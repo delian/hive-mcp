@@ -27,4 +27,5 @@ class Settings(BaseSettings):
     data_dir: Path = Path("/data")
     mcp_path: str = "/mcp"
     allowed_origins: list[str] = Field(default_factory=list)
-    drain_seconds: float = Field(default=10.0, ge=0)
+    drain_seconds: float = Field(default=5.0, ge=0)  # readiness-fail window before shutdown
+    shutdown_timeout: float = Field(default=30.0, ge=1)  # max wait for in-flight requests

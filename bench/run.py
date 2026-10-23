@@ -14,16 +14,20 @@ Q = 300
 def make(name: str):  # noqa: ANN201
     if name == "pg":
         from bench.pg import Postgres, start_server
+
         start_server()
         return Postgres()
     if name == "lance":
         from bench.lance import Lance
+
         return Lance()
     if name == "duck":
         from bench.duck import Duck
+
         return Duck()
     if name == "sqlitevec":
         from bench.sqlitevec import SqliteVec
+
         return SqliteVec()
     raise SystemExit(f"unknown candidate {name}")
 
@@ -58,5 +62,8 @@ def main(name: str, n: int, nq: int = Q) -> dict:
 if __name__ == "__main__":
     out = main(sys.argv[1], int(sys.argv[2]), int(sys.argv[3]) if len(sys.argv) > 3 else Q)
     print(json.dumps(out, indent=1))
-    with open(f"/home/user/benchdata/result_{sys.argv[1]}_{sys.argv[2]}{'_real' if os.environ.get('BENCH_REAL') else ''}.json", "w") as f:
+    with open(
+        f"/home/user/benchdata/result_{sys.argv[1]}_{sys.argv[2]}{'_real' if os.environ.get('BENCH_REAL') else ''}.json",
+        "w",
+    ) as f:
         json.dump(out, f, indent=1)

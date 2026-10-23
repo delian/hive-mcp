@@ -37,14 +37,23 @@ class Lance:
     def build_vector_index(self) -> float:
         t = time.perf_counter()
         parts = max(8, int(self.n**0.5))
-        kw = {"num_partitions": parts, "num_sub_vectors": 48} if INDEX == "IVF_PQ" else {"num_partitions": parts}
+        kw = (
+            {"num_partitions": parts, "num_sub_vectors": 48}
+            if INDEX == "IVF_PQ"
+            else {"num_partitions": parts}
+        )
         self.tbl.create_index(metric="dot", index_type=INDEX, vector_column_name="vector", **kw)
         return time.perf_counter() - t
 
     def build_text_index(self) -> float:
         t = time.perf_counter()
-        self.tbl.create_fts_index("body", base_tokenizer="whitespace", stem=False,
-                                  remove_stop_words=False, ascii_folding=False)
+        self.tbl.create_fts_index(
+            "body",
+            base_tokenizer="whitespace",
+            stem=False,
+            remove_stop_words=False,
+            ascii_folding=False,
+        )
         return time.perf_counter() - t
 
     def vec_search(self, q: np.ndarray, allowed: np.ndarray | None) -> list[int]:
@@ -56,7 +65,10 @@ class Lance:
         return [r["id"] for r in s.select(["id"]).limit(10).to_list()]
 
     def lex_search(self, text: str) -> list[int]:
-        return [r["id"] for r in self.tbl.search(text, query_type="fts").select(["id"]).limit(10).to_list()]
+        return [
+            r["id"]
+            for r in self.tbl.search(text, query_type="fts").select(["id"]).limit(10).to_list()
+        ]
 
     def sizes(self) -> dict[str, float]:
         total = sum(f.stat().st_size for f in PATH.rglob("*") if f.is_file()) / 1e6

@@ -35,13 +35,13 @@ def real_queries(ds: Dataset, nq: int, seed: int = 11) -> Queries:
     qv = Embedder().encode(phrases)
     df = Counter(t for text in ds.texts for t in set(text.split()))
     lex = [" ".join(sorted(set(ds.texts[s].split()), key=lambda t: df[t])[:4]) for s in src]
-    allowed = [np.unique(np.concatenate([[ds.group[s]], rng.integers(0, GROUPS, 4)])).astype(np.int32) for s in src]
+    allowed = [
+        np.unique(np.concatenate([[ds.group[s]], rng.integers(0, GROUPS, 4)])).astype(np.int32)
+        for s in src
+    ]
     allow = np.zeros((nq, GROUPS), dtype=bool)
     for i, g in enumerate(allowed):
         allow[i, g] = True
     gt_all, gt_acl = ground_truth(ds, qv, allow)
     sel = [allow[i, ds.group].mean() for i in range(nq)]
     return Queries(qv, allowed, src, lex, gt_all, gt_acl, float(np.mean(sel)))
-
-
-

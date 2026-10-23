@@ -29,14 +29,23 @@ class SqliteVec:
     def load(self, ds: Dataset) -> float:
         texts = load_texts(ds)
         t = time.perf_counter()
-        self.con.execute(f"CREATE VIRTUAL TABLE v USING vec0(id integer primary key, group_id integer, embedding float[{DIM}] distance_metric=cosine)")
-        self.con.execute("CREATE VIRTUAL TABLE f USING fts5(body, content='', tokenize='unicode61', detail=column)")
+        self.con.execute(
+            f"CREATE VIRTUAL TABLE v USING vec0(id integer primary key, group_id integer, embedding float[{DIM}] distance_metric=cosine)"
+        )
+        self.con.execute(
+            "CREATE VIRTUAL TABLE f USING fts5(body, content='', tokenize='unicode61', detail=column)"
+        )
         for lo in range(0, ds.n, 20_000):
             hi = min(lo + 20_000, ds.n)
             vec = ds.f32(lo, hi)
-            self.con.executemany("INSERT INTO v(id, group_id, embedding) VALUES (?,?,?)",
-                                 ((lo + i, int(ds.group[lo + i]), vec[i].tobytes()) for i in range(hi - lo)))
-            self.con.executemany("INSERT INTO f(rowid, body) VALUES (?,?)", ((lo + i, texts[lo + i]) for i in range(hi - lo)))
+            self.con.executemany(
+                "INSERT INTO v(id, group_id, embedding) VALUES (?,?,?)",
+                ((lo + i, int(ds.group[lo + i]), vec[i].tobytes()) for i in range(hi - lo)),
+            )
+            self.con.executemany(
+                "INSERT INTO f(rowid, body) VALUES (?,?)",
+                ((lo + i, texts[lo + i]) for i in range(hi - lo)),
+            )
             self.con.commit()
         return time.perf_counter() - t
 

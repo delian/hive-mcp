@@ -135,8 +135,11 @@ def timed(fn, items) -> tuple[list, dict[str, float]]:  # noqa: ANN001
         res.append(fn(it))
         lat.append((time.perf_counter() - t) * 1000)
     a = np.array(lat)
-    return res, {"p50": float(np.percentile(a, 50)), "p95": float(np.percentile(a, 95)),
-                 "p99": float(np.percentile(a, 99))}
+    return res, {
+        "p50": float(np.percentile(a, 50)),
+        "p95": float(np.percentile(a, 95)),
+        "p99": float(np.percentile(a, 99)),
+    }
 
 
 def load_texts(ds: Dataset) -> list[str]:

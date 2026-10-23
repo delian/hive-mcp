@@ -24,7 +24,14 @@ _CAT = re.compile(r"\[\[Category:([^\]|]+)", re.I)
 
 
 def _strip_nested(text: str, open_: str, close: str) -> str:
-    pat = re.compile(re.escape(open_) + r"[^" + re.escape(open_[0]) + re.escape(close[0]) + r"]*" + re.escape(close))
+    pat = re.compile(
+        re.escape(open_)
+        + r"[^"
+        + re.escape(open_[0])
+        + re.escape(close[0])
+        + r"]*"
+        + re.escape(close)
+    )
     prev = None
     while prev != text:
         prev, text = text, pat.sub("", text)
@@ -36,7 +43,9 @@ def clean(wikitext: str) -> str:
     t = re.sub(r"<ref[^>]*?/>|<ref.*?</ref>", "", t, flags=re.S)
     t = _strip_nested(t, "{{", "}}")
     t = _strip_nested(t, "{|", "|}")
-    t = re.sub(r"\[\[(?:File|Image|Category):[^\]]*(?:\[\[[^\]]*\]\][^\]]*)*\]\]", "", t, flags=re.I)
+    t = re.sub(
+        r"\[\[(?:File|Image|Category):[^\]]*(?:\[\[[^\]]*\]\][^\]]*)*\]\]", "", t, flags=re.I
+    )
     t = re.sub(r"\[\[[^\]|]*\|([^\]]*)\]\]", r"\1", t)
     t = re.sub(r"\[\[([^\]]*)\]\]", r"\1", t)
     t = re.sub(r"\[https?://\S+ ([^\]]*)\]|\[https?://\S+\]", r"\1", t)

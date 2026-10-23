@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 
 from bench.common import K, make_dataset, make_queries, recall, timed
@@ -28,8 +29,15 @@ def make(name: str):  # noqa: ANN201
 
 
 def main(name: str, n: int, nq: int = Q) -> dict:
-    ds = make_dataset(n)
-    qs = make_queries(ds, nq)
+    if os.environ.get("BENCH_REAL"):
+        from bench.real_data import real_dataset, real_queries
+
+        ds = real_dataset(n)
+        n = ds.n
+        qs = real_queries(ds, nq)
+    else:
+        ds = make_dataset(n)
+        qs = make_queries(ds, nq)
     c = make(name)
     r: dict = {"candidate": c.name, "n": n, "dim": 384, "acl_selectivity": qs.selectivity}
     r["load_s"] = c.load(ds)
@@ -50,5 +58,5 @@ def main(name: str, n: int, nq: int = Q) -> dict:
 if __name__ == "__main__":
     out = main(sys.argv[1], int(sys.argv[2]), int(sys.argv[3]) if len(sys.argv) > 3 else Q)
     print(json.dumps(out, indent=1))
-    with open(f"/home/user/benchdata/result_{sys.argv[1]}_{sys.argv[2]}.json", "w") as f:
+    with open(f"/home/user/benchdata/result_{sys.argv[1]}_{sys.argv[2]}{'_real' if os.environ.get('BENCH_REAL') else ''}.json", "w") as f:
         json.dump(out, f, indent=1)

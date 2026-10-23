@@ -26,9 +26,11 @@ bench = [
     "duckdb>=2.0.0",
     "lancedb>=0.40.0",
     "numpy>=2.5.4",
+    "onnxruntime>=1.31.0",
     "psycopg[binary]>=3.3.6",
     "pyarrow>=26.0.0",
     "sqlite-vec>=0.1.9",
+    "tokenizers>=0.23.3",
 ]
 dev = [
     "httpx>=0.28.1",

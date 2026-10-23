@@ -14,6 +14,7 @@ CLUSTERS = 1500
 VOCAB = 20000
 K = 10
 DATA_ROOT = Path("/home/user/benchdata")
+REAL_DIR = DATA_ROOT / "real"
 
 
 @dataclass
@@ -22,6 +23,7 @@ class Dataset:
     vecs: np.ndarray  # float16 (n, DIM), unit-ish norm
     group: np.ndarray  # int32 (n,)
     cluster: np.ndarray  # int32 (n,)
+    texts: list[str] | None = None  # real corpus text (None: synthetic, generated on demand)
 
     def f32(self, lo: int = 0, hi: int | None = None) -> np.ndarray:
         return self.vecs[lo:hi].astype(np.float32)
@@ -84,7 +86,7 @@ def _merge(best_s: np.ndarray, best_i: np.ndarray, s: np.ndarray, base: int) -> 
     best_i[:] = np.take_along_axis(ci, top, 1)
 
 
-def _ground_truth(ds: Dataset, qv: np.ndarray, allow: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def ground_truth(ds: Dataset, qv: np.ndarray, allow: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     q = len(qv)
     bs = [np.full((q, K), -np.inf, np.float32) for _ in range(2)]
     bi = [np.zeros((q, K), np.int64) for _ in range(2)]
@@ -114,7 +116,7 @@ def make_queries(ds: Dataset, q: int = 300, seed: int = 11) -> Queries:
     allow = np.zeros((q, GROUPS), dtype=bool)
     for i, g in enumerate(allowed):
         allow[i, g] = True
-    gt_all, gt_acl = _ground_truth(ds, qv, allow)
+    gt_all, gt_acl = ground_truth(ds, qv, allow)
     sel = [allow[i, ds.group].mean() for i in range(q)]
     words = [words_for(ds.cluster[s : s + 1], int(s))[0].split() for s in src]
     lex = [_lex_query(w) for w in words]
@@ -139,6 +141,8 @@ def timed(fn, items) -> tuple[list, dict[str, float]]:  # noqa: ANN001
 
 def load_texts(ds: Dataset) -> list[str]:
     """Pseudo-text per chunk, cached on disk (generation is slow in pure Python)."""
+    if ds.texts is not None:
+        return ds.texts
     path = DATA_ROOT / f"text_{ds.n}.txt"
     if path.exists():
         return path.read_text().split("\n")[: ds.n]

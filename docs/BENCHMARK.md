@@ -36,5 +36,32 @@ At 100k, same ordering; pgvector (m=16) recall 0.975 and LanceDB IVF_FLAT 1.000.
 5. Not measured: concurrency, writes/updates under load, memory use of each engine, 10M+ scale, real embeddings
    (synthetic clusters may favour or hurt ANN indexes differently), hybrid fusion quality, Azure Files behaviour.
 
+## Real data (220k chunks, 384-dim)
+Corpus: Simple English Wikipedia (first 220,000 chunks of ~107 words, up to 5 per article), embedded with
+bge-small-en-v1.5 (int8 ONNX, CLS pooling, normalised). Groups: hash of each article's first category (topic-correlated,
+2000 buckets), 20% reassigned at random. Queries: a 12-word phrase from a stored chunk, embedded with the same model;
+keyword queries: the 4 rarest corpus words of the source chunk. The visible set per ACL query averages 0.3% of chunks (about 660).
+Postgres: HNSW m=32, ef_construction=200, ef_search=200, iterative scan on. LanceDB: IVF_FLAT, 469 partitions, nprobes=150.
+
+| engine | vec recall | vec p50 / p99 ms | ACL recall | ACL p50 / p99 ms | keyword p50 / p99 ms | vec idx s | disk MB |
+|---|---|---|---|---|---|---|---|
+| pgvector HNSW | 0.990 | 6.2 / 11.5 | 1.000 | 1.1 / 20.9 | 0.2 / 0.3 | 90 | 729 |
+| LanceDB IVF_FLAT | 0.994 | 13.3 / 31.8 | 0.961 | 6.4 / 7.7 | 4.6 / 6.1 | 8 | 802 |
+| DuckDB exact | 1.000 | 81 / 96 | 1.000 | 31 / 46 | 51 / 65 | 0 | 471 |
+| sqlite-vec brute force | 0.998 | 133 / 154 | 1.000 | 74 / 83 | 0.2 / 0.3 | 0 | 405 |
+
+Keyword hit@10 = 1.00 for every engine.
+
+### What the real data changes
+- Rankings match the synthetic run; absolute recall is higher on real embeddings (pgvector 0.99 at m=32 here).
+- pgvector's slow filtered tail did not appear: `EXPLAIN` shows the planner uses the `group_id` btree plus an exact sort when the
+  visible set is small (about 1,000 of 220k rows: exact, recall 1.0) and HNSW when it is broad (about 10%).
+  Hypothesis, not yet verified at 1M: the 400 ms tail on the synthetic 1M run came from the in-between zone (0.5-2% visible), where
+  the planner picks HNSW and the iterative scan walks far. Test with real data at larger scale and with `EXPLAIN` before relying on it.
+- LanceDB's filtered recall (0.96) is the lowest of the ANN engines: with a very selective filter some allowed rows sit in
+  partitions that are not probed. Higher `nprobes` fixes it at some cost.
+- Scale limit: embedding on this 4-vCPU machine runs at about 60 chunks/s, so the real corpus stops at 220k; 1M+ real-embedding
+  results need a faster embedding source (GPU or hosted API).
+
 ## Caveats
-Synthetic data and a single machine. Treat results as relative. Re-run with real embeddings before the final choice.
+Single machine, sequential queries, no concurrency or writes. The 1M results are synthetic; the real-embedding results stop at 220k.

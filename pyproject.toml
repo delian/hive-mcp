@@ -1,0 +1,66 @@
+[project]
+name = "hive-mcp"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "Claude", email = "noreply@anthropic.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=2,<3",
+    "pydantic>=2",
+    "pydantic-settings>=2.16.1",
+    "typer>=0.27.3",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+hive = "hive_mcp.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.32,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+bench = [
+    "duckdb>=2.0.0",
+    "lancedb>=0.40.0",
+    "numpy>=2.5.4",
+    "onnxruntime>=1.31.0",
+    "psycopg[binary]>=3.3.6",
+    "pyarrow>=26.0.0",
+    "sqlite-vec>=0.1.9",
+    "tokenizers>=0.23.3",
+]
+dev = [
+    "httpx>=0.28.1",
+    "hypothesis>=6.170.8",
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.2",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+extend-exclude = ["bench"]  # TODO: lint-clean the benchmark harness
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC", "S", "PL", "RUF", "TCH", "ANN"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "PLR2004", "ANN"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--cov=hive_mcp --cov-report=term-missing"

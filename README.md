@@ -1,10 +1,33 @@
 # hive-mcp
 
+A remote MCP server that lets agents and teams share knowledge: session logs, compactions, research,
+formulas, measurements and best practices, stored once and found again by any connected agent.
+
+Status: early development (Phase 0 skeleton). The full design and roadmap are in [docs/PLAN.md](docs/PLAN.md).
+
+## Quick start
+
+```bash
+uv sync
+uv run hive serve            # MCP endpoint on http://localhost:8080/mcp, health on /healthz
+```
+
+Docker (one container, data in the `/data` volume):
+
+```bash
+docker build -t hive-mcp .
+docker run -p 8080:8080 -v hive:/data hive-mcp
+```
+
+Configuration is through `HIVE_*` environment variables (see `src/hive_mcp/config.py`).
+
+## Standalone SQLite stdio server
+
 A lightweight Model Context Protocol (MCP) server for sharing knowledge with a
 team. It provides tools to save, search, list, and delete entries in a SQLite
 database. The server uses only the Python standard library.
 
-## Run
+### Run
 
 Requires Python 3.9 or newer. Configure your MCP client to launch the server
 over stdio:
@@ -30,7 +53,7 @@ everyone. SQLite is intended for a shared local or mounted filesystem, not
 simultaneous access over a network filesystem that does not support SQLite
 locking.
 
-## Tools
+### Tools
 
 - `save_knowledge`: save a required `title` and `content`, with optional
   string-array `tags` and `author`. Returns the entry and its generated ID.
@@ -40,8 +63,17 @@ locking.
   default 20) and `offset`.
 - `delete_knowledge`: delete an entry by its ID.
 
-## Test
+### Test
 
 ```sh
-python3 -m unittest discover -s tests
+python3 -m unittest discover -s tests -p test_server.py
+```
+
+## Development
+
+```bash
+uv run ruff format . && uv run ruff check .
+uv run mypy src
+uv run python scripts/check_file_size.py src   # source files: target 8 KB, hard limit 16 KB
+uv run pytest
 ```

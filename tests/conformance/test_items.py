@@ -215,3 +215,11 @@ async def test_long_unicode_and_control_text_roundtrips(backend):
     item = make_item(backend.clock, title="Тест 测试", body=body)
     await backend.items.create(ALICE, item)
     assert (await backend.items.get(ALICE, item.id)).item == item
+
+
+async def test_system_read_ignores_user_acl_but_never_crosses_orgs(backend):
+    private = make_item(backend.clock, scope=ALICE_PRIVATE)
+    await backend.items.create(ALICE, private)
+    assert await backend.items.get_system("org1", private.id) == private  # no principal needed
+    assert await backend.items.get_system("org2", private.id) is None  # wrong tenant
+    assert await backend.items.get_system("org1", "missing") is None

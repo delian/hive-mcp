@@ -103,6 +103,11 @@ class PgItems:
             raise NotFound(item_id)
         return view
 
+    async def get_system(self, org_id: str, item_id: str) -> Item | None:
+        async with self._db.tx() as conn:
+            item = await fetch_item(conn, item_id)
+        return item if item and item.org_id == org_id else None
+
     async def get_many(self, principal: Principal, item_ids: Sequence[str]) -> list[ItemView]:
         flt = access.read_filter(principal)
         where, params = acl_where(flt)

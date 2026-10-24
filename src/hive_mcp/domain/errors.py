@@ -29,3 +29,7 @@ class IdempotencyConflict(HiveError):
 
 class StorageBusy(HiveError):
     """The database is locked, unreachable or overloaded; the caller may retry."""
+
+
+class EmbeddingUnavailable(HiveError):
+    """The embedding provider failed or is unreachable; callers degrade to keyword search."""

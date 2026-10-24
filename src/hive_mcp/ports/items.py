@@ -32,6 +32,10 @@ class ItemRepository(Protocol):
 
     async def get(self, principal: Principal, item_id: str) -> ItemView: ...
 
+    async def get_system(self, org_id: str, item_id: str) -> Item | None:
+        """Trusted internal read for indexing/maintenance jobs: no user ACL, never across orgs.
+        Must not be reachable from any tool."""
+
     async def get_many(self, principal: Principal, item_ids: Sequence[str]) -> list[ItemView]:
         """Hydrate search hits. Invisible or missing ids are dropped; order follows `item_ids`."""
 

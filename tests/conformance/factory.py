@@ -17,6 +17,7 @@ BOB = Principal("bob", "org1", Role.MEMBER, projects=frozenset({"p1"}))
 CAROL = Principal("carol", "org1", Role.MEMBER, projects=frozenset({"p2"}))
 EDDIE = Principal("eddie", "org1", Role.EDITOR, projects=frozenset({"p1"}))
 VIVI = Principal("vivi", "org1", Role.VIEWER, projects=frozenset({"p1"}))
+ROOT = Principal("root", "org1", Role.ADMIN, projects=frozenset({"p2"}))  # an approver
 ZOE = Principal("zoe", "org2", Role.ADMIN, projects=frozenset({"p1"}))  # other tenant, same ids
 
 P1 = Scope(ScopeLevel.PROJECT, "p1")

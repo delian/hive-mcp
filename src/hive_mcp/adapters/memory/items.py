@@ -54,6 +54,10 @@ class MemoryItems:
     async def get(self, principal: Principal, item_id: str) -> ItemView:
         return self._visible(principal, item_id)
 
+    async def get_system(self, org_id: str, item_id: str) -> Item | None:
+        item = self._items.get(item_id)
+        return item if item and item.org_id == org_id else None
+
     async def get_many(self, principal: Principal, item_ids: Sequence[str]) -> list[ItemView]:
         views = []
         for item_id in item_ids:

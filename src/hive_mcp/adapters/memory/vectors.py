@@ -1,0 +1,77 @@
+"""In-memory VectorIndex: exact cosine search, one entry per (model, item)."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import numpy as np
+
+from hive_mcp.domain.errors import ValidationError
+from hive_mcp.domain.item import Hit
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from numpy.typing import NDArray
+
+    from hive_mcp.domain.access import Acl, ScopeFilter
+
+
+def unit(vector: NDArray[np.float32]) -> NDArray[np.float32]:
+    """L2-normalise; rejects empty, non-finite and zero vectors (they poison every later search)."""
+    v = np.asarray(vector, dtype=np.float32)
+    if v.ndim != 1 or v.size == 0 or not np.all(np.isfinite(v)):
+        raise ValidationError("vector must be a non-empty 1-D array of finite numbers")
+    norm = float(np.linalg.norm(v))
+    if norm == 0.0:
+        raise ValidationError("zero vector")
+    return v / norm
+
+
+class MemoryVectors:
+    def __init__(self) -> None:
+        self._dims: dict[str, int] = {}
+        self._rows: dict[str, dict[str, tuple[Acl, NDArray[np.float32]]]] = {}
+
+    def _check_dim(self, model_id: str, dim: int) -> None:
+        if self._dims.setdefault(model_id, dim) != dim:
+            raise ValidationError(
+                f"model {model_id} has dimension {self._dims[model_id]}, got {dim}"
+            )
+
+    async def replace(
+        self, item_id: str, model_id: str, acl: Acl, vectors: Sequence[NDArray[np.float32]]
+    ) -> None:
+        mats = [unit(v) for v in vectors]  # validate everything before touching state
+        for m in mats:
+            self._check_dim(model_id, m.shape[0])
+        rows = self._rows.setdefault(model_id, {})
+        if mats:
+            rows[item_id] = (acl, np.vstack(mats))
+        else:
+            rows.pop(item_id, None)
+
+    async def search(
+        self, flt: ScopeFilter, model_id: str, vector: NDArray[np.float32], limit: int
+    ) -> list[Hit]:
+        q = unit(vector)
+        if model_id in self._dims:
+            self._check_dim(model_id, q.shape[0])
+        hits = []
+        for item_id, (acl, mat) in self._rows.get(model_id, {}).items():
+            if flt.tier(acl) is None:
+                continue
+            sims = mat @ q
+            best = int(np.argmax(sims))
+            hits.append(Hit(item_id, float(sims[best]), best))
+        hits.sort(key=lambda h: (-h.score, h.item_id))
+        return hits[: max(limit, 0)]
+
+    async def update_acl(self, item_id: str, acl: Acl) -> None:
+        for rows in self._rows.values():
+            if item_id in rows:
+                rows[item_id] = (acl, rows[item_id][1])
+
+    async def delete(self, item_id: str) -> None:
+        for rows in self._rows.values():
+            rows.pop(item_id, None)

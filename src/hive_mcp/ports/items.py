@@ -1,0 +1,54 @@
+"""System of record for knowledge items.
+
+Every method takes the calling `Principal`. Adapters apply `domain.access` themselves (defence in
+depth) and raise `NotFound` for items the caller cannot see, so existence never leaks.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from hive_mcp.domain.item import Item, ItemPatch, ItemQuery, ItemView, Page
+    from hive_mcp.domain.principal import Principal
+    from hive_mcp.domain.scope import Scope, Visibility
+
+
+@dataclass(frozen=True, slots=True)
+class CreateResult:
+    item: Item
+    created: bool  # False when an idempotency key replayed an earlier create
+
+
+class ItemRepository(Protocol):
+    async def create(
+        self, principal: Principal, item: Item, idempotency_key: str | None = None
+    ) -> CreateResult:
+        """Idempotent per (org, author, key): same payload replays, a different
+        one raises IdempotencyConflict."""
+
+    async def get(self, principal: Principal, item_id: str) -> ItemView: ...
+
+    async def get_many(self, principal: Principal, item_ids: Sequence[str]) -> list[ItemView]:
+        """Hydrate search hits. Invisible or missing ids are dropped; order follows `item_ids`."""
+
+    async def update(
+        self, principal: Principal, item_id: str, patch: ItemPatch, expected_revision: int
+    ) -> Item:
+        """Conflict if `expected_revision` is stale; PermissionDenied if read-only."""
+
+    async def relocate(
+        self,
+        principal: Principal,
+        item_id: str,
+        scope: Scope,
+        visibility: Visibility,
+        expected_revision: int,
+    ) -> Item:
+        """Promote/demote; caller must write the item and belong to the target."""
+
+    async def list(self, principal: Principal, query: ItemQuery) -> Page:
+        """Newest first, keyset-paginated: no repeats or skips, even with equal timestamps."""

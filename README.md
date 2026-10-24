@@ -3,7 +3,7 @@
 A remote MCP server that lets agents and teams share knowledge: session logs, compactions, research,
 formulas, measurements and best practices, stored once and found again by any connected agent.
 
-Status: early development (Phase 0 skeleton). The full design and roadmap are in [docs/PLAN.md](docs/PLAN.md).
+Status: early development. Design and roadmap: [docs/PLAN.md](docs/PLAN.md); storage interfaces: [docs/STORAGE.md](docs/STORAGE.md); storage benchmark: [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
 ## Quick start
 

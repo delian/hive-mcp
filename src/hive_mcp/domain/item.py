@@ -74,6 +74,18 @@ class Item:
             raise ValidationError(f"title must be 1-{MAX_TITLE} characters")
         if not self.body.strip() or len(self.body) > MAX_BODY:
             raise ValidationError(f"body must be 1-{MAX_BODY} characters")
+        texts = (
+            self.id,
+            self.org_id,
+            self.author_id,
+            self.title,
+            self.body,
+            self.scope.owner,
+            self.supersedes or "",
+            self.source or "",
+        )
+        if any("\x00" in t for t in texts):
+            raise ValidationError("text must not contain NUL characters")
         if self.tags != normalize_tags(self.tags):
             raise ValidationError("tags must be normalised with normalize_tags()")
         if self.revision < 1:
@@ -144,6 +156,13 @@ def apply_patch(item: Item, patch: ItemPatch, now: datetime) -> Item:
         tags=(item.tags - patch.remove_tags) | patch.add_tags,
         revision=item.revision + 1,
         updated_at=now,
+    )
+
+
+def relocate_item(item: Item, scope: Scope, visibility: Visibility, now: datetime) -> Item:
+    """Promotion/demotion transform; re-validates invariants (private cannot be org-visible)."""
+    return replace(
+        item, scope=scope, visibility=visibility, revision=item.revision + 1, updated_at=now
     )
 
 

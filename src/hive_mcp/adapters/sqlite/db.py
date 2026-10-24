@@ -11,7 +11,7 @@ import threading
 from typing import TYPE_CHECKING, TypeVar
 
 from hive_mcp.adapters.sqlite.schema import migrate
-from hive_mcp.domain.errors import HiveError
+from hive_mcp.domain.errors import StorageBusy
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -21,8 +21,7 @@ T = TypeVar("T")
 BUSY_SECONDS = 10.0
 
 
-class StorageBusy(HiveError):
-    """Another process holds the database lock; the caller may retry."""
+__all__ = ["BUSY_SECONDS", "Database", "StorageBusy"]
 
 
 class Database:

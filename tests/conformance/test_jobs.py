@@ -1,3 +1,5 @@
+import asyncio
+
 from hive_mcp.ports.jobs import JobState
 
 KINDS = frozenset({"ingest", "embed"})
@@ -86,3 +88,13 @@ async def test_crash_loop_ends_dead_instead_of_retrying_forever(backend):
         backend.clock.advance(seconds=11)  # worker dies without reporting
     assert await backend.jobs.claim("w3", KINDS, 10) is None
     assert (await backend.jobs.get(job.id)).state is JobState.DEAD
+
+
+async def test_concurrent_dedupe_enqueue_creates_one_job(backend):
+    # A single burst can slip through a missing lock by luck, so hammer many independent keys.
+    for round_no in range(40):
+        key = f"same-{round_no}"
+        jobs = await asyncio.gather(
+            *(backend.jobs.enqueue("org1", "ingest", {}, dedupe_key=key) for _ in range(8))
+        )
+        assert len({j.id for j in jobs}) == 1, f"duplicate jobs for {key}"

@@ -202,3 +202,16 @@ async def test_failed_create_does_not_poison_its_idempotency_key(backend):
     assert result.created and result.item.id == "new"
     replay = await backend.items.create(ALICE, fresh, idempotency_key="k")
     assert not replay.created and replay.item.id == "new"
+
+
+@pytest.mark.parametrize("key", ["", "x" * 201, "bad\x00key"])
+async def test_bad_idempotency_keys_are_rejected_everywhere(backend, key):
+    with pytest.raises(ValidationError):
+        await backend.items.create(ALICE, make_item(backend.clock), idempotency_key=key)
+
+
+async def test_long_unicode_and_control_text_roundtrips(backend):
+    body = "Радар 雷达 🛰️ " + "x" * 5000 + "\n\ttab and 'quotes' \"double\" ; DROP TABLE items; --"
+    item = make_item(backend.clock, title="Тест 测试", body=body)
+    await backend.items.create(ALICE, item)
+    assert (await backend.items.get(ALICE, item.id)).item == item

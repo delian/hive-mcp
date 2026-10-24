@@ -40,7 +40,7 @@ Indexes denormalise the item's `Acl`; after any `relocate` the service must call
 |---|---|---|
 | In-memory | `adapters/memory` | Reference implementation and test double |
 | SQLite (embedded profile) | `adapters/sqlite` + `adapters/fs` | Items, FTS5 text search, exact vector search, jobs, audit; blobs on the filesystem |
-| Postgres + pgvector + object storage (external profile) | `adapters/postgres` | Next |
+| Postgres + pgvector (external profile) | `adapters/postgres` | Done; blobs still use the filesystem adapter (Azure Blob adapter planned) |
 | LanceDB vectors (scalable embedded vectors) | `adapters/lance` | Planned; SQLite vectors are exact and fine up to about 200k chunks (about 130 ms) |
 
 ### SQLite specifics
@@ -57,6 +57,34 @@ Indexes denormalise the item's `Acl`; after any `relocate` the service must call
 ## How the tests were checked
 Besides the conformance suite, deliberate bugs ("mutants") were injected into the adapters to prove the tests catch them:
 dropped tenant filter, removed revision check, stale vector chunks, removed job-lease fencing, ignored idempotency
-fingerprint, ignored viewer permission, no-op ACL update, unquoted FTS terms, non-UTC timestamps, cross-org blob access.
-All are caught. Two early gaps (time-zone test data that accidentally sorted correctly; FTS quoting reachable only
-through the tokenizer) were fixed by sharper tests.
+fingerprint, ignored viewer permission, no-op ACL update, unquoted FTS terms, non-UTC timestamps, cross-org blob access
+(SQLite/memory), and for Postgres: dropped tenant filter, missing advisory locks, shallow vector search, missing lease
+fencing, ignored pagination cursor, unquoted tsquery, unmapped data errors, unlocked migrations, no-op vector ACL update.
+All are caught. Early gaps (time-zone test data that accidentally sorted correctly; FTS quoting reachable only through the tokenizer;
+a job de-duplication race that one burst of requests missed) were fixed by sharper tests.
+
+### Postgres specifics
+- Needs the `vector` extension (pgvector 0.8+). Migrations create it if the role may; on managed services allow-list it first
+  (Azure Database for PostgreSQL: `azure.extensions`). Install the client with `pip install hive-mcp[postgres]`.
+- Migrations run in one transaction under an advisory lock, so several app instances can start together; a database from a newer
+  version is refused.
+- Writes lock only rows the caller can see (`FOR UPDATE` after the ACL filter), so users cannot stall each other's invisible items.
+  Idempotent creates and job de-duplication use advisory locks keyed by a hash of the JSON-encoded parts (no separator collisions).
+- Jobs are claimed with `FOR UPDATE SKIP LOCKED`; lease fencing as in the other adapters.
+- Vectors: one `halfvec` table per embedding model (pgvector needs a fixed dimension per index), HNSW m=32, ef_construction=200
+  (from the benchmark), inner product on unit vectors. Scores are cosine similarity accurate to about 1e-3 (float16 storage).
+  Search over-fetches chunks and deepens up to four rounds so one item with many chunks cannot crowd out others.
+  Deleted rows stay in the HNSW index until it is rebuilt: schedule `REINDEX` after large deletions (maintenance job to come).
+- Keyword search uses `tsvector`/GIN over text tokenised by the shared tokenizer, ranked with `ts_rank` (not BM25, and no IDF).
+  Ranking quality should be measured on real data; ParadeDB `pg_search` is the upgrade path for true BM25.
+- Text must not contain NUL characters (Postgres cannot store them): the domain rejects them for items and idempotency keys,
+  and any other driver data error becomes a `ValidationError`.
+- Pool exhaustion, deadlocks and lost connections surface as the retryable `StorageBusy`.
+
+### Running the Postgres tests
+```bash
+# any server with pgvector; the tests create and drop one schema per test
+export HIVE_TEST_PG_DSN="host=localhost port=5432 dbname=postgres user=postgres password=postgres"
+uv run pytest
+```
+Without `HIVE_TEST_PG_DSN` the Postgres cases are skipped. CI runs them against the `pgvector/pgvector:pg16` image.

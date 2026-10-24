@@ -8,6 +8,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "mcp>=2,<3",
+    "numpy>=2",
     "pydantic>=2",
     "pydantic-settings>=2.16.1",
     "typer>=0.27.3",
@@ -16,6 +17,11 @@ dependencies = [
 
 [project.scripts]
 hive = "hive_mcp.cli:main"
+
+[project.optional-dependencies]
+postgres = [
+    "psycopg[binary,pool]>=3.2",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.32,<0.12.0"]
@@ -36,6 +42,7 @@ dev = [
     "httpx>=0.28.1",
     "hypothesis>=6.170.8",
     "mypy>=2.4.0",
+    "psycopg[binary,pool]>=3.2",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
@@ -53,6 +60,7 @@ select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC", "S", "PL", "RUF", "TCH", "AN
 
 [tool.ruff.lint.per-file-ignores]
 "src/hive_mcp/adapters/sqlite/*.py" = ["E501"]  # long SQL string literals read better unwrapped
+"src/hive_mcp/adapters/postgres/*.py" = ["E501"]
 "tests/**" = ["S101", "PLR2004", "ANN"]
 
 [tool.mypy]

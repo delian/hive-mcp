@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from hive_mcp.adapters.sqlite.codec import item_params, ts
@@ -13,9 +12,9 @@ from hive_mcp.domain.errors import (
     HiveError,
     IdempotencyConflict,
     NotFound,
-    PermissionDenied,
 )
-from hive_mcp.domain.item import apply_patch
+from hive_mcp.domain.item import apply_patch, relocate_item
+from hive_mcp.domain.rules import authorize_create, authorize_relocate, authorize_update
 from hive_mcp.ports.items import CreateResult
 
 if TYPE_CHECKING:
@@ -74,8 +73,7 @@ class SqliteItems:
     async def create(
         self, principal: Principal, item: Item, idempotency_key: str | None = None
     ) -> CreateResult:
-        if item.author_id != principal.id or not access.can_create(principal, item.acl):
-            raise PermissionDenied("cannot create in this scope")
+        authorize_create(principal, item, idempotency_key)
 
         def tx(conn: sqlite3.Connection) -> CreateResult:
             if idempotency_key:
@@ -135,10 +133,7 @@ class SqliteItems:
             view = fetch_view(conn, flt, item_id)
             if view is None:
                 raise NotFound(item_id)
-            if not access.can_write(principal, view.item.acl, view.item.author_id):
-                raise PermissionDenied(item_id)
-            if view.item.revision != expected_revision:
-                raise Conflict(f"revision {view.item.revision} != expected {expected_revision}")
+            authorize_update(principal, view.item, expected_revision)
             updated = apply_patch(view.item, patch, self._clock.now())
             _store_update(conn, view.item, updated)
             return updated
@@ -159,14 +154,8 @@ class SqliteItems:
             view = fetch_view(conn, flt, item_id)
             if view is None:
                 raise NotFound(item_id)
-            target = replace(view.item, scope=scope, visibility=visibility)  # validates invariants
-            if not access.can_write(principal, view.item.acl, view.item.author_id):
-                raise PermissionDenied(item_id)
-            if not access.can_create(principal, target.acl):
-                raise PermissionDenied("not a member of the target scope")
-            if view.item.revision != expected_revision:
-                raise Conflict(f"revision {view.item.revision} != expected {expected_revision}")
-            moved = replace(target, revision=target.revision + 1, updated_at=self._clock.now())
+            moved = relocate_item(view.item, scope, visibility, self._clock.now())
+            authorize_relocate(principal, view.item, moved, expected_revision)
             _store_update(conn, view.item, moved)
             return moved
 

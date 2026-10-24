@@ -25,3 +25,7 @@ class Conflict(HiveError):
 
 class IdempotencyConflict(HiveError):
     """An idempotency key was reused with a different payload."""
+
+
+class StorageBusy(HiveError):
+    """The database is locked, unreachable or overloaded; the caller may retry."""

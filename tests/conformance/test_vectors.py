@@ -80,3 +80,12 @@ async def test_limit(backend):
         await backend.vectors.replace(f"i{i}", M, ACL1, [v(1, i * 0.1, 0)])
     assert len(await search(backend, ALICE, v(1, 0, 0), limit=3)) == 3
     assert await search(backend, ALICE, v(1, 0, 0), limit=0) == []
+
+
+async def test_one_item_with_many_chunks_cannot_crowd_out_others(backend):
+    many = [v(1, 0.001 * i, 0) for i in range(120)]  # 120 near-identical chunks of one item
+    await backend.vectors.replace("big", M, ACL1, many)
+    await backend.vectors.replace("b", M, ACL1, [v(0.9, 0.3, 0)])
+    await backend.vectors.replace("c", M, ACL1, [v(0.8, 0.5, 0)])
+    hits = await search(backend, ALICE, v(1, 0, 0), limit=3)
+    assert {h.item_id for h in hits} == {"big", "b", "c"}  # deeper chunks must still be reached

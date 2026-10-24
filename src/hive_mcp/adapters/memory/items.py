@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from hive_mcp.domain import access
-from hive_mcp.domain.errors import Conflict, IdempotencyConflict, NotFound, PermissionDenied
-from hive_mcp.domain.item import Cursor, Item, ItemView, Page, apply_patch
+from hive_mcp.domain.errors import Conflict, IdempotencyConflict, NotFound
+from hive_mcp.domain.item import Cursor, Item, ItemView, Page, apply_patch, relocate_item
+from hive_mcp.domain.rules import authorize_create, authorize_relocate, authorize_update
 from hive_mcp.ports.items import CreateResult
 
 if TYPE_CHECKING:
@@ -37,8 +37,7 @@ class MemoryItems:
     async def create(
         self, principal: Principal, item: Item, idempotency_key: str | None = None
     ) -> CreateResult:
-        if item.author_id != principal.id or not access.can_create(principal, item.acl):
-            raise PermissionDenied("cannot create in this scope")
+        authorize_create(principal, item, idempotency_key)
         slot = (principal.org_id, principal.id, idempotency_key or "")
         if idempotency_key and slot in self._idem:
             fingerprint, existing = self._idem[slot]
@@ -68,10 +67,7 @@ class MemoryItems:
         self, principal: Principal, item_id: str, patch: ItemPatch, expected_revision: int
     ) -> Item:
         view = self._visible(principal, item_id)
-        if not access.can_write(principal, view.item.acl, view.item.author_id):
-            raise PermissionDenied(item_id)
-        if view.item.revision != expected_revision:
-            raise Conflict(f"revision {view.item.revision} != expected {expected_revision}")
+        authorize_update(principal, view.item, expected_revision)
         updated = apply_patch(view.item, patch, self._clock.now())
         self._items[item_id] = updated
         return updated
@@ -85,14 +81,8 @@ class MemoryItems:
         expected_revision: int,
     ) -> Item:
         view = self._visible(principal, item_id)
-        target = replace(view.item, scope=scope, visibility=visibility)  # re-validates invariants
-        if not access.can_write(principal, view.item.acl, view.item.author_id):
-            raise PermissionDenied(item_id)
-        if not access.can_create(principal, target.acl):
-            raise PermissionDenied("not a member of the target scope")
-        if view.item.revision != expected_revision:
-            raise Conflict(f"revision {view.item.revision} != expected {expected_revision}")
-        moved = replace(target, revision=target.revision + 1, updated_at=self._clock.now())
+        moved = relocate_item(view.item, scope, visibility, self._clock.now())
+        authorize_relocate(principal, view.item, moved, expected_revision)
         self._items[item_id] = moved
         return moved
 

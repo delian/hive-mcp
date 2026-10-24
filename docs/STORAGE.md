@@ -34,3 +34,29 @@ Indexes denormalise the item's `Acl`; after any `relocate` the service must call
 - Vector `replace` is all-or-nothing: bad vectors (zero, NaN, wrong dimension) leave the previous state untouched; models are never mixed.
 - A job whose lease expired is reclaimed; the old worker can no longer complete, fail or heartbeat it; crash loops end `DEAD`.
 - Text search is case-insensitive for every script (e.g. Bulgarian), unlike SQLite `LIKE`.
+
+## Adapters
+| Adapter | Package | Status |
+|---|---|---|
+| In-memory | `adapters/memory` | Reference implementation and test double |
+| SQLite (embedded profile) | `adapters/sqlite` + `adapters/fs` | Items, FTS5 text search, exact vector search, jobs, audit; blobs on the filesystem |
+| Postgres + pgvector + object storage (external profile) | `adapters/postgres` | Next |
+| LanceDB vectors (scalable embedded vectors) | `adapters/lance` | Planned; SQLite vectors are exact and fine up to about 200k chunks (about 130 ms) |
+
+### SQLite specifics
+- One serialised connection, WAL mode, each operation one transaction run off the event loop; "database is locked"
+  becomes `StorageBusy` (a retryable `HiveError`), never a crash.
+- Forward-only migrations by `PRAGMA user_version`; opening a database from a newer version is refused.
+- Text is tokenised in Python with the shared tokenizer and stored in FTS5, so SQLite and every other backend match alike.
+  Query terms are always quoted before they reach FTS5.
+- The SQL access filter (`acl_where`) is only a prefilter; the tier is always decided by `ScopeFilter.tier`.
+  A property test checks the two agree.
+- Timestamps are stored as UTC ISO text so text order equals time order, whatever zone the caller used.
+- Blobs: per-org directory named by the hex of the org id (no path tricks), atomic write, hash verified on read.
+
+## How the tests were checked
+Besides the conformance suite, deliberate bugs ("mutants") were injected into the adapters to prove the tests catch them:
+dropped tenant filter, removed revision check, stale vector chunks, removed job-lease fencing, ignored idempotency
+fingerprint, ignored viewer permission, no-op ACL update, unquoted FTS terms, non-UTC timestamps, cross-org blob access.
+All are caught. Two early gaps (time-zone test data that accidentally sorted correctly; FTS quoting reachable only
+through the tokenizer) were fixed by sharper tests.

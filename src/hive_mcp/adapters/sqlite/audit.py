@@ -1,0 +1,59 @@
+"""SQLite AuditLog (append-only by construction: the adapter exposes no update or delete)."""
+
+from __future__ import annotations
+
+import json
+from typing import TYPE_CHECKING
+
+from hive_mcp.adapters.sqlite.codec import parse_ts, ts
+from hive_mcp.ports.audit import AuditEvent, AuditRecord
+
+if TYPE_CHECKING:
+    import sqlite3
+
+    from hive_mcp.adapters.sqlite.db import Database
+
+
+class SqliteAudit:
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    async def append(self, event: AuditEvent) -> int:
+        def tx(conn: sqlite3.Connection) -> int:
+            cur = conn.execute(
+                "INSERT INTO audit (org_id, actor_id, action, target_id, at, details) VALUES (?,?,?,?,?,?)",
+                (
+                    event.org_id,
+                    event.actor_id,
+                    event.action,
+                    event.target_id,
+                    ts(event.at),
+                    json.dumps(event.details, sort_keys=True),
+                ),
+            )
+            return int(cur.lastrowid or 0)
+
+        return await self._db.run(tx, write=True)
+
+    async def list(self, org_id: str, *, after_seq: int = 0, limit: int = 100) -> list[AuditRecord]:
+        def tx(conn: sqlite3.Connection) -> list[AuditRecord]:
+            rows = conn.execute(
+                "SELECT * FROM audit WHERE org_id = ? AND seq > ? ORDER BY seq LIMIT ?",
+                (org_id, after_seq, limit),
+            ).fetchall()
+            return [
+                AuditRecord(
+                    r["seq"],
+                    AuditEvent(
+                        r["org_id"],
+                        r["actor_id"],
+                        r["action"],
+                        parse_ts(r["at"]),
+                        r["target_id"],
+                        json.loads(r["details"]),
+                    ),
+                )
+                for r in rows
+            ]
+
+        return await self._db.run(tx)

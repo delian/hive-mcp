@@ -53,8 +53,8 @@ class TokenStore:
             st = self.path.stat()
         except FileNotFoundError:
             return []
-        # Writes replace the file atomically (new inode), so this key changes even when two writes share
-        # a coarse timestamp tick; a stale cache would keep a revoked token alive.
+        # Writes replace the file atomically (new inode), so this key changes even when two writes
+        # share a coarse timestamp tick; a stale cache would keep a revoked token alive.
         key = (st.st_ino, st.st_mtime_ns, st.st_size)
         if self._cache and self._cache[0] == key:
             return self._cache[1]

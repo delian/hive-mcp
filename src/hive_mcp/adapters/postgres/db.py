@@ -45,7 +45,10 @@ class PgDatabase:
         if schema:
             if not _IDENT.match(schema):
                 raise ValidationError(f"invalid schema name: {schema!r}")
-            async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as admin:
+            # "IF NOT EXISTS" alone is not safe when several instances start together: both pass the
+            # check and one then fails on the catalog's unique index. A transaction-scoped lock serialises them.
+            async with await psycopg.AsyncConnection.connect(dsn) as admin:
+                await lock(admin, "create-schema", schema)
                 await admin.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
             options += f" -c search_path={schema},public"
         pool: AsyncConnectionPool[Any] = AsyncConnectionPool(

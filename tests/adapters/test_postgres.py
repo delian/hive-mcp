@@ -57,11 +57,21 @@ async def test_refuses_database_from_the_future(schema, tmp_path):
 
 
 async def test_simultaneous_app_starts_migrate_once(schema):
-    dbs = await asyncio.gather(*(PgDatabase.open(DSN, schema=schema, max_size=2) for _ in range(6)))
-    async with dbs[0].tx() as conn:
-        cur = await conn.execute("SELECT version FROM schema_migrations ORDER BY version")
-        assert [r["version"] for r in await cur.fetchall()] == list(range(1, len(MIGRATIONS) + 1))
-    await asyncio.gather(*(db.close() for db in dbs))
+    # return_exceptions + finally: a failed start must not leave other pools open (can stall exit)
+    results = await asyncio.gather(
+        *(PgDatabase.open(DSN, schema=schema, max_size=2) for _ in range(6)), return_exceptions=True
+    )
+    opened = [r for r in results if isinstance(r, PgDatabase)]
+    try:
+        errors = [r for r in results if isinstance(r, BaseException)]
+        assert not errors, errors
+        async with opened[0].tx() as conn:
+            cur = await conn.execute("SELECT version FROM schema_migrations ORDER BY version")
+            assert [r["version"] for r in await cur.fetchall()] == list(
+                range(1, len(MIGRATIONS) + 1)
+            )
+    finally:
+        await asyncio.gather(*(db.close() for db in opened))
 
 
 async def test_pool_exhaustion_is_a_retryable_error(schema):

@@ -62,6 +62,9 @@ select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC", "S", "PL", "RUF", "TCH", "AN
 [tool.ruff.lint.per-file-ignores]
 "src/hive_mcp/adapters/sqlite/*.py" = ["E501"]  # long SQL string literals read better unwrapped
 "src/hive_mcp/adapters/postgres/*.py" = ["E501"]
+# Tool signatures are the public API: many optional arguments are intended.
+"src/hive_mcp/mcp_api/*.py" = ["E501"]  # agent-facing text is clearer unwrapped
+"src/hive_mcp/mcp_api/tools.py" = ["PLR0913", "PLR0917"]
 "tests/**" = ["S101", "PLR2004", "ANN"]
 
 [tool.mypy]

@@ -1,24 +1,54 @@
-"""Builds the MCP server object. Tools are registered from one place."""
+"""Builds the MCP server: instructions, tools and prompts, wired to a lazily available service stack."""
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from mcp.server import MCPServer
 
 from hive_mcp import __version__
+from hive_mcp.mcp_api.instructions import INSTRUCTIONS
+from hive_mcp.mcp_api.tools import register_tools
 
-INSTRUCTIONS = (
-    "Shared team knowledge base. Before starting a task, search it for prior work. "
-    "After finishing research or learning something reusable, store it. "
-    "Results from other groups are labelled with their origin."
-)
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Callable
+    from contextlib import AbstractAsyncContextManager
+
+    from mcp.server.auth.provider import TokenVerifier
+    from mcp.server.auth.settings import AuthSettings
+
+    from hive_mcp.bootstrap import Services
 
 
-def build_mcp() -> MCPServer:
-    mcp = MCPServer("hive-mcp", instructions=INSTRUCTIONS, version=__version__)
+def build_mcp(
+    get_services: Callable[[], Services],
+    *,
+    token_verifier: TokenVerifier | None = None,
+    auth: AuthSettings | None = None,
+    lifespan: Callable[[MCPServer], AbstractAsyncContextManager[AsyncIterator[None] | None]]
+    | None = None,
+) -> MCPServer:
+    mcp = MCPServer(
+        "hive-mcp",
+        instructions=INSTRUCTIONS,
+        version=__version__,
+        token_verifier=token_verifier,
+        auth=auth,
+        lifespan=lifespan,
+    )
+    register_tools(mcp, get_services)
 
-    @mcp.tool()
-    def ping(message: str = "pong") -> str:
-        """Health check tool: echoes the message."""
-        return message
+    @mcp.prompt()
+    def consult_before_task(task: str) -> str:
+        """Start a task by checking what the team already knows."""
+        return f"Before starting, call kb_consult for: {task}\nThen proceed, citing the origin of anything you reuse."
+
+    @mcp.prompt()
+    def end_of_session_report() -> str:
+        """Wrap up a session: store reusable findings and the session record."""
+        return (
+            "Review this session. For each reusable finding call kb_remember (one idea per item, with tags). "
+            "Then call kb_report_session with a short summary, the outcomes and (optionally) the log."
+        )
 
     return mcp

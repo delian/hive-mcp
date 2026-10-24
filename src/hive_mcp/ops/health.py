@@ -22,6 +22,8 @@ def health_routes(lifecycle: Lifecycle) -> list[Route]:
     async def readyz(_: Request) -> Response:
         if lifecycle.draining:
             return JSONResponse({"status": "draining"}, status_code=503)
+        if not lifecycle.ready:
+            return JSONResponse({"status": "starting"}, status_code=503)
         return JSONResponse({"status": "ready"})
 
     return [Route("/healthz", healthz), Route("/readyz", readyz)]

@@ -1,0 +1,128 @@
+"""Static bearer tokens for pipelines, the CLI and tests (OAuth serves interactive assistants).
+
+Only SHA-256 hashes are stored; the plaintext token is shown once. Tokens can expire and be
+revoked by deleting their record; the file is re-read when it changes, so no restart is needed.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import os
+import secrets
+import tempfile
+import time
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from mcp.server.auth.provider import AccessToken
+
+from hive_mcp.domain.errors import ValidationError
+from hive_mcp.security.principals import claims_for
+
+if TYPE_CHECKING:
+    from hive_mcp.domain.principal import Principal
+
+TOKEN_PREFIX = "hive_"  # noqa: S105 - prefix, not a secret; lets secret scanners recognise leaked tokens
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class TokenRecord:
+    token_hash: str
+    subject: str
+    claims: dict[str, object]
+    expires_at: int | None = None  # unix seconds
+    label: str = ""
+
+
+class TokenStore:
+    """JSON file of token records, written atomically with owner-only permissions."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self._cache: tuple[tuple[int, int, int], list[TokenRecord]] | None = None
+
+    def _read(self) -> list[TokenRecord]:
+        try:
+            st = self.path.stat()
+        except FileNotFoundError:
+            return []
+        # Writes replace the file atomically (new inode), so this key changes even when two writes share
+        # a coarse timestamp tick; a stale cache would keep a revoked token alive.
+        key = (st.st_ino, st.st_mtime_ns, st.st_size)
+        if self._cache and self._cache[0] == key:
+            return self._cache[1]
+        records = [TokenRecord(**r) for r in json.loads(self.path.read_text())]
+        self._cache = (key, records)
+        return records
+
+    def _write(self, records: list[TokenRecord]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=self.path.parent)
+        with os.fdopen(fd, "w") as handle:
+            json.dump([asdict(r) for r in records], handle, indent=1)
+        Path(tmp).chmod(0o600)
+        Path(tmp).replace(self.path)
+        self._cache = None
+
+    def create(
+        self, principal: Principal, *, label: str = "", expires_in_days: float | None = None
+    ) -> str:
+        """Returns the plaintext token: show it once; it cannot be recovered later."""
+        if not label or any(r.label == label for r in self._read()):
+            raise ValidationError("a unique label is required (it is how tokens are revoked)")
+        token = TOKEN_PREFIX + secrets.token_urlsafe(32)
+        expires = int(time.time() + expires_in_days * 86_400) if expires_in_days else None
+        record = TokenRecord(
+            hash_token(token), principal.id, claims_for(principal, label), expires, label
+        )
+        self._write([*self._read(), record])
+        return token
+
+    def revoke(self, label: str) -> bool:
+        records = self._read()
+        kept = [r for r in records if r.label != label]
+        if len(kept) == len(records):
+            return False
+        self._write(kept)
+        return True
+
+    def list(self) -> list[TokenRecord]:
+        return list(self._read())
+
+    def find(self, token: str) -> TokenRecord | None:
+        digest = hash_token(token)
+        match = None
+        for (
+            record
+        ) in self._read():  # compare every record: no early exit that leaks which hash matched
+            if hmac.compare_digest(record.token_hash, digest):
+                match = record
+        return match
+
+
+class StaticTokenVerifier:
+    """Implements the SDK's TokenVerifier protocol over a TokenStore."""
+
+    def __init__(self, store: TokenStore, resource: str | None = None) -> None:
+        self._store, self._resource = store, resource
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        record = self._store.find(token) if token.startswith(TOKEN_PREFIX) else None
+        if record is None or (record.expires_at is not None and record.expires_at <= time.time()):
+            return None
+        return AccessToken(
+            token=token,
+            client_id=f"static:{record.label}",
+            scopes=["hive"],
+            expires_at=record.expires_at,
+            resource=self._resource,
+            subject=record.subject,
+            claims=dict(record.claims),
+        )

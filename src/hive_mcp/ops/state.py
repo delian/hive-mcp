@@ -10,6 +10,14 @@ class Lifecycle:
 
     def __init__(self) -> None:
         self._draining = threading.Event()
+        self._ready = threading.Event()
+
+    @property
+    def ready(self) -> bool:
+        return self._ready.is_set()
+
+    def mark_ready(self) -> None:
+        self._ready.set()
 
     @property
     def draining(self) -> bool:

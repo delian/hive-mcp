@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from hive_mcp.ports.indexes import TextIndex, VectorIndex
     from hive_mcp.ports.items import ItemRepository
     from hive_mcp.ports.jobs import JobQueue
+    from hive_mcp.ports.kv import KeyValueStore
 
 
 class Backend(Protocol):
@@ -26,6 +27,8 @@ class Backend(Protocol):
     def jobs(self) -> JobQueue: ...
     @property
     def audit(self) -> AuditLog: ...
+    @property
+    def kv(self) -> KeyValueStore: ...
 
     def close(self) -> object:
         """Sync backends return None, async ones an awaitable; `close_backend` handles both."""

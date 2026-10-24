@@ -8,9 +8,8 @@ starting or draining) need no credentials.
 Every MCP request needs `Authorization: Bearer <token>`. Missing or invalid tokens get `401` with a `WWW-Authenticate` header
 pointing at the OAuth protected-resource metadata, which is what OAuth-capable clients use for discovery.
 
-Today the server verifies **static bearer tokens** (for pipelines, the CLI and coding agents). Interactive assistants
-(claude.ai, ChatGPT, Gemini) need the OAuth authorization server, which is not built yet; it plugs into the same
-`TokenVerifier` and claim mapping.
+The server accepts **static bearer tokens** (pipelines, the CLI, coding agents) and, when Google sign-in is configured,
+**OAuth access tokens** for interactive assistants (claude.ai, ChatGPT, Gemini): see [OAUTH.md](OAUTH.md).
 
 ```bash
 # create a token (printed once; only its hash is stored in <data_dir>/tokens.json)
@@ -49,4 +48,6 @@ remember reusable results, report sessions, never store secrets, say when result
 ## Configuration (environment)
 `HIVE_DATA_DIR` (default `/data`), `HIVE_PORT`, `HIVE_PUBLIC_URL` (the externally visible URL, used for Host/Origin checks and
 OAuth metadata), `HIVE_PROFILE` (`embedded` | `external`), `HIVE_DATABASE_URL` (external profile), `HIVE_TOKENS_FILE`,
-`HIVE_ALLOWED_ORIGINS`, `HIVE_RUN_JOBS`, `HIVE_DRAIN_SECONDS`, `HIVE_SHUTDOWN_TIMEOUT`.
+`HIVE_ALLOWED_ORIGINS`, `HIVE_RUN_JOBS`, `HIVE_DRAIN_SECONDS`, `HIVE_SHUTDOWN_TIMEOUT`, and for OAuth sign-in
+`HIVE_GOOGLE_CLIENT_ID`, `HIVE_GOOGLE_CLIENT_SECRET`, `HIVE_GOOGLE_ALLOWED_DOMAINS`, `HIVE_USERS_FILE`, `HIVE_SECRET_KEY`
+(see [OAUTH.md](OAUTH.md)).

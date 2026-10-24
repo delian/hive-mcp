@@ -7,10 +7,12 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "httpx>=0.27",
     "mcp>=2,<3",
     "numpy>=2",
     "pydantic>=2",
     "pydantic-settings>=2.16.1",
+    "pyjwt[crypto]>=2.8",
     "typer>=0.27.3",
     "uvicorn>=0.54.0",
 ]
@@ -64,8 +66,9 @@ select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC", "S", "PL", "RUF", "TCH", "AN
 "src/hive_mcp/adapters/postgres/*.py" = ["E501"]
 # Tool signatures are the public API: many optional arguments are intended.
 "src/hive_mcp/mcp_api/*.py" = ["E501"]  # agent-facing text is clearer unwrapped
+"src/hive_mcp/security/oauth/*.py" = ["E501"]  # long RFC references and log formats read better unwrapped
 "src/hive_mcp/mcp_api/tools.py" = ["PLR0913", "PLR0917"]
-"tests/**" = ["S101", "PLR2004", "ANN"]
+"tests/**" = ["S101", "PLR2004", "ANN", "S105", "S106", "E501"]  # fake secrets and long fixtures are fine in tests
 
 [tool.mypy]
 strict = true

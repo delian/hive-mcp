@@ -1,8 +1,8 @@
-"""Builds the MCP server: instructions, tools and prompts, wired to a lazily available service stack."""
+"""Builds the MCP server: instructions, tools and prompts over a lazily available service stack."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from mcp.server import MCPServer
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
     from contextlib import AbstractAsyncContextManager
 
-    from mcp.server.auth.provider import TokenVerifier
+    from mcp.server.auth.provider import OAuthAuthorizationServerProvider, TokenVerifier
     from mcp.server.auth.settings import AuthSettings
 
     from hive_mcp.bootstrap import Services
@@ -24,6 +24,7 @@ def build_mcp(
     get_services: Callable[[], Services],
     *,
     token_verifier: TokenVerifier | None = None,
+    auth_server_provider: OAuthAuthorizationServerProvider[Any, Any, Any] | None = None,
     auth: AuthSettings | None = None,
     lifespan: Callable[[MCPServer], AbstractAsyncContextManager[AsyncIterator[None] | None]]
     | None = None,
@@ -33,6 +34,7 @@ def build_mcp(
         instructions=INSTRUCTIONS,
         version=__version__,
         token_verifier=token_verifier,
+        auth_server_provider=auth_server_provider,
         auth=auth,
         lifespan=lifespan,
     )

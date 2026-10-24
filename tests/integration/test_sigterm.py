@@ -8,7 +8,7 @@ import time
 
 import httpx
 
-from tests.integration.conftest import free_port
+from tests.integration.util import free_port
 
 
 def test_sigterm_flips_readiness_then_process_exits(tmp_path) -> None:

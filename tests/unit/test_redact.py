@@ -5,14 +5,14 @@ from hypothesis import strategies as st
 from hive_mcp.security.redact import redact
 
 SECRETS = {
-    "private-key": "-----BEGIN RSA PRIVATE KEY-----\nMIIEvQIBADANBgkq\nabc\n-----END RSA PRIVATE KEY-----",  # noqa: E501
+    "private-key": "-----BEGIN RSA PRIVATE KEY-----\nMIIEvQIBADANBgkq\nabc\n-----END RSA PRIVATE KEY-----",
     "aws-access-key": "key AKIAIOSFODNN7EXAMPLE here",
     "aws-secret": "aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
     "github-token": "token ghp_" + "a1B2c3D4e5" * 4,
     "slack-token": "xoxb-1234567890-abcdefghij",
     "google-api-key": "AIza" + "SyA-1234567890abcdefghijklmnopqrstu"[:35],
     "llm-api-key": "sk-ant-api03-abcdefghijklmnopqrstuvwxyz",
-    "jwt": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk",  # noqa: E501
+    "jwt": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk",
     "bearer-token": "Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123456789",
     "azure-account-key": "AccountKey=" + "A" * 43 + "==",
     "url-password": "postgres://admin:s3cretpass@db.example.com:5432/app",

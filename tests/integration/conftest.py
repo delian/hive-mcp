@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import socket
 import threading
 import time
 from typing import TYPE_CHECKING, Any
@@ -15,9 +14,14 @@ from mcp.client.streamable_http import streamable_http_client
 
 from hive_mcp.app import create_app
 from hive_mcp.config import Settings
+from hive_mcp.domain.principal import Role
 from hive_mcp.ops.drain import DrainingServer
 from hive_mcp.ops.state import Lifecycle
+from hive_mcp.security.directory import DirectoryUser, UserDirectory
+from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.security.tokens import TokenStore
+from tests.integration.fake_google import FakeGoogle
+from tests.integration.util import free_port
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -26,23 +30,27 @@ if TYPE_CHECKING:
     from hive_mcp.domain.principal import Principal
 
 
-def free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return int(s.getsockname()[1])
-
-
 class Live:
-    def __init__(self, data_dir: Path, grace: float = 0.0) -> None:
+    def __init__(self, data_dir: Path, grace: float = 0.0, google: Any = None) -> None:
         self.port = free_port()
         self.lifecycle = Lifecycle()
+        oauth: dict[str, Any] = {}
+        if google is not None:  # Google sign-in against the in-process fake provider
+            oauth = {
+                "google_client_id": google.client_id,
+                "google_client_secret": google.client_secret,
+                "google_issuer": google.issuer,
+                "google_allowed_domains": ["acme.com"],
+            }
         self.settings = Settings(
             host="127.0.0.1",
             port=self.port,
             data_dir=data_dir,
             public_url=f"http://127.0.0.1:{self.port}",
+            **oauth,
         )
         self.tokens = TokenStore(self.settings.tokens_path)
+        self.directory = UserDirectory(AtomicJsonFile(self.settings.users_path, default=[]))
         config = uvicorn.Config(
             create_app(self.settings, self.lifecycle),
             host="127.0.0.1",
@@ -82,6 +90,29 @@ class Live:
 @pytest.fixture
 def live(tmp_path: Path) -> Iterator[Live]:
     srv = Live(tmp_path / "data")
+    srv.start()
+    yield srv
+    srv.stop()
+
+
+@pytest.fixture
+def google() -> Iterator[Any]:
+    fake = FakeGoogle()
+    fake.start()
+    yield fake
+    fake.stop()
+
+
+@pytest.fixture
+def oauth_live(tmp_path: Path, google: Any) -> Iterator[Live]:
+    """A server with Google sign-in on, and alice@acme.com / bob@acme.com in the directory."""
+    srv = Live(tmp_path / "data", google=google)
+    srv.directory.upsert(
+        DirectoryUser("alice@acme.com", "acme", Role.MEMBER, projects=frozenset({"p1"}))
+    )
+    srv.directory.upsert(
+        DirectoryUser("bob@acme.com", "acme", Role.MEMBER, projects=frozenset({"p1"}))
+    )
     srv.start()
     yield srv
     srv.stop()

@@ -56,6 +56,13 @@ MIGRATIONS = [
     );
     CREATE INDEX audit_org ON audit (org_id, seq);
     """,
+    """
+    CREATE TABLE kv (
+        namespace TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, expires_at TEXT,
+        PRIMARY KEY (namespace, key)
+    );
+    CREATE INDEX kv_expiry ON kv (expires_at);
+    """,
 ]
 
 

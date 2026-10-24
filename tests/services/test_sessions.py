@@ -38,7 +38,7 @@ async def test_compaction_report_kind(stack):
 
 
 async def test_log_is_redacted_stored_as_a_file_and_access_controlled(stack):
-    secret = "xoxb-1234567890-abcdefghij"  # noqa: S105 - fake test token
+    secret = "xoxb-1234567890-abcdefghij"
     log = f"step 1 ok\nexport SLACK_TOKEN={secret}\nstep 2 ok\n" + "Радар 雷达 " * 50
     saved = await stack.sessions.report_session(ALICE, SessionReport(summary="Deploy run", log=log))
     assert saved.redactions.get("slack-token") == 1 and saved.item.source.startswith("blob:")

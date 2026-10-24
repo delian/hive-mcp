@@ -14,6 +14,8 @@ from hive_mcp.domain.errors import HiveError
 from hive_mcp.domain.principal import Principal, Role
 from hive_mcp.ops.drain import DrainingServer
 from hive_mcp.ops.state import Lifecycle
+from hive_mcp.security.directory import DirectoryUser, UserDirectory, normalize_email
+from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.security.tokens import TokenStore
 
 cli = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -21,6 +23,10 @@ tokens = typer.Typer(
     no_args_is_help=True, help="Manage static bearer tokens (pipelines, CLI, tests)."
 )
 cli.add_typer(tokens, name="token")
+users = typer.Typer(
+    no_args_is_help=True, help="Manage who may sign in (Google accounts) and what they belong to."
+)
+cli.add_typer(users, name="user")
 
 
 @cli.command()
@@ -88,6 +94,55 @@ def token_revoke(label: str) -> None:
         typer.echo(f"no token labelled {label!r}", err=True)
         raise typer.Exit(1)
     typer.echo(f"revoked {label}")
+
+
+def _directory() -> UserDirectory:
+    return UserDirectory(AtomicJsonFile(Settings().users_path, default=[]))
+
+
+@users.command("add")
+def user_add(  # noqa: PLR0913, PLR0917 - one option per attribute
+    email: str = typer.Argument(..., help="The person's Google Workspace email address."),
+    org: str = typer.Option(..., help="Organisation id."),
+    role: str = typer.Option("member", help="viewer, member, editor or admin."),
+    team: list[str] = typer.Option([], help="Team membership (repeatable)."),  # noqa: B008
+    project: list[str] = typer.Option([], help="Project membership (repeatable)."),  # noqa: B008
+    disabled: bool = typer.Option(False, help="Keep the entry but block sign-in and live tokens."),
+) -> None:
+    """Add or update a user. Changes apply to live tokens immediately."""
+    try:
+        user = DirectoryUser(
+            normalize_email(email),
+            org,
+            Role[role.upper()],
+            frozenset(team),
+            frozenset(project),
+            disabled,
+        )
+        _directory().upsert(user)
+    except (KeyError, HiveError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"saved {user.email}")
+
+
+@users.command("list")
+def user_list() -> None:
+    """List users."""
+    for u in _directory().list():
+        flags = " (disabled)" if u.disabled else ""
+        typer.echo(
+            f"{u.email}\t{u.org_id}\t{u.role.name.lower()}\tteams={sorted(u.teams)}\tprojects={sorted(u.projects)}{flags}"
+        )
+
+
+@users.command("remove")
+def user_remove(email: str) -> None:
+    """Remove a user; their tokens stop working immediately."""
+    if not _directory().remove(email):
+        typer.echo(f"no such user {email!r}", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"removed {email}")
 
 
 def main() -> None:

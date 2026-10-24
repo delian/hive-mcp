@@ -8,21 +8,20 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
-import os
 import secrets
-import tempfile
 import time
 from dataclasses import asdict, dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from mcp.server.auth.provider import AccessToken
 
 from hive_mcp.domain.errors import ValidationError
+from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.security.principals import claims_for
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from hive_mcp.domain.principal import Principal
 
 TOKEN_PREFIX = "hive_"  # noqa: S105 - prefix, not a secret; lets secret scanners recognise leaked tokens
@@ -42,34 +41,17 @@ class TokenRecord:
 
 
 class TokenStore:
-    """JSON file of token records, written atomically with owner-only permissions."""
+    """JSON file of token records (see AtomicJsonFile for the atomic write / cache rules)."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
-        self._cache: tuple[tuple[int, int, int], list[TokenRecord]] | None = None
+        self._file = AtomicJsonFile(path, default=[])
 
     def _read(self) -> list[TokenRecord]:
-        try:
-            st = self.path.stat()
-        except FileNotFoundError:
-            return []
-        # Writes replace the file atomically (new inode), so this key changes even when two writes
-        # share a coarse timestamp tick; a stale cache would keep a revoked token alive.
-        key = (st.st_ino, st.st_mtime_ns, st.st_size)
-        if self._cache and self._cache[0] == key:
-            return self._cache[1]
-        records = [TokenRecord(**r) for r in json.loads(self.path.read_text())]
-        self._cache = (key, records)
-        return records
+        return [TokenRecord(**r) for r in self._file.read()]
 
     def _write(self, records: list[TokenRecord]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=self.path.parent)
-        with os.fdopen(fd, "w") as handle:
-            json.dump([asdict(r) for r in records], handle, indent=1)
-        Path(tmp).chmod(0o600)
-        Path(tmp).replace(self.path)
-        self._cache = None
+        self._file.write([asdict(r) for r in records])
 
     def create(
         self, principal: Principal, *, label: str = "", expires_in_days: float | None = None

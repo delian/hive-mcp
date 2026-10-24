@@ -22,7 +22,8 @@ docker run -p 8080:8080 -v hive:/data hive-mcp
 docker exec <container> hive token create --label me --subject me --org myorg --project demo
 ```
 
-See [docs/MCP.md](docs/MCP.md) for the tools, authentication and configuration.
+See [docs/MCP.md](docs/MCP.md) for the tools, authentication and configuration, and [docs/OAUTH.md](docs/OAUTH.md) for
+connecting claude.ai, ChatGPT and Gemini through Google sign-in.
 
 ## Development
 

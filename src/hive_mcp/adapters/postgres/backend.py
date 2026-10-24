@@ -9,6 +9,7 @@ from hive_mcp.adapters.postgres.audit import PgAudit
 from hive_mcp.adapters.postgres.db import PgDatabase
 from hive_mcp.adapters.postgres.items import PgItems
 from hive_mcp.adapters.postgres.jobs import PgJobs
+from hive_mcp.adapters.postgres.kv import PgKv
 from hive_mcp.adapters.postgres.text import PgText
 from hive_mcp.adapters.postgres.vectors import PgVectors
 from hive_mcp.domain.clock import Clock, FixedClock
@@ -23,6 +24,7 @@ class PostgresBackend:
         self.vectors = PgVectors(db)
         self.jobs = PgJobs(db, self.clock)
         self.audit = PgAudit(db)
+        self.kv = PgKv(db, self.clock)
         self.blobs = FsBlobs(Path(blobs_root))
 
     @classmethod

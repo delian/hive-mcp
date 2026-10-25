@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 import typer
@@ -9,6 +10,7 @@ import uvicorn
 
 from hive_mcp import __version__
 from hive_mcp.app import create_app
+from hive_mcp.bootstrap import build_services
 from hive_mcp.config import Settings
 from hive_mcp.domain.errors import HiveError
 from hive_mcp.domain.principal import Principal, Role
@@ -150,6 +152,26 @@ def user_remove(email: str) -> None:
 
 def main() -> None:
     cli()
+
+
+@cli.command()
+def reindex(org: str = typer.Option(..., help="Organisation id.")) -> None:
+    """Queue re-embedding of every item (run after changing HIVE_EMBEDDER). The server's job
+    runner does the work; a running server need not be restarted."""
+
+    async def run() -> int:
+        services = await build_services(Settings())
+        try:
+            return await services.indexing.reindex_org(org)
+        finally:
+            await services.close()
+
+    try:
+        count = asyncio.run(run())
+    except HiveError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"queued {count} items")
 
 
 @models.command("fetch")

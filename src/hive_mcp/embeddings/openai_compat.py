@@ -76,7 +76,8 @@ class OpenAICompatEmbedder:
                 f"provider returned a vector of the wrong size (want {self.dim})"
             )
         try:
-            vec = np.asarray(raw, dtype=np.float32)
+            with np.errstate(over="ignore"):
+                vec = np.asarray(raw, dtype=np.float32)
         except (ValueError, TypeError) as exc:
             raise EmbeddingUnavailable("provider returned a non-numeric vector") from exc
         norm = float(np.linalg.norm(vec))

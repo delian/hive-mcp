@@ -108,6 +108,14 @@ class PgItems:
             item = await fetch_item(conn, item_id)
         return item if item and item.org_id == org_id else None
 
+    async def list_ids_system(self, org_id: str, after: str | None, limit: int) -> list[str]:
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                "SELECT id FROM items WHERE org_id = %s AND id > %s ORDER BY id LIMIT %s",
+                [org_id, after or "", limit],
+            )
+            return [r["id"] for r in await cur.fetchall()]
+
     async def get_many(self, principal: Principal, item_ids: Sequence[str]) -> list[ItemView]:
         flt = access.read_filter(principal)
         where, params = acl_where(flt)

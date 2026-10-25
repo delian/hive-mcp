@@ -217,6 +217,20 @@ async def test_long_unicode_and_control_text_roundtrips(backend):
     assert (await backend.items.get(ALICE, item.id)).item == item
 
 
+async def test_system_listing_is_org_scoped_ordered_and_paginated(backend):
+    made = [make_item(backend.clock, scope=ALICE_PRIVATE) for _ in range(5)]
+    for item in made:
+        await backend.items.create(ALICE, item)
+    want = sorted(i.id for i in made)
+    assert await backend.items.list_ids_system("org1", None, 100) == want
+    assert await backend.items.list_ids_system("org2", None, 100) == []
+    seen, after = [], None
+    while page := await backend.items.list_ids_system("org1", after, 2):
+        seen += page
+        after = page[-1]
+    assert seen == want
+
+
 async def test_system_read_ignores_user_acl_but_never_crosses_orgs(backend):
     private = make_item(backend.clock, scope=ALICE_PRIVATE)
     await backend.items.create(ALICE, private)

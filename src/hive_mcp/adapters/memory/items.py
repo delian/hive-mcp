@@ -58,6 +58,10 @@ class MemoryItems:
         item = self._items.get(item_id)
         return item if item and item.org_id == org_id else None
 
+    async def list_ids_system(self, org_id: str, after: str | None, limit: int) -> list[str]:
+        ids = sorted(i.id for i in self._items.values() if i.org_id == org_id)
+        return [i for i in ids if after is None or i > after][:limit]
+
     async def get_many(self, principal: Principal, item_ids: Sequence[str]) -> list[ItemView]:
         views = []
         for item_id in item_ids:

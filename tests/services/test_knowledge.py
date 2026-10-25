@@ -374,3 +374,26 @@ async def test_superseded_items_are_hidden_by_default_and_rank_below_current_one
     everything = frozenset(Status) - {Status.ARCHIVED}
     with_old = (await ids(stack, ALICE, "pulse timing", statuses=everything))[0]
     assert with_old[-1] == old.item.id  # superseded knowledge is last, not lost
+
+
+async def test_reindex_after_switching_embedder_makes_items_searchable_by_new_model(backend):
+    old = build_stack(backend, HashingEmbedder(128))
+    saved = [
+        await old.knowledge.remember(ALICE, req(title=f"t{i}", body=f"pelican {i}"))
+        for i in range(3)
+    ]
+    new_emb = HashingEmbedder(64)
+    new = build_stack(backend, new_emb)
+    flt = read_filter(ALICE)
+    probe = await new_emb.embed_query("pelican")
+    assert await backend.vectors.search(flt, new_emb.model_id, probe, 10) == []  # nothing yet
+    assert await new.indexing.reindex_org("org1") == 3
+    assert await new.indexing.reindex_org("org1") == 3  # repeat is deduplicated
+    done = 0
+    while job := await backend.jobs.claim("w", frozenset({INDEX_JOB}), 30):
+        await new.indexing.handle_job(job)
+        assert await backend.jobs.complete(job.id, "w")
+        done += 1
+    assert done == 3
+    hits = await backend.vectors.search(flt, new_emb.model_id, probe, 10)
+    assert {h.item_id for h in hits} == {s.item.id for s in saved}

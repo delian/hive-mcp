@@ -122,6 +122,16 @@ class SqliteItems:
 
         return await self._db.run(tx)
 
+    async def list_ids_system(self, org_id: str, after: str | None, limit: int) -> list[str]:
+        def tx(conn: sqlite3.Connection) -> list[str]:
+            rows = conn.execute(
+                "SELECT id FROM items WHERE org_id = ? AND id > ? ORDER BY id LIMIT ?",
+                (org_id, after or "", limit),
+            ).fetchall()
+            return [r[0] for r in rows]
+
+        return await self._db.run(tx)
+
     async def get_many(self, principal: Principal, item_ids: Sequence[str]) -> list[ItemView]:
         flt = access.read_filter(principal)
 

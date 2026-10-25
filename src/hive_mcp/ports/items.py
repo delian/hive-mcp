@@ -36,6 +36,10 @@ class ItemRepository(Protocol):
         """Trusted internal read for indexing/maintenance jobs: no user ACL, never across orgs.
         Must not be reachable from any tool."""
 
+    async def list_ids_system(self, org_id: str, after: str | None, limit: int) -> list[str]:
+        """Trusted maintenance listing: ids of every item in the org (any status, any ACL),
+        ascending, strictly after `after`. For reindexing; must not be reachable from any tool."""
+
     async def get_many(self, principal: Principal, item_ids: Sequence[str]) -> list[ItemView]:
         """Hydrate search hits. Invisible or missing ids are dropped; order follows `item_ids`."""
 

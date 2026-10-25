@@ -1,7 +1,9 @@
 # Embeddings
 
 `HIVE_EMBEDDER` selects the embedder. Vectors are stored per `model_id` and never compared across
-models, so switching is safe; items must then be re-indexed (a `hive reindex` command is planned).
+models, so switching is safe; run `hive reindex --org <id>` afterwards: it queues one job per item and the server's job runner
+re-embeds them (no restart; repeating is safe). Until done, consult falls back to keyword hits for
+unindexed items. Vectors of the old model stay stored and unused.
 
 | Value     | What                                   | Needs                                              |
 |-----------|----------------------------------------|----------------------------------------------------|

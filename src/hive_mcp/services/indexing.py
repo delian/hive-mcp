@@ -80,6 +80,18 @@ class IndexService:
             )
             return False
 
+    async def reindex_org(self, org_id: str, page: int = 500) -> int:
+        """Queue an index job for every item in the org (e.g. after switching embedder).
+        Safe to repeat: jobs are deduplicated per item. Returns the number of items seen."""
+        total, after = 0, None
+        while ids := await self._items.list_ids_system(org_id, after, page):
+            for item_id in ids:
+                await self._jobs.enqueue(
+                    org_id, INDEX_JOB, {"item_id": item_id}, dedupe_key=f"index:{item_id}"
+                )
+            total, after = total + len(ids), ids[-1]
+        return total
+
     async def sync_acl(self, item: Item) -> None:
         await self._text.update_acl(item.id, item.acl)
         await self._vectors.update_acl(item.id, item.acl)

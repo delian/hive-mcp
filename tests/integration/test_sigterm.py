@@ -18,7 +18,9 @@ def test_sigterm_flips_readiness_then_process_exits(tmp_path) -> None:
         "HIVE_PORT": str(port),
         "HIVE_HOST": "127.0.0.1",
         "HIVE_DRAIN_SECONDS": "1",
-        "HIVE_DATA_DIR": str(tmp_path / "data"),  # the default (/data) is not writable outside Docker
+        "HIVE_DATA_DIR": str(
+            tmp_path / "data"
+        ),  # the default (/data) is not writable outside Docker
     }
     proc = subprocess.Popen([sys.executable, "-m", "hive_mcp"], env=env)
     base = f"http://127.0.0.1:{port}"

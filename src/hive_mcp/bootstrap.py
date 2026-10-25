@@ -9,7 +9,7 @@ from hive_mcp.adapters.sqlite import SqliteBackend
 from hive_mcp.config import Profile, Settings
 from hive_mcp.domain.clock import SystemClock
 from hive_mcp.domain.errors import ValidationError
-from hive_mcp.embeddings.factory import make_embedder
+from hive_mcp.embeddings.factory import embed_min_level, make_embedder
 from hive_mcp.ports.backend import Backend, close_backend
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.graph import GraphService
@@ -52,7 +52,14 @@ async def build_services(settings: Settings) -> Services:
             settings.database_url, settings.data_dir / "blobs", clock=clock
         )
     embedder = make_embedder(settings)
-    indexing = IndexService(backend.items, backend.text, backend.vectors, embedder, backend.jobs)
+    indexing = IndexService(
+        backend.items,
+        backend.text,
+        backend.vectors,
+        embedder,
+        backend.jobs,
+        embed_min_level(settings),
+    )
     knowledge = KnowledgeService(
         items=backend.items, indexing=indexing, audit=backend.audit, clock=clock
     )

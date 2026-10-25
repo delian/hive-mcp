@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from hive_mcp.domain.scope import ScopeLevel
 from hive_mcp.embeddings.hashing import HashingEmbedder
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.graph import GraphService
@@ -30,9 +31,13 @@ class Stack:
     ingest: IngestService
 
 
-def build_stack(backend: Any, embedder: Any = None) -> Stack:
+def build_stack(
+    backend: Any, embedder: Any = None, embed_min_level: ScopeLevel = ScopeLevel.PRIVATE
+) -> Stack:
     embedder = embedder or HashingEmbedder(128)
-    indexing = IndexService(backend.items, backend.text, backend.vectors, embedder, backend.jobs)
+    indexing = IndexService(
+        backend.items, backend.text, backend.vectors, embedder, backend.jobs, embed_min_level
+    )
     knowledge = KnowledgeService(
         items=backend.items, indexing=indexing, audit=backend.audit, clock=backend.clock
     )

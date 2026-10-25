@@ -12,6 +12,7 @@ NS_CLIENT = "oauth:client"
 NS_TXN = "oauth:txn"  # a login in progress, bound to the browser by a signed cookie
 NS_CODE = "oauth:code"
 NS_CODE_USED = "oauth:code-used"  # remembers spent codes so a replay can revoke what they produced
+NS_CONSENT = "oauth:consent"  # "remember my approval" per user + client + redirect + scopes
 NS_ACCESS = "oauth:access"
 NS_REFRESH = "oauth:refresh"
 NS_REFRESH_USED = "oauth:refresh-used"  # remembers rotated refresh tokens to detect theft
@@ -51,3 +52,4 @@ class OAuthConfig:
     resource_url: str
     access_ttl: int = 3600
     refresh_ttl: int = 30 * 86400
+    consent_ttl: int = 0  # seconds an approval is remembered; 0 = ask every time

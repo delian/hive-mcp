@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from hive_mcp.domain.errors import HiveError
 from hive_mcp.domain.item import Status
+from hive_mcp.domain.scope import ScopeLevel
 from hive_mcp.ingest.chunker import chunk_text
 from hive_mcp.ports.indexes import TextDoc
 from hive_mcp.search.tokenize import tokenize
@@ -27,16 +28,20 @@ def embedding_texts(item: Item) -> list[str]:
 
 
 class IndexService:
-    def __init__(
+    def __init__(  # noqa: PLR0913, PLR0917 - ports plus one policy
         self,
         items: ItemRepository,
         text: TextIndex,
         vectors: VectorIndex,
         embedder: Embedder,
         jobs: JobQueue,
+        embed_min_level: ScopeLevel = ScopeLevel.PRIVATE,
     ) -> None:
         self._items, self._text, self._vectors = items, text, vectors
         self._embedder, self._jobs = embedder, jobs
+        # Items narrower than this are kept out of the embedder: they are found by keyword only.
+        # Used so private notes are never sent to a hosted embedding provider.
+        self._min_level = embed_min_level
 
     async def index_item(self, item: Item) -> None:
         """Make the indexes match `item` exactly (archived items are removed)."""
@@ -46,7 +51,7 @@ class IndexService:
             return
         body = f"{item.title}\n{item.body}\n{' '.join(sorted(item.tags))}"
         await self._text.upsert(TextDoc(item.id, item.acl, body))
-        texts = embedding_texts(item)
+        texts = embedding_texts(item) if item.scope.level >= self._min_level else []
         usable = next((t for t in texts if tokenize(t)), None)
         if usable is None:  # no words anywhere: findable by id only, nothing to embed
             await self._vectors.replace(item.id, self._embedder.model_id, item.acl, [])
@@ -95,6 +100,8 @@ class IndexService:
     async def sync_acl(self, item: Item) -> None:
         await self._text.update_acl(item.id, item.acl)
         await self._vectors.update_acl(item.id, item.acl)
+        if self._min_level > ScopeLevel.PRIVATE:  # a move may cross the embedding boundary
+            await self.index_or_enqueue(item)
 
     async def handle_job(self, job: Job) -> None:
         """Job handler: raises on failure so the runner retries with backoff."""

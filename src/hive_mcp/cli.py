@@ -47,6 +47,8 @@ def serve() -> None:
         host=settings.host,
         port=settings.port,
         timeout_graceful_shutdown=int(settings.shutdown_timeout),
+        proxy_headers=True,
+        forwarded_allow_ips=settings.forwarded_allow_ips,
     )
     DrainingServer(config, lifecycle, settings.drain_seconds).run()
 

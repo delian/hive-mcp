@@ -20,6 +20,7 @@ from hive_mcp.security.oauth.upstream import UpstreamError
 if TYPE_CHECKING:
     from starlette.requests import Request
 
+    from hive_mcp.ports.kv import JsonObject
     from hive_mcp.security.oauth.cookies import CookieSigner
     from hive_mcp.security.oauth.provider import HiveOAuthProvider
     from hive_mcp.security.oauth.upstream import GoogleOidc
@@ -86,6 +87,19 @@ class LoginRoutes:
         code = request.query_params.get("code")
         if request.query_params.get("error") or not code:
             return redirect(await self.provider.finish(state, approve=False) or "/")
+        who = await self.verified_email(state, txn, code)
+        if isinstance(who, Response):
+            return who
+        email = who
+        await self.provider.attach_user(state, txn, email)
+        log.info("oauth.login user=%s", email)
+        if await self.provider.has_consent({**txn, "user": email}):
+            log.info("oauth.consent_remembered user=%s client=%s", email, txn["client_id"])
+            return await self.complete(state, approve=True)
+        return redirect(f"/oauth/consent?txn={state}")
+
+    async def verified_email(self, state: str, txn: JsonObject, code: str) -> str | Response:
+        """The Google account's email if it may sign in, else the response to send back."""
         try:
             identity = await self.upstream.exchange(
                 code=code, code_verifier=txn["upstream_verifier"], nonce=txn["nonce"]
@@ -100,9 +114,15 @@ class LoginRoutes:
             return redirect(
                 await self.provider.finish(state, approve=False) or "/"
             )  # client sees only access_denied
-        await self.provider.attach_user(state, txn, outcome.email)
-        log.info("oauth.login user=%s", outcome.email)
-        return redirect(f"/oauth/consent?txn={state}")
+        return outcome.email
+
+    async def complete(self, txn_id: str, *, approve: bool) -> Response:
+        url = await self.provider.finish(txn_id, approve=approve)
+        if url is None:
+            return error_page("This sign-in has expired.")
+        response = redirect(url, 303)
+        response.delete_cookie(COOKIE_NAME, path="/oauth")
+        return response
 
     async def consent(self, request: Request) -> Response:
         form = await request.form() if request.method == "POST" else None
@@ -117,15 +137,12 @@ class LoginRoutes:
         if not hmac.compare_digest(str(form.get("csrf", "")), txn["csrf"]):
             return error_page("The approval form was not valid.", 403)
         approve = form.get("decision") == "approve"
-        url = await self.provider.finish(txn_id, approve=approve)
-        if url is None:
-            return error_page("This sign-in has expired.")
+        if approve:
+            await self.provider.remember_consent(txn)
         log.info(
             "oauth.consent user=%s client=%s approved=%s", txn["user"], txn["client_id"], approve
         )
-        response = redirect(url, 303)
-        response.delete_cookie(COOKIE_NAME, path="/oauth")
-        return response
+        return await self.complete(txn_id, approve=approve)
 
     async def consent_form(self, txn_id: str, txn: dict[str, object]) -> Response:
         client = await self.provider.get_client(str(txn["client_id"]))

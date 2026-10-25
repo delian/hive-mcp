@@ -17,6 +17,7 @@ from hive_mcp.domain.clock import SystemClock
 from hive_mcp.domain.errors import StorageBusy
 from hive_mcp.mcp_api.server import build_mcp
 from hive_mcp.ops.health import health_routes
+from hive_mcp.ops.ratelimit import RateLimiter, RateLimitMiddleware, Rule
 from hive_mcp.ops.state import Lifecycle
 from hive_mcp.security.directory import UserDirectory
 from hive_mcp.security.jsonfile import AtomicJsonFile
@@ -51,6 +52,26 @@ def transport_security(settings: Settings) -> TransportSecuritySettings:
 
 
 PURGE_INTERVAL_SECONDS = 600
+BURST_SECONDS = 10  # a client may use this many seconds of its allowance at once
+
+
+def rate_limit_rules(settings: Settings) -> list[Rule]:
+    """Registration is the only anonymous write, so it is the tightest; 0 turns a limit off."""
+    rules = []
+    if settings.rate_limit_register:
+        per_hour = settings.rate_limit_register
+        rules.append(
+            Rule(("/register",), RateLimiter(per_hour / 60, per_hour), methods=frozenset({"POST"}))
+        )
+    if settings.rate_limit_auth:
+        per_min = settings.rate_limit_auth
+        auth_paths = ("/authorize", "/token", "/revoke", "/oauth")
+        rules.append(Rule(auth_paths, RateLimiter(per_min, max(per_min // 2, 5))))
+    if settings.rate_limit_mcp:
+        per_min = settings.rate_limit_mcp
+        burst = max(per_min * BURST_SECONDS // 60, 10)
+        rules.append(Rule((settings.mcp_path,), RateLimiter(per_min, burst), by_token=True))
+    return rules
 
 
 async def purge_loop(services: Services) -> None:
@@ -71,6 +92,7 @@ def build_oauth(
         settings.resource_url,
         settings.access_token_ttl,
         settings.refresh_token_ttl,
+        settings.consent_remember_days * 86400,
     )
     provider = HiveOAuthProvider(
         get_kv=get_kv,
@@ -160,5 +182,6 @@ def create_app(
     )
     app.router.routes.extend(health_routes(lifecycle))
     app.router.routes[0:0] = extra_routes  # ours first: /revoke must shadow the SDK's version
+    app.add_middleware(RateLimitMiddleware, rules=rate_limit_rules(settings))
     app.state.lifecycle = lifecycle
     return app

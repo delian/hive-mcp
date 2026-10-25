@@ -7,6 +7,7 @@ reuse detection, resource binding, live directory checks, and the login/consent 
 
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 from typing import TYPE_CHECKING, Any
@@ -29,6 +30,7 @@ from hive_mcp.security.oauth.models import (
     NS_CLIENT,
     NS_CODE,
     NS_CODE_USED,
+    NS_CONSENT,
     NS_FAMILY,
     NS_TXN,
     SCOPE,
@@ -147,6 +149,24 @@ class HiveOAuthProvider:
 
     async def attach_user(self, txn_id: str, txn: JsonObject, email: str) -> None:
         await self.kv.put(NS_TXN, txn_id, {**txn, "user": email}, ttl_seconds=TXN_TTL_SECONDS)
+
+    @staticmethod
+    def _consent_key(txn: JsonObject) -> str:
+        """Approval is bound to the exact user, client, redirect target and scopes."""
+        parts = [txn["user"], txn["client_id"], txn["redirect_uri"], *sorted(txn["scopes"])]
+        return digest(json.dumps(parts))
+
+    async def has_consent(self, txn: JsonObject) -> bool:
+        if self.config.consent_ttl <= 0 or not txn.get("user"):
+            return False
+        return await self.kv.get(NS_CONSENT, self._consent_key(txn)) is not None
+
+    async def remember_consent(self, txn: JsonObject) -> None:
+        if self.config.consent_ttl > 0 and txn.get("user"):
+            await self.kv.put(
+                NS_CONSENT, self._consent_key(txn), {"user": txn["user"]},
+                ttl_seconds=self.config.consent_ttl,
+            )  # fmt: skip
 
     async def finish(
         self, txn_id: str, *, approve: bool, error: str = "access_denied"

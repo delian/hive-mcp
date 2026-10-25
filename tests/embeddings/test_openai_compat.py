@@ -4,7 +4,10 @@ import httpx
 import numpy as np
 import pytest
 
+from hive_mcp.config import Settings
 from hive_mcp.domain.errors import EmbeddingUnavailable, ValidationError
+from hive_mcp.domain.scope import ScopeLevel
+from hive_mcp.embeddings.factory import embed_min_level
 from hive_mcp.embeddings.openai_compat import OpenAICompatEmbedder
 
 DIM = 8
@@ -120,3 +123,18 @@ async def test_rejects_empty_text_without_calling_the_provider():
 
     with pytest.raises(ValidationError):
         await make(handler).embed(["  "])
+
+
+def test_hosted_embedders_default_to_keeping_private_notes_local():
+    assert embed_min_level(Settings(embedder="hashing")) is ScopeLevel.PRIVATE
+    assert embed_min_level(Settings(embedder="onnx")) is ScopeLevel.PRIVATE
+    assert embed_min_level(Settings(embedder="openai")) is ScopeLevel.PROJECT
+    assert (
+        embed_min_level(Settings(embedder="openai", embedding_min_scope="Team")) is ScopeLevel.TEAM
+    )
+    assert (
+        embed_min_level(Settings(embedder="openai", embedding_min_scope="private"))
+        is ScopeLevel.PRIVATE
+    )
+    with pytest.raises(ValidationError):
+        embed_min_level(Settings(embedder="openai", embedding_min_scope="galaxy"))

@@ -14,7 +14,10 @@ unindexed items. Vectors of the old model stay stored and unused.
 `hive models fetch` downloads pinned files and verifies SHA-256; nothing is downloaded at server
 start. Set `HIVE_EMBEDDING_AZURE=true` for Azure OpenAI (`api-key` header).
 
-**Privacy:** with `openai`, item text is sent to the provider. Use `onnx` where that is not allowed.
+**Privacy:** with `openai`, item text is sent to the provider. By default only items shared to a project
+or wider are sent (`HIVE_EMBEDDING_MIN_SCOPE=project`); private notes and session logs stay keyword-only,
+and are embedded the moment they are promoted. Search *queries* are always sent to the provider. Use `onnx`
+where nothing may leave the server.
 
 ## Relevance floor
 Nearest neighbours always exist, so each embedder has a `min_similarity` below which a vector hit is

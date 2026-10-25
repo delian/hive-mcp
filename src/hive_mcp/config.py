@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     embedding_url: str | None = None  # openai: full .../embeddings URL
     embedding_api_key: SecretStr | None = None
     embedding_dim: int = Field(default=1024, ge=8, le=4096)  # openai: requested dimensions
+    # Narrowest scope whose items may be embedded (private, project, team, org). Default: all for
+    # local embedders; project and wider for hosted ones, so private notes never leave the server.
+    embedding_min_scope: str | None = None
     embedding_azure: bool = False  # openai: send `api-key` header (Azure OpenAI)
     embedding_min_similarity: float = Field(default=0.3, ge=0, le=1)  # openai relevance floor
     run_jobs: bool = True  # run the background job runner inside the server process
@@ -51,6 +54,16 @@ class Settings(BaseSettings):
     secret_key: SecretStr | None = (
         None  # signs login cookies; default: generated into <data_dir>/secret.key
     )
+    # Requests per minute per client address (login/registration) or per token (MCP); 0 = unlimited.
+    rate_limit_mcp: int = Field(default=1200, ge=0)
+    rate_limit_auth: int = Field(default=60, ge=0)
+    rate_limit_register: int = Field(
+        default=30, ge=0
+    )  # new client registrations per hour per address
+    forwarded_allow_ips: str = (
+        "127.0.0.1"  # proxies whose X-Forwarded-For is trusted for client addresses
+    )
+    consent_remember_days: int = Field(default=30, ge=0)  # 0 = show the approval page every time
     access_token_ttl: int = Field(default=3600, ge=60)
     refresh_token_ttl: int = Field(default=30 * 86400, ge=3600)
     allowed_origins: list[str] = Field(default_factory=list)

@@ -31,7 +31,9 @@ if TYPE_CHECKING:
 
 
 class Live:
-    def __init__(self, data_dir: Path, grace: float = 0.0, google: Any = None) -> None:
+    def __init__(
+        self, data_dir: Path, grace: float = 0.0, google: Any = None, **overrides: Any
+    ) -> None:
         self.port = free_port()
         self.lifecycle = Lifecycle()
         oauth: dict[str, Any] = {}
@@ -48,6 +50,7 @@ class Live:
             data_dir=data_dir,
             public_url=f"http://127.0.0.1:{self.port}",
             **oauth,
+            **overrides,
         )
         self.tokens = TokenStore(self.settings.tokens_path)
         self.directory = UserDirectory(AtomicJsonFile(self.settings.users_path, default=[]))
@@ -103,10 +106,8 @@ def google() -> Iterator[Any]:
     fake.stop()
 
 
-@pytest.fixture
-def oauth_live(tmp_path: Path, google: Any) -> Iterator[Live]:
-    """A server with Google sign-in on, and alice@acme.com / bob@acme.com in the directory."""
-    srv = Live(tmp_path / "data", google=google)
+def _oauth_server(tmp_path: Path, google: Any, **overrides: Any) -> Live:
+    srv = Live(tmp_path / "data", google=google, **overrides)
     srv.directory.upsert(
         DirectoryUser("alice@acme.com", "acme", Role.MEMBER, projects=frozenset({"p1"}))
     )
@@ -114,5 +115,19 @@ def oauth_live(tmp_path: Path, google: Any) -> Iterator[Live]:
         DirectoryUser("bob@acme.com", "acme", Role.MEMBER, projects=frozenset({"p1"}))
     )
     srv.start()
+    return srv
+
+
+@pytest.fixture
+def oauth_live(tmp_path: Path, google: Any) -> Iterator[Live]:
+    """A server with Google sign-in on, and alice@acme.com / bob@acme.com in the directory."""
+    srv = _oauth_server(tmp_path, google)
+    yield srv
+    srv.stop()
+
+
+@pytest.fixture
+def oauth_live_no_memory(tmp_path: Path, google: Any) -> Iterator[Live]:
+    srv = _oauth_server(tmp_path, google, consent_remember_days=0)
     yield srv
     srv.stop()

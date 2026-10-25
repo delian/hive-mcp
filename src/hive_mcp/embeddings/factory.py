@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from hive_mcp.domain.errors import ValidationError
+from hive_mcp.domain.scope import ScopeLevel
 from hive_mcp.embeddings.hashing import HashingEmbedder
 from hive_mcp.embeddings.models import get_spec, model_files
 from hive_mcp.embeddings.onnx import OnnxEmbedder
@@ -15,6 +16,17 @@ if TYPE_CHECKING:
     from hive_mcp.ports.embeddings import Embedder
 
 KINDS = ("hashing", "onnx", "openai")
+
+
+def embed_min_level(settings: Settings) -> ScopeLevel:
+    """Which items may be sent to the embedder (see Settings.embedding_min_scope)."""
+    if settings.embedding_min_scope is None:
+        return ScopeLevel.PROJECT if settings.embedder == "openai" else ScopeLevel.PRIVATE
+    try:
+        return ScopeLevel[settings.embedding_min_scope.upper()]
+    except KeyError:
+        names = ", ".join(level.name.lower() for level in ScopeLevel)
+        raise ValidationError(f"HIVE_EMBEDDING_MIN_SCOPE must be one of: {names}") from None
 
 
 def make_embedder(settings: Settings) -> Embedder:

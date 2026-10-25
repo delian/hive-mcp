@@ -397,3 +397,56 @@ async def test_reindex_after_switching_embedder_makes_items_searchable_by_new_mo
     assert done == 3
     hits = await backend.vectors.search(flt, new_emb.model_id, probe, 10)
     assert {h.item_id for h in hits} == {s.item.id for s in saved}
+
+
+class Recorder:
+    """Remembers what text reached the embedder (stands in for a hosted provider)."""
+
+    def __init__(self):
+        self.inner = HashingEmbedder(128)
+        self.model_id, self.dim, self.min_similarity = (
+            self.inner.model_id,
+            self.inner.dim,
+            self.inner.min_similarity,
+        )
+        self.seen = []
+
+    async def embed(self, texts):
+        self.seen += list(texts)
+        return await self.inner.embed(texts)
+
+    async def embed_query(self, text):
+        return await self.inner.embed_query(text)
+
+
+async def test_private_items_are_not_embedded_when_the_embedder_only_gets_project_and_wider(
+    backend,
+):
+    rec = Recorder()
+    stack = build_stack(backend, rec, embed_min_level=ScopeLevel.PROJECT)
+    private = (
+        await stack.knowledge.remember(ALICE, req(title="Secret plan", body="heron nest"))
+    ).item
+    assert not any("heron" in t for t in rec.seen)  # never sent
+    assert (await ids(stack, ALICE, "heron nest"))[0] == [private.id]  # still found by keyword
+    assert (
+        await backend.vectors.search(read_filter(ALICE), rec.model_id, rec.inner._one("heron"), 5)
+        == []
+    )
+    # promoting to a project sends it to the embedder and makes it semantically searchable
+    moved = await stack.knowledge.move(ALICE, private.id, P1, Visibility.SCOPE, private.revision)
+    assert any("heron" in t for t in rec.seen)
+    hits = await backend.vectors.search(
+        read_filter(ALICE), rec.model_id, rec.inner._one("heron nest"), 5
+    )
+    assert [h.item_id for h in hits] == [private.id]
+    # moving it back removes its vectors again
+    await stack.knowledge.move(
+        ALICE, private.id, Scope(ScopeLevel.PRIVATE, "alice"), Visibility.SCOPE, moved.revision
+    )
+    assert (
+        await backend.vectors.search(
+            read_filter(ALICE), rec.model_id, rec.inner._one("heron nest"), 5
+        )
+        == []
+    )

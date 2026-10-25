@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from hive_mcp.domain.principal import Principal, Role
 from hive_mcp.security.directory import DirectoryUser
 from tests.integration import oauth_driver as d
-from tests.integration.conftest import Live
+from tests.integration.conftest import Live, _oauth_server
 
 ACCEPT = {"Accept": "application/json, text/event-stream"}
 
@@ -464,3 +464,100 @@ def test_dynamic_registration_refuses_dangerous_redirects_and_accepts_native_one
         assert d.register(oauth_live, redirect_uris=[good]).status_code == 201
     assert d.register(oauth_live, redirect_uris=[]).status_code == 400
     assert d.register(oauth_live, scope="hive admin").status_code == 400
+
+
+# ---------------------------------------------------------------- remembered consent
+def test_approval_is_remembered_for_the_same_user_client_and_redirect(oauth_live):
+    client_id = d.register(oauth_live).json()["client_id"]
+    verifier, challenge = d.pkce()
+    with httpx.Client() as browser:  # first time: the approval page is shown
+        stage = d.follow_to_consent(
+            oauth_live, browser, d.authorize_url(oauth_live, client_id, challenge)
+        )
+        assert "Allow access?" in stage.page.text
+        assert d.decide(oauth_live, browser, stage.page).code
+    verifier2, challenge2 = d.pkce()
+    with httpx.Client() as browser:  # second time: straight back to the client with a fresh code
+        again = d.follow_to_consent(
+            oauth_live, browser, d.authorize_url(oauth_live, client_id, challenge2)
+        )
+    assert again.page is None and again.code
+    assert d.exchange(oauth_live, client_id, again.code, verifier2).status_code == 200
+    assert verifier != verifier2
+
+
+def asks(live, client_id, **kw):
+    """Does a fresh authorize request show the approval page (True) or go straight back (False)?"""
+    _, challenge = d.pkce()
+    with httpx.Client() as browser:
+        stage = d.follow_to_consent(
+            live, browser, d.authorize_url(live, client_id, challenge, **kw)
+        )
+    return stage.page is not None and "Allow access?" in stage.page.text
+
+
+def test_remembered_approval_does_not_carry_over_to_other_clients_users_or_redirects(
+    oauth_live, google
+):
+    other_redirect = "https://client.example/other"
+    client_id = d.register(oauth_live, redirect_uris=[d.REDIRECT, other_redirect]).json()[
+        "client_id"
+    ]
+    _, challenge = d.pkce()
+    assert d.full_login(oauth_live, client_id, challenge).code
+    assert not asks(oauth_live, client_id)  # remembered for this client + redirect
+    assert asks(oauth_live, client_id, redirect_uri=other_redirect)  # other redirect: asked
+    assert asks(oauth_live, d.register(oauth_live).json()["client_id"])  # other client: asked
+    google.account = {"email": "bob@acme.com", "email_verified": True, "hd": "acme.com", "sub": "b"}
+    assert asks(oauth_live, client_id)  # other user: asked
+
+
+def test_denial_is_not_remembered(oauth_live):
+    client_id = d.register(oauth_live).json()["client_id"]
+    _, challenge = d.pkce()
+    assert d.full_login(oauth_live, client_id, challenge, approve=False).error == "access_denied"
+    with httpx.Client() as browser:
+        stage = d.follow_to_consent(
+            oauth_live, browser, d.authorize_url(oauth_live, client_id, challenge)
+        )
+    assert stage.page is not None and "Allow access?" in stage.page.text
+
+
+def test_memory_can_be_switched_off(oauth_live_no_memory):
+    client_id = d.register(oauth_live_no_memory).json()["client_id"]
+    _, challenge = d.pkce()
+    assert d.full_login(oauth_live_no_memory, client_id, challenge).code
+    with httpx.Client() as browser:
+        stage = d.follow_to_consent(
+            oauth_live_no_memory,
+            browser,
+            d.authorize_url(oauth_live_no_memory, client_id, challenge),
+        )
+    assert stage.page is not None and "Allow access?" in stage.page.text
+
+
+# ---------------------------------------------------------------- abuse limits
+def test_client_registration_is_rate_limited_per_address(tmp_path, google):
+    live = _oauth_server(tmp_path, google, rate_limit_register=3)
+    try:
+        codes = [d.register(live).status_code for _ in range(5)]
+        assert codes[:3] == [201] * 3 and codes[3:] == [429, 429]
+        blocked = d.register(live)
+        assert int(blocked.headers["retry-after"]) >= 1
+        assert httpx.get(f"{live.url}/healthz").status_code == 200  # health is never limited
+        assert httpx.get(f"{live.url}/.well-known/oauth-authorization-server").status_code == 200
+    finally:
+        live.stop()
+
+
+def test_mcp_requests_are_limited_per_token_not_globally(tmp_path):
+    live = Live(tmp_path / "data", rate_limit_mcp=60)  # burst of 10
+    live.start()
+    try:
+        a = live.token_for(Principal("a", "org1", Role.MEMBER))
+        b = live.token_for(Principal("b", "org1", Role.MEMBER))
+        statuses = [mcp_status(live, a) for _ in range(14)]
+        assert statuses.count(200) == 10 and statuses.count(429) == 4
+        assert mcp_status(live, b) == 200  # another agent is unaffected
+    finally:
+        live.stop()

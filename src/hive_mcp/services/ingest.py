@@ -1,0 +1,112 @@
+"""Turn files into knowledge: extract text, split long documents, store as linked DOC items."""
+
+from __future__ import annotations
+
+import hashlib
+import itertools
+import re
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+from hive_mcp.domain.errors import HiveError, ValidationError
+from hive_mcp.domain.item import MAX_TITLE, Item, Kind
+from hive_mcp.domain.tags import normalize_tags
+from hive_mcp.ingest.extract import extract_text
+from hive_mcp.ingest.sections import MAX_SECTION_CHARS, split_sections
+from hive_mcp.services.models import RememberRequest
+
+if TYPE_CHECKING:
+    from hive_mcp.domain.principal import Principal
+    from hive_mcp.domain.scope import Scope
+    from hive_mcp.services.graph import GraphService
+    from hive_mcp.services.knowledge import KnowledgeService
+
+MAX_FILE_BYTES = 50 * 1024 * 1024
+MAX_SECTIONS = 200
+_NON_SLUG = re.compile(r"[^a-z0-9]+")
+
+
+@dataclass(frozen=True, slots=True)
+class IngestResult:
+    name: str
+    items: list[Item]
+    created: int  # sections newly stored; the rest were already there
+    redactions: dict[str, int] = field(default_factory=dict)
+
+
+def file_slug(name: str) -> str:
+    return _NON_SLUG.sub("-", name.lower()).strip("-")[:60] or "file"
+
+
+class IngestService:
+    def __init__(
+        self,
+        knowledge: KnowledgeService,
+        graph: GraphService,
+        section_chars: int = MAX_SECTION_CHARS,
+    ) -> None:
+        self._knowledge, self._graph, self._section_chars = knowledge, graph, section_chars
+
+    async def ingest(  # noqa: PLR0913 - keyword-only options
+        self,
+        principal: Principal,
+        name: str,
+        data: bytes,
+        *,
+        tags: tuple[str, ...] = (),
+        scope: Scope | None = None,
+        kind: Kind = Kind.DOC,
+    ) -> IngestResult:
+        """Idempotent: ingesting the same bytes with the same name, tags and scope again stores
+        nothing new. Parts are linked: each `part_of` the first, and chained with `next`."""
+        if not name.strip() or "\x00" in name:
+            raise ValidationError("file name is required")
+        if len(data) > MAX_FILE_BYTES:
+            raise ValidationError(f"file larger than {MAX_FILE_BYTES // (1024 * 1024)} MB")
+        extracted = extract_text(name, data)
+        sections = split_sections(extracted.text, self._section_chars)
+        if len(sections) > MAX_SECTIONS:
+            raise ValidationError(f"document too long ({len(sections)} parts, max {MAX_SECTIONS})")
+        base = (extracted.title or name).strip()[: MAX_TITLE - 24]
+        file_tags = (*tags, f"file/{file_slug(name)}", f"format/{extracted.format}")
+        fingerprint = hashlib.sha256(
+            "\0".join([name, str(scope), *sorted(normalize_tags(file_tags)), str(kind)]).encode()
+            + b"\0"
+            + data
+        ).hexdigest()
+        items: list[Item] = []
+        created = 0
+        redactions: dict[str, int] = {}
+        for index, section in enumerate(sections, start=1):
+            label = f"{base} ({index}/{len(sections)})" if len(sections) > 1 else base
+            title = f"{label} - {section.heading}" if section.heading else label
+            result = await self._knowledge.remember(
+                principal,
+                RememberRequest(
+                    title=title[:MAX_TITLE],
+                    body=section.text,
+                    kind=kind,
+                    tags=file_tags,
+                    scope=scope,
+                    idempotency_key=f"ingest:{fingerprint}:{index}",
+                    source=f"file:{name[:200]}",
+                ),
+            )
+            items.append(result.item)
+            created += result.created
+            for k, v in result.redactions.items():
+                redactions[k] = redactions.get(k, 0) + v
+        await self._link_parts(principal, items)
+        return IngestResult(name, items, created, redactions)
+
+    async def _link_parts(self, principal: Principal, items: list[Item]) -> None:
+        head = items[0]
+        for previous, part in itertools.pairwise(items):
+            try:
+                await self._graph.link(principal, part.id, head.id, "part_of")
+                await self._graph.link(principal, previous.id, part.id, "next")
+            except HiveError:  # links are best effort: the content is already safely stored
+                break
+
+
+__all__ = ["IngestResult", "IngestService"]

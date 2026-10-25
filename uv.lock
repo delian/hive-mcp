@@ -499,6 +499,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+documents = [
+    { name = "pypdf" },
+]
 local-embeddings = [
     { name = "onnxruntime" },
     { name = "tokenizers" },
@@ -524,6 +527,7 @@ dev = [
     { name = "mypy" },
     { name = "onnxruntime" },
     { name = "psycopg", extra = ["binary", "pool"] },
+    { name = "pypdf" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -542,11 +546,12 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2" },
     { name = "pydantic-settings", specifier = ">=2.16.1" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8" },
+    { name = "pypdf", marker = "extra == 'documents'", specifier = ">=5.0" },
     { name = "tokenizers", marker = "extra == 'local-embeddings'", specifier = ">=0.23.3" },
     { name = "typer", specifier = ">=0.27.3" },
     { name = "uvicorn", specifier = ">=0.54.0" },
 ]
-provides-extras = ["postgres", "local-embeddings"]
+provides-extras = ["postgres", "documents", "local-embeddings"]
 
 [package.metadata.requires-dev]
 bench = [
@@ -565,6 +570,7 @@ dev = [
     { name = "mypy", specifier = ">=2.4.0" },
     { name = "onnxruntime", specifier = ">=1.31.0" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2" },
+    { name = "pypdf", specifier = ">=5.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
@@ -1515,6 +1521,15 @@ wheels = [
 [package.optional-dependencies]
 crypto = [
     { name = "cryptography" },
+]
+
+[[package]]
+name = "pypdf"
+version = "6.21.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/06/28/081f1cbcca7042441dafc8de00f48ba60853f89e5bff92c5f26477346d81/pypdf-6.21.2.tar.gz", hash = "sha256:0a3e1c5c886a1be03646c16a04827cc166c2a0575c971b26a4bf89686551c2d4", size = 7144571, upload-time = "2026-10-21T16:44:55.272Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/4d/c9d2d67f204eff463237a1a8f5e25a6923b7b1043982b91fcaf104c8ef60/pypdf-6.21.2-py3-none-any.whl", hash = "sha256:1d44d1a3a200f25062adff0085b02040e4646431ac2ccac22e42679e91466084", size = 407766, upload-time = "2026-10-21T16:44:53.626Z" },
 ]
 
 [[package]]

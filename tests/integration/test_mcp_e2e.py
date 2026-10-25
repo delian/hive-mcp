@@ -1,5 +1,6 @@
 """End-to-end over real HTTP: bearer auth, tool wiring, caller isolation, error messages."""
 
+import base64
 import time
 
 import httpx
@@ -19,8 +20,8 @@ def post(live: Live, token: str | None, **kw):
     )
 
 
-async def call(client, name, **args):
-    return await client.call_tool(name, args)
+async def call(client, tool, /, **args):
+    return await client.call_tool(tool, args)
 
 
 # ---------------------------------------------------------------- authentication
@@ -287,3 +288,34 @@ async def test_graph_tools_over_mcp(live: Live) -> None:
             alice, "kb_unlink", from_id=a["id"], to_id=b["id"], relation="derived_from"
         )
         assert not gone.is_error
+
+
+async def test_ingest_tool_over_mcp(live: Live) -> None:
+    async with live.client(live.token_for(ALICE)) as alice:
+        page = b"<html><title>Waveforms</title><body><h1>Chirps</h1><p>Linear chirp bandwidth.</p></body></html>"
+        done = (
+            await call(
+                alice,
+                "kb_ingest",
+                name="w.html",
+                content=base64.b64encode(page).decode(),
+                encoding="base64",
+            )
+        ).structured_content
+        assert done["parts"] == 1 and done["new_parts"] == 1
+        found = (await call(alice, "kb_consult", query="linear chirp bandwidth")).structured_content
+        assert [r["id"] for r in found["results"]] == done["ids"]
+        again = (
+            await call(
+                alice,
+                "kb_ingest",
+                name="w.html",
+                content=base64.b64encode(page).decode(),
+                encoding="base64",
+            )
+        ).structured_content
+        assert again["new_parts"] == 0
+        assert (await call(alice, "kb_ingest", name="x.bin", content="abc")).is_error
+        assert (
+            await call(alice, "kb_ingest", name="x.pdf", content="!!!", encoding="base64")
+        ).is_error

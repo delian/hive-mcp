@@ -14,6 +14,7 @@ from hive_mcp.ports.backend import Backend, close_backend
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.graph import GraphService
 from hive_mcp.services.indexing import INDEX_JOB, IndexService
+from hive_mcp.services.ingest import IngestService
 from hive_mcp.services.knowledge import KnowledgeService
 from hive_mcp.services.promotions import PromotionService
 from hive_mcp.services.runner import JobRunner
@@ -30,6 +31,7 @@ class Services:
     backend: Backend
     promotions: PromotionService
     graph: GraphService
+    ingest: IngestService
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -72,4 +74,7 @@ async def build_services(settings: Settings) -> Services:
         clock=clock,
     )
     graph = GraphService(items=backend.items, edges=backend.edges, audit=backend.audit, clock=clock)
-    return Services(knowledge, consult, sessions, indexing, runner, backend, promotions, graph)
+    ingest = IngestService(knowledge, graph)
+    return Services(
+        knowledge, consult, sessions, indexing, runner, backend, promotions, graph, ingest
+    )

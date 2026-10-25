@@ -24,6 +24,9 @@ hive = "hive_mcp.cli:main"
 postgres = [
     "psycopg[binary,pool]>=3.2",
 ]
+documents = [
+    "pypdf>=5.0",
+]
 local-embeddings = [
     "onnxruntime>=1.31.0",
     "tokenizers>=0.23.3",
@@ -46,6 +49,7 @@ bench = [
 ]
 dev = [
     "httpx>=0.28.1",
+    "pypdf>=5.0",
     "onnxruntime>=1.31.0",
     "tokenizers>=0.23.3",
     "hypothesis>=6.170.8",

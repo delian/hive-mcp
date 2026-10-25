@@ -11,6 +11,7 @@ from hive_mcp.embeddings.hashing import HashingEmbedder
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.graph import GraphService
 from hive_mcp.services.indexing import IndexService
+from hive_mcp.services.ingest import IngestService
 from hive_mcp.services.knowledge import KnowledgeService
 from hive_mcp.services.promotions import PromotionService
 from hive_mcp.services.sessions import SessionService
@@ -26,6 +27,7 @@ class Stack:
     sessions: SessionService
     promotions: PromotionService
     graph: GraphService
+    ingest: IngestService
 
 
 def build_stack(backend: Any, embedder: Any = None) -> Stack:
@@ -52,7 +54,10 @@ def build_stack(backend: Any, embedder: Any = None) -> Stack:
     graph = GraphService(
         items=backend.items, edges=backend.edges, audit=backend.audit, clock=backend.clock
     )
-    return Stack(backend, embedder, indexing, knowledge, consult, sessions, promotions, graph)
+    ingest = IngestService(knowledge, graph)
+    return Stack(
+        backend, embedder, indexing, knowledge, consult, sessions, promotions, graph, ingest
+    )
 
 
 @pytest.fixture

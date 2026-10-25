@@ -22,7 +22,7 @@ def _by_headings(text: str) -> list[Section]:
     out = [Section(None, text[: marks[0].start()])] if text[: marks[0].start()].strip() else []
     for i, m in enumerate(marks):
         end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
-        out.append(Section(m.group(2), text[m.start() : end]))
+        out.append(Section(m.group(2), text[m.start() : end].rstrip()))
     return out
 
 

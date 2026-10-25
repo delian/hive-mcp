@@ -4,22 +4,18 @@ from __future__ import annotations
 
 import socket
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from hive_mcp.adapters.sqlite import SqliteBackend
 from hive_mcp.config import Profile, Settings
 from hive_mcp.domain.clock import SystemClock
 from hive_mcp.domain.errors import ValidationError
-from hive_mcp.embeddings.hashing import HashingEmbedder
+from hive_mcp.embeddings.factory import make_embedder
 from hive_mcp.ports.backend import Backend, close_backend
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.indexing import INDEX_JOB, IndexService
 from hive_mcp.services.knowledge import KnowledgeService
 from hive_mcp.services.runner import JobRunner
 from hive_mcp.services.sessions import SessionService
-
-if TYPE_CHECKING:
-    from hive_mcp.ports.embeddings import Embedder
 
 
 @dataclass
@@ -33,12 +29,6 @@ class Services:
 
     async def close(self) -> None:
         await close_backend(self.backend)
-
-
-def make_embedder(name: str) -> Embedder:
-    if name == "hashing":
-        return HashingEmbedder(256)
-    raise ValidationError(f"unknown embedder {name!r} (available: hashing)")
 
 
 async def build_services(settings: Settings) -> Services:
@@ -55,7 +45,7 @@ async def build_services(settings: Settings) -> Services:
         backend = await PostgresBackend.connect(
             settings.database_url, settings.data_dir / "blobs", clock=clock
         )
-    embedder = make_embedder(settings.embedder)
+    embedder = make_embedder(settings)
     indexing = IndexService(backend.items, backend.text, backend.vectors, embedder, backend.jobs)
     knowledge = KnowledgeService(
         items=backend.items, indexing=indexing, audit=backend.audit, clock=clock

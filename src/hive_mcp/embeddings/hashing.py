@@ -49,3 +49,6 @@ class HashingEmbedder:
 
     async def embed(self, texts: Sequence[str]) -> list[NDArray[np.float32]]:
         return [self._one(t) for t in texts]
+
+    async def embed_query(self, text: str) -> NDArray[np.float32]:
+        return self._one(text)

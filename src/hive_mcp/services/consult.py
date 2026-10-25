@@ -44,7 +44,7 @@ class ConsultService:
         vector_hits = []
         if tokenize(req.query):
             try:
-                query_vector = (await self._embedder.embed([req.query]))[0]
+                query_vector = await self._embedder.embed_query(req.query)
                 found = await self._vectors.search(flt, self._embedder.model_id, query_vector, pool)
                 vector_hits = [h for h in found if h.score >= self._embedder.min_similarity]
             except EmbeddingUnavailable:

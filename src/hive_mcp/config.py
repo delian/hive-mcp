@@ -31,7 +31,14 @@ class Settings(BaseSettings):
     )
     database_url: str | None = None  # required for the external profile (Postgres + pgvector)
     tokens_file: Path | None = None  # default: <data_dir>/tokens.json
-    embedder: str = "hashing"  # "hashing" (dev/test) until a real model adapter is configured
+    embedder: str = "hashing"  # "hashing" (dev/test only), "onnx" (offline) or "openai" (hosted)
+    embedding_model: str = "bge-small-en-v1.5-int8"  # onnx: pinned model name; openai: model id
+    models_dir: Path | None = None  # onnx model files; default: <data_dir>/models
+    embedding_url: str | None = None  # openai: full .../embeddings URL
+    embedding_api_key: SecretStr | None = None
+    embedding_dim: int = Field(default=1024, ge=8, le=4096)  # openai: requested dimensions
+    embedding_azure: bool = False  # openai: send `api-key` header (Azure OpenAI)
+    embedding_min_similarity: float = Field(default=0.3, ge=0, le=1)  # openai relevance floor
     run_jobs: bool = True  # run the background job runner inside the server process
     # Interactive sign-in (claude.ai, ChatGPT, Gemini) via Google Workspace; needs id and secret.
     google_client_id: str | None = None
@@ -49,6 +56,10 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = Field(default_factory=list)
     drain_seconds: float = Field(default=5.0, ge=0)  # readiness-fail window before shutdown
     shutdown_timeout: float = Field(default=30.0, ge=1)  # max wait for in-flight requests
+
+    @property
+    def models_path(self) -> Path:
+        return self.models_dir or self.data_dir / "models"
 
     @property
     def tokens_path(self) -> Path:

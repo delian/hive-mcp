@@ -499,6 +499,10 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+local-embeddings = [
+    { name = "onnxruntime" },
+    { name = "tokenizers" },
+]
 postgres = [
     { name = "psycopg", extra = ["binary", "pool"] },
 ]
@@ -518,12 +522,14 @@ dev = [
     { name = "httpx" },
     { name = "hypothesis" },
     { name = "mypy" },
+    { name = "onnxruntime" },
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "pytest-timeout" },
     { name = "ruff" },
+    { name = "tokenizers" },
 ]
 
 [package.metadata]
@@ -531,14 +537,16 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", specifier = ">=2,<3" },
     { name = "numpy", specifier = ">=2" },
+    { name = "onnxruntime", marker = "extra == 'local-embeddings'", specifier = ">=1.31.0" },
     { name = "psycopg", extras = ["binary", "pool"], marker = "extra == 'postgres'", specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pydantic-settings", specifier = ">=2.16.1" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8" },
+    { name = "tokenizers", marker = "extra == 'local-embeddings'", specifier = ">=0.23.3" },
     { name = "typer", specifier = ">=0.27.3" },
     { name = "uvicorn", specifier = ">=0.54.0" },
 ]
-provides-extras = ["postgres"]
+provides-extras = ["postgres", "local-embeddings"]
 
 [package.metadata.requires-dev]
 bench = [
@@ -555,12 +563,14 @@ dev = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "hypothesis", specifier = ">=6.170.8" },
     { name = "mypy", specifier = ">=2.4.0" },
+    { name = "onnxruntime", specifier = ">=1.31.0" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-timeout", specifier = ">=2.4.0" },
     { name = "ruff", specifier = ">=0.17.2" },
+    { name = "tokenizers", specifier = ">=0.23.3" },
 ]
 
 [[package]]

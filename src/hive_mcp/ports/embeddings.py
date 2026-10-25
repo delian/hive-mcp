@@ -20,3 +20,6 @@ class Embedder(Protocol):
 
     async def embed(self, texts: Sequence[str]) -> list[NDArray[np.float32]]:
         """One finite non-zero vector per text, in order; ValidationError for wordless text."""
+
+    async def embed_query(self, text: str) -> NDArray[np.float32]:
+        """Embed a search query (some models want a different treatment than documents)."""

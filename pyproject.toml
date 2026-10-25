@@ -24,6 +24,10 @@ hive = "hive_mcp.cli:main"
 postgres = [
     "psycopg[binary,pool]>=3.2",
 ]
+local-embeddings = [
+    "onnxruntime>=1.31.0",
+    "tokenizers>=0.23.3",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.32,<0.12.0"]
@@ -42,6 +46,8 @@ bench = [
 ]
 dev = [
     "httpx>=0.28.1",
+    "onnxruntime>=1.31.0",
+    "tokenizers>=0.23.3",
     "hypothesis>=6.170.8",
     "mypy>=2.4.0",
     "psycopg[binary,pool]>=3.2",
@@ -74,6 +80,10 @@ select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC", "S", "PL", "RUF", "TCH", "AN
 strict = true
 python_version = "3.12"
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["onnxruntime", "onnxruntime.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

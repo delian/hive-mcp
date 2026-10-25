@@ -255,6 +255,11 @@ class FlakyEmbedder:
             raise EmbeddingUnavailable("provider down")
         return await self.inner.embed(texts)
 
+    async def embed_query(self, text):
+        if not self.up:
+            raise EmbeddingUnavailable("provider down")
+        return await self.inner.embed_query(text)
+
 
 async def test_embedding_outage_never_loses_items_and_recovers_via_job(backend):
     flaky = FlakyEmbedder(HashingEmbedder(128))
@@ -304,6 +309,9 @@ async def test_item_changing_while_it_is_indexed_ends_up_consistent(backend):
                     ALICE, item_id, ItemPatch(body="second version pelican"), 1
                 )
             return await inner.embed(texts)
+
+        async def embed_query(self, text):
+            return await inner.embed_query(text)
 
     racer_stack = build_stack(backend, Racer())
     base = await racer_stack.knowledge._items.create(

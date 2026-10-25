@@ -7,6 +7,7 @@ from pathlib import Path
 from hive_mcp.adapters.fs.blobs import FsBlobs
 from hive_mcp.adapters.sqlite.audit import SqliteAudit
 from hive_mcp.adapters.sqlite.db import BUSY_SECONDS, Database
+from hive_mcp.adapters.sqlite.edges import SqliteEdges
 from hive_mcp.adapters.sqlite.items import SqliteItems
 from hive_mcp.adapters.sqlite.jobs import SqliteJobs
 from hive_mcp.adapters.sqlite.kv import SqliteKv
@@ -31,6 +32,7 @@ class SqliteBackend:
         self.audit = SqliteAudit(self.db)
         self.kv = SqliteKv(self.db, self.clock)
         self.promotions = SqlitePromotions(self.db)
+        self.edges = SqliteEdges(self.db)
         self.blobs = FsBlobs(self.root / "blobs")
 
     def close(self) -> None:

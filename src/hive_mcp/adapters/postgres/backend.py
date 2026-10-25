@@ -7,6 +7,7 @@ from pathlib import Path
 from hive_mcp.adapters.fs.blobs import FsBlobs
 from hive_mcp.adapters.postgres.audit import PgAudit
 from hive_mcp.adapters.postgres.db import PgDatabase
+from hive_mcp.adapters.postgres.edges import PgEdges
 from hive_mcp.adapters.postgres.items import PgItems
 from hive_mcp.adapters.postgres.jobs import PgJobs
 from hive_mcp.adapters.postgres.kv import PgKv
@@ -27,6 +28,7 @@ class PostgresBackend:
         self.audit = PgAudit(db)
         self.kv = PgKv(db, self.clock)
         self.promotions = PgPromotions(db)
+        self.edges = PgEdges(db)
         self.blobs = FsBlobs(Path(blobs_root))
 
     @classmethod

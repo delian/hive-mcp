@@ -69,6 +69,14 @@ MIGRATIONS = [
     CREATE UNIQUE INDEX promotions_one_pending ON promotions (item_id) WHERE status = 'pending';
     CREATE INDEX promotions_queue ON promotions (org_id, status, created_at, id);
     """,
+    """
+    CREATE TABLE edges (
+        org_id text NOT NULL, src text NOT NULL, dst text NOT NULL, relation text NOT NULL,
+        author_id text NOT NULL, created_at timestamptz NOT NULL,
+        PRIMARY KEY (org_id, src, dst, relation)
+    );
+    CREATE INDEX edges_dst ON edges (org_id, dst);
+    """,
 ]
 
 

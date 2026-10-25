@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from hive_mcp.adapters.memory.audit import MemoryAudit
 from hive_mcp.adapters.memory.blobs import MemoryBlobs
+from hive_mcp.adapters.memory.edges import MemoryEdges
 from hive_mcp.adapters.memory.items import MemoryItems
 from hive_mcp.adapters.memory.jobs import MemoryJobs
 from hive_mcp.adapters.memory.kv import MemoryKv
@@ -26,6 +27,7 @@ class MemoryBackend:
     audit: MemoryAudit = field(default_factory=MemoryAudit)
     kv: MemoryKv = field(init=False)
     promotions: MemoryPromotions = field(default_factory=MemoryPromotions)
+    edges: MemoryEdges = field(default_factory=MemoryEdges)
 
     def __post_init__(self) -> None:
         self.items = MemoryItems(self.clock)

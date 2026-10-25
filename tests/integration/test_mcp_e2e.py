@@ -261,3 +261,29 @@ async def test_promotion_workflow_over_mcp(live: Live) -> None:
         assert [r["id"] for r in found] == [item["id"]]
         mine = (await call(alice, "kb_list_promotions", status="all")).structured_content["result"]
         assert [m["status"] for m in mine] == ["approved"]
+
+
+async def test_graph_tools_over_mcp(live: Live) -> None:
+    async with live.client(live.token_for(ALICE)) as alice, live.client(live.token_for(BOB)) as bob:
+        a = (
+            await call(alice, "kb_remember", title="Finding", body="finding text")
+        ).structured_content
+        b = (
+            await call(alice, "kb_remember", title="Source", body="source text")
+        ).structured_content
+        linked = await call(
+            alice, "kb_link", from_id=a["id"], to_id=b["id"], relation="derived_from"
+        )
+        assert linked.structured_content["created"] is True
+        graph = (await call(alice, "kb_graph", id=a["id"])).structured_content
+        assert [n["title"] for n in graph["nodes"]] == ["Finding", "Source"]
+        assert graph["edges"] == [
+            {"from_id": a["id"], "to_id": b["id"], "relation": "derived_from"}
+        ]
+        assert (await call(bob, "kb_graph", id=a["id"])).is_error  # private to alice
+        assert (await call(bob, "kb_link", from_id=a["id"], to_id=b["id"])).is_error
+        assert (await call(alice, "kb_graph", id=a["id"], depth=9)).is_error
+        gone = await call(
+            alice, "kb_unlink", from_id=a["id"], to_id=b["id"], relation="derived_from"
+        )
+        assert not gone.is_error

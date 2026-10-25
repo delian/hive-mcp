@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from hive_mcp.ports.audit import AuditLog
     from hive_mcp.ports.blobs import BlobStore
+    from hive_mcp.ports.edges import EdgeRepository
     from hive_mcp.ports.indexes import TextIndex, VectorIndex
     from hive_mcp.ports.items import ItemRepository
     from hive_mcp.ports.jobs import JobQueue
@@ -32,6 +33,8 @@ class Backend(Protocol):
     def kv(self) -> KeyValueStore: ...
     @property
     def promotions(self) -> PromotionRepository: ...
+    @property
+    def edges(self) -> EdgeRepository: ...
 
     def close(self) -> object:
         """Sync backends return None, async ones an awaitable; `close_backend` handles both."""

@@ -12,6 +12,7 @@ from hive_mcp.domain.errors import ValidationError
 from hive_mcp.embeddings.factory import make_embedder
 from hive_mcp.ports.backend import Backend, close_backend
 from hive_mcp.services.consult import ConsultService
+from hive_mcp.services.graph import GraphService
 from hive_mcp.services.indexing import INDEX_JOB, IndexService
 from hive_mcp.services.knowledge import KnowledgeService
 from hive_mcp.services.promotions import PromotionService
@@ -28,6 +29,7 @@ class Services:
     runner: JobRunner
     backend: Backend
     promotions: PromotionService
+    graph: GraphService
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -69,4 +71,5 @@ async def build_services(settings: Settings) -> Services:
         audit=backend.audit,
         clock=clock,
     )
-    return Services(knowledge, consult, sessions, indexing, runner, backend, promotions)
+    graph = GraphService(items=backend.items, edges=backend.edges, audit=backend.audit, clock=clock)
+    return Services(knowledge, consult, sessions, indexing, runner, backend, promotions, graph)

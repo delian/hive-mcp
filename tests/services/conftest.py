@@ -9,6 +9,7 @@ import pytest
 
 from hive_mcp.embeddings.hashing import HashingEmbedder
 from hive_mcp.services.consult import ConsultService
+from hive_mcp.services.graph import GraphService
 from hive_mcp.services.indexing import IndexService
 from hive_mcp.services.knowledge import KnowledgeService
 from hive_mcp.services.promotions import PromotionService
@@ -24,6 +25,7 @@ class Stack:
     consult: ConsultService
     sessions: SessionService
     promotions: PromotionService
+    graph: GraphService
 
 
 def build_stack(backend: Any, embedder: Any = None) -> Stack:
@@ -47,7 +49,10 @@ def build_stack(backend: Any, embedder: Any = None) -> Stack:
         audit=backend.audit,
         clock=backend.clock,
     )
-    return Stack(backend, embedder, indexing, knowledge, consult, sessions, promotions)
+    graph = GraphService(
+        items=backend.items, edges=backend.edges, audit=backend.audit, clock=backend.clock
+    )
+    return Stack(backend, embedder, indexing, knowledge, consult, sessions, promotions, graph)
 
 
 @pytest.fixture

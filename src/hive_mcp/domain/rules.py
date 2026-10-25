@@ -26,7 +26,7 @@ def authorize_create(principal: Principal, item: Item, idempotency_key: str | No
         raise PermissionDenied("cannot create in this scope")
 
 
-def _check_revision(current: Item, expected_revision: int) -> None:
+def check_revision(current: Item, expected_revision: int) -> None:
     if current.revision != expected_revision:
         raise Conflict(f"revision {current.revision} != expected {expected_revision}")
 
@@ -35,7 +35,7 @@ def authorize_update(principal: Principal, current: Item, expected_revision: int
     """The caller already proved the item is visible. Permission is checked before the revision."""
     if not access.can_write(principal, current.acl, current.author_id):
         raise PermissionDenied(current.id)
-    _check_revision(current, expected_revision)
+    check_revision(current, expected_revision)
 
 
 def authorize_relocate(
@@ -46,4 +46,4 @@ def authorize_relocate(
         raise PermissionDenied(current.id)
     if not access.can_create(principal, moved.acl):
         raise PermissionDenied("not a member of the target scope")
-    _check_revision(current, expected_revision)
+    check_revision(current, expected_revision)

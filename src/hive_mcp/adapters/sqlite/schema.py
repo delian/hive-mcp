@@ -63,6 +63,16 @@ MIGRATIONS = [
     );
     CREATE INDEX kv_expiry ON kv (expires_at);
     """,
+    """
+    CREATE TABLE promotions (
+        id TEXT PRIMARY KEY, org_id TEXT NOT NULL, item_id TEXT NOT NULL, requester_id TEXT NOT NULL,
+        scope_level INTEGER NOT NULL, scope_owner TEXT NOT NULL, visibility TEXT NOT NULL,
+        item_revision INTEGER NOT NULL, reason TEXT NOT NULL, status TEXT NOT NULL,
+        created_at TEXT NOT NULL, decided_by TEXT, decided_at TEXT, note TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX promotions_one_pending ON promotions (item_id) WHERE status = 'pending';
+    CREATE INDEX promotions_queue ON promotions (org_id, status, created_at, id);
+    """,
 ]
 
 

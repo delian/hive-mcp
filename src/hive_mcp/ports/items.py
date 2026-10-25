@@ -58,5 +58,16 @@ class ItemRepository(Protocol):
     ) -> Item:
         """Promote/demote; caller must write the item and belong to the target."""
 
+    async def relocate_system(
+        self,
+        org_id: str,
+        item_id: str,
+        scope: Scope,
+        visibility: Visibility,
+        expected_revision: int,
+    ) -> Item:
+        """Move on behalf of an approved promotion: no user ACL, never across orgs, and still
+        guarded by `expected_revision`. The approval service has already done the authorising."""
+
     async def list(self, principal: Principal, query: ItemQuery) -> Page:
         """Newest first, keyset-paginated: no repeats or skips, even with equal timestamps."""

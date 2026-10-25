@@ -9,6 +9,7 @@ from hive_mcp.adapters.memory.blobs import MemoryBlobs
 from hive_mcp.adapters.memory.items import MemoryItems
 from hive_mcp.adapters.memory.jobs import MemoryJobs
 from hive_mcp.adapters.memory.kv import MemoryKv
+from hive_mcp.adapters.memory.promotions import MemoryPromotions
 from hive_mcp.adapters.memory.text import MemoryText
 from hive_mcp.adapters.memory.vectors import MemoryVectors
 from hive_mcp.domain.clock import FixedClock
@@ -24,6 +25,7 @@ class MemoryBackend:
     jobs: MemoryJobs = field(init=False)
     audit: MemoryAudit = field(default_factory=MemoryAudit)
     kv: MemoryKv = field(init=False)
+    promotions: MemoryPromotions = field(default_factory=MemoryPromotions)
 
     def __post_init__(self) -> None:
         self.items = MemoryItems(self.clock)

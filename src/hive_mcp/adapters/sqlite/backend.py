@@ -10,6 +10,7 @@ from hive_mcp.adapters.sqlite.db import BUSY_SECONDS, Database
 from hive_mcp.adapters.sqlite.items import SqliteItems
 from hive_mcp.adapters.sqlite.jobs import SqliteJobs
 from hive_mcp.adapters.sqlite.kv import SqliteKv
+from hive_mcp.adapters.sqlite.promotions import SqlitePromotions
 from hive_mcp.adapters.sqlite.text import SqliteText
 from hive_mcp.adapters.sqlite.vectors import SqliteVectors
 from hive_mcp.domain.clock import Clock, FixedClock
@@ -29,6 +30,7 @@ class SqliteBackend:
         self.jobs = SqliteJobs(self.db, self.clock)
         self.audit = SqliteAudit(self.db)
         self.kv = SqliteKv(self.db, self.clock)
+        self.promotions = SqlitePromotions(self.db)
         self.blobs = FsBlobs(self.root / "blobs")
 
     def close(self) -> None:

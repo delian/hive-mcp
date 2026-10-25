@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING
 from hive_mcp.domain import access
 from hive_mcp.domain.errors import Conflict, IdempotencyConflict, NotFound
 from hive_mcp.domain.item import Cursor, Item, ItemView, Page, apply_patch, relocate_item
-from hive_mcp.domain.rules import authorize_create, authorize_relocate, authorize_update
+from hive_mcp.domain.rules import (
+    authorize_create,
+    authorize_relocate,
+    authorize_update,
+    check_revision,
+)
 from hive_mcp.ports.items import CreateResult
 
 if TYPE_CHECKING:
@@ -91,6 +96,22 @@ class MemoryItems:
         view = self._visible(principal, item_id)
         moved = relocate_item(view.item, scope, visibility, self._clock.now())
         authorize_relocate(principal, view.item, moved, expected_revision)
+        self._items[item_id] = moved
+        return moved
+
+    async def relocate_system(
+        self,
+        org_id: str,
+        item_id: str,
+        scope: Scope,
+        visibility: Visibility,
+        expected_revision: int,
+    ) -> Item:
+        current = self._items.get(item_id)
+        if current is None or current.org_id != org_id:
+            raise NotFound(item_id)
+        check_revision(current, expected_revision)
+        moved = relocate_item(current, scope, visibility, self._clock.now())
         self._items[item_id] = moved
         return moved
 

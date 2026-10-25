@@ -13,7 +13,12 @@ from hive_mcp.adapters.postgres.item_queries import fetch_item, fetch_view, list
 from hive_mcp.domain import access
 from hive_mcp.domain.errors import Conflict, HiveError, IdempotencyConflict, NotFound
 from hive_mcp.domain.item import ItemView, apply_patch, relocate_item
-from hive_mcp.domain.rules import authorize_create, authorize_relocate, authorize_update
+from hive_mcp.domain.rules import (
+    authorize_create,
+    authorize_relocate,
+    authorize_update,
+    check_revision,
+)
 from hive_mcp.ports.items import CreateResult
 
 if TYPE_CHECKING:
@@ -160,6 +165,28 @@ class PgItems:
             moved = relocate_item(view.item, scope, visibility, self._clock.now())
             authorize_relocate(principal, view.item, moved, expected_revision)
             await _store_update(conn, view.item, moved)
+            return moved
+
+    async def relocate_system(
+        self,
+        org_id: str,
+        item_id: str,
+        scope: Scope,
+        visibility: Visibility,
+        expected_revision: int,
+    ) -> Item:
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                f"SELECT {ITEM_COLS} FROM items WHERE id = %s AND org_id = %s FOR UPDATE",  # noqa: S608
+                (item_id, org_id),
+            )
+            row = await cur.fetchone()
+            if row is None:
+                raise NotFound(item_id)
+            current = row_to_item(row)
+            check_revision(current, expected_revision)
+            moved = relocate_item(current, scope, visibility, self._clock.now())
+            await _store_update(conn, current, moved)
             return moved
 
     async def list(self, principal: Principal, query: ItemQuery) -> Page:

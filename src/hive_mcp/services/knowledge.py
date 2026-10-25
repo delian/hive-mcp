@@ -34,8 +34,7 @@ def _require_sharing_allowed(principal: Principal, scope: Scope, visibility: Vis
     if not can_share_directly(principal, scope, visibility):
         raise PermissionDenied(
             f"sharing at {scope.level.name.lower()} level / {visibility} visibility needs "
-            "approval; "
-            "keep it private or in a project, and ask an approver to promote it"
+            "approval; keep it private or in a project, then use kb_request_promotion"
         )
 
 

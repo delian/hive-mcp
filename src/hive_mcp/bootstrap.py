@@ -14,6 +14,7 @@ from hive_mcp.ports.backend import Backend, close_backend
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.indexing import INDEX_JOB, IndexService
 from hive_mcp.services.knowledge import KnowledgeService
+from hive_mcp.services.promotions import PromotionService
 from hive_mcp.services.runner import JobRunner
 from hive_mcp.services.sessions import SessionService
 
@@ -26,6 +27,7 @@ class Services:
     indexing: IndexService
     runner: JobRunner
     backend: Backend
+    promotions: PromotionService
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -60,4 +62,11 @@ async def build_services(settings: Settings) -> Services:
     sessions = SessionService(knowledge, backend.blobs)
     handlers = {INDEX_JOB: indexing.handle_job}
     runner = JobRunner(backend.jobs, handlers, worker_id=f"{socket.gethostname()}-runner")
-    return Services(knowledge, consult, sessions, indexing, runner, backend)
+    promotions = PromotionService(
+        items=backend.items,
+        promotions=backend.promotions,
+        indexing=indexing,
+        audit=backend.audit,
+        clock=clock,
+    )
+    return Services(knowledge, consult, sessions, indexing, runner, backend, promotions)

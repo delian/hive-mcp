@@ -15,7 +15,8 @@ WORKFLOW
 
 PRIVACY
 Everything you store is private to the user until they choose to share it (kb_share with a project they belong to).
-Sharing wider than a project needs an approver. Identity comes from the connection; there is no user argument.
+Sharing wider than a project needs an approver:
+call kb_request_promotion; approvers use kb_list_promotions and kb_decide_promotion. Identity comes from the connection; there is no user argument.
 
 Items have a revision number. To change one, read it (kb_get), then call kb_update with its current revision.
 """

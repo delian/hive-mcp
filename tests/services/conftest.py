@@ -11,6 +11,7 @@ from hive_mcp.embeddings.hashing import HashingEmbedder
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.indexing import IndexService
 from hive_mcp.services.knowledge import KnowledgeService
+from hive_mcp.services.promotions import PromotionService
 from hive_mcp.services.sessions import SessionService
 
 
@@ -22,6 +23,7 @@ class Stack:
     knowledge: KnowledgeService
     consult: ConsultService
     sessions: SessionService
+    promotions: PromotionService
 
 
 def build_stack(backend: Any, embedder: Any = None) -> Stack:
@@ -38,7 +40,14 @@ def build_stack(backend: Any, embedder: Any = None) -> Stack:
         clock=backend.clock,
     )
     sessions = SessionService(knowledge, backend.blobs)
-    return Stack(backend, embedder, indexing, knowledge, consult, sessions)
+    promotions = PromotionService(
+        items=backend.items,
+        promotions=backend.promotions,
+        indexing=indexing,
+        audit=backend.audit,
+        clock=backend.clock,
+    )
+    return Stack(backend, embedder, indexing, knowledge, consult, sessions, promotions)
 
 
 @pytest.fixture

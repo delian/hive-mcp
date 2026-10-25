@@ -4,6 +4,7 @@ import time
 
 import httpx
 
+from hive_mcp.domain.principal import Principal, Role
 from tests.conformance.factory import ALICE, BOB, CAROL, ROOT, VIVI, ZOE
 from tests.integration.conftest import Live
 
@@ -227,3 +228,36 @@ async def test_large_bodies_are_truncated_on_read(live: Live) -> None:
         ).structured_content
         item = (await call(alice, "kb_get", id=saved["id"])).structured_content
         assert item["truncated"] is True and len(item["body"]) == 20_000
+
+
+async def test_promotion_workflow_over_mcp(live: Live) -> None:
+    team = Principal("tina", "org1", Role.MEMBER, teams=frozenset({"t1"}))
+    async with (
+        live.client(live.token_for(ALICE)) as alice,
+        live.client(live.token_for(team)) as tina,
+        live.client(live.token_for(ROOT)) as root,
+    ):
+        item = (
+            await call(alice, "kb_remember", title="Dwell", body="dwell time plan")
+        ).structured_content
+        denied = await call(alice, "kb_share", id=item["id"], expected_revision=1, project="p9")
+        assert denied.is_error  # not a member of p9
+        req = (
+            await call(
+                alice, "kb_request_promotion", id=item["id"], to="team", owner="t1", reason="r"
+            )
+        ).structured_content
+        assert req["status"] == "pending" and req["target"] == "team:t1"
+        assert req["review_body"] is None  # requesters never get the review view
+        queue = (await call(root, "kb_list_promotions")).structured_content["result"]
+        assert [q["review_body"] for q in queue] == ["dwell time plan"]
+        assert (await call(alice, "kb_decide_promotion", id=req["id"], decision="approve")).is_error
+        assert not (await call(tina, "kb_consult", query="dwell time")).structured_content[
+            "results"
+        ]
+        done = await call(root, "kb_decide_promotion", id=req["id"], decision="approve", note="ok")
+        assert done.structured_content["status"] == "approved"
+        found = (await call(tina, "kb_consult", query="dwell time")).structured_content["results"]
+        assert [r["id"] for r in found] == [item["id"]]
+        mine = (await call(alice, "kb_list_promotions", status="all")).structured_content["result"]
+        assert [m["status"] for m in mine] == ["approved"]

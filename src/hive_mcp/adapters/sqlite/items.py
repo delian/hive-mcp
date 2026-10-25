@@ -14,7 +14,12 @@ from hive_mcp.domain.errors import (
     NotFound,
 )
 from hive_mcp.domain.item import apply_patch, relocate_item
-from hive_mcp.domain.rules import authorize_create, authorize_relocate, authorize_update
+from hive_mcp.domain.rules import (
+    authorize_create,
+    authorize_relocate,
+    authorize_update,
+    check_revision,
+)
 from hive_mcp.ports.items import CreateResult
 
 if TYPE_CHECKING:
@@ -174,6 +179,25 @@ class SqliteItems:
             moved = relocate_item(view.item, scope, visibility, self._clock.now())
             authorize_relocate(principal, view.item, moved, expected_revision)
             _store_update(conn, view.item, moved)
+            return moved
+
+        return await self._db.run(tx, write=True)
+
+    async def relocate_system(
+        self,
+        org_id: str,
+        item_id: str,
+        scope: Scope,
+        visibility: Visibility,
+        expected_revision: int,
+    ) -> Item:
+        def tx(conn: sqlite3.Connection) -> Item:
+            current = fetch_item(conn, item_id)
+            if current is None or current.org_id != org_id:
+                raise NotFound(item_id)
+            check_revision(current, expected_revision)
+            moved = relocate_item(current, scope, visibility, self._clock.now())
+            _store_update(conn, current, moved)
             return moved
 
         return await self._db.run(tx, write=True)

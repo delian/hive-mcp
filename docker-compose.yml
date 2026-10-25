@@ -1,0 +1,88 @@
+# Local / single-host use.
+#   docker compose up -d                              embedded profile (SQLite + files), one container
+#   docker compose --profile postgres up -d           external profile (Postgres + pgvector)
+#   docker compose --profile cloudflare up -d         add a Cloudflare tunnel (set TUNNEL_TOKEN)
+#   docker compose --profile tailscale up -d          add a Tailscale node (set TS_AUTHKEY)
+# Settings come from .env (see .env.example).
+name: hive
+
+x-hive: &hive
+  build:
+    context: .
+    args:
+      BAKE_MODEL: "${BAKE_MODEL:-true}"
+  image: hive-mcp:local
+  restart: unless-stopped
+  stop_grace_period: 30s
+  environment:
+    HIVE_EMBEDDER: ${HIVE_EMBEDDER:-onnx}
+    HIVE_PUBLIC_URL: ${HIVE_PUBLIC_URL:-http://localhost:8080}
+    HIVE_GOOGLE_CLIENT_ID: ${HIVE_GOOGLE_CLIENT_ID:-}
+    HIVE_GOOGLE_CLIENT_SECRET: ${HIVE_GOOGLE_CLIENT_SECRET:-}
+    HIVE_GOOGLE_ALLOWED_DOMAINS: ${HIVE_GOOGLE_ALLOWED_DOMAINS:-[]}
+    HIVE_SECRET_KEY: ${HIVE_SECRET_KEY:-}
+    HIVE_FORWARDED_ALLOW_IPS: ${HIVE_FORWARDED_ALLOW_IPS:-127.0.0.1}
+  volumes: [hive-data:/data]
+
+services:
+  hive:
+    <<: *hive
+    ports: ["${HIVE_BIND:-127.0.0.1}:8080:8080"]
+
+  hive-pg:
+    <<: *hive
+    profiles: [postgres]
+    ports: ["${HIVE_BIND:-127.0.0.1}:8080:8080"]
+    environment:
+      HIVE_PROFILE: external
+      HIVE_DATABASE_URL: postgresql://hive:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/hive
+      HIVE_EMBEDDER: ${HIVE_EMBEDDER:-onnx}
+      HIVE_PUBLIC_URL: ${HIVE_PUBLIC_URL:-http://localhost:8080}
+      HIVE_GOOGLE_CLIENT_ID: ${HIVE_GOOGLE_CLIENT_ID:-}
+      HIVE_GOOGLE_CLIENT_SECRET: ${HIVE_GOOGLE_CLIENT_SECRET:-}
+      HIVE_GOOGLE_ALLOWED_DOMAINS: ${HIVE_GOOGLE_ALLOWED_DOMAINS:-[]}
+      HIVE_SECRET_KEY: ${HIVE_SECRET_KEY:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  postgres:
+    profiles: [postgres]
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_DB: hive
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes: [pg-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive -d hive"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # The tunnel reaches hive over the compose network; hive itself stays bound to localhost.
+  cloudflared:
+    profiles: [cloudflare]
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN}
+
+  tailscale:
+    profiles: [tailscale]
+    image: tailscale/tailscale:latest
+    restart: unless-stopped
+    hostname: ${TS_HOSTNAME:-hive}
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?set TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - ts-state:/var/lib/tailscale
+      - ./deploy/tailscale-serve.json:/config/serve.json:ro
+
+volumes:
+  hive-data:
+  pg-data:
+  ts-state:

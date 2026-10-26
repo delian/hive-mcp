@@ -27,6 +27,10 @@ from hive_mcp.security.oauth.provider import HiveOAuthProvider
 from hive_mcp.security.oauth.routes import oauth_routes
 from hive_mcp.security.oauth.upstream import GoogleOidc
 from hive_mcp.security.tokens import StaticTokenVerifier, TokenStore
+from hive_mcp.webui.auth import AdminAuth
+from hive_mcp.webui.routes import AdminUi
+from hive_mcp.webui.session import SessionCodec
+from hive_mcp.webui.signin import SignIn
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
@@ -65,7 +69,7 @@ def rate_limit_rules(settings: Settings) -> list[Rule]:
         )
     if settings.rate_limit_auth:
         per_min = settings.rate_limit_auth
-        auth_paths = ("/authorize", "/token", "/revoke", "/oauth")
+        auth_paths = ("/authorize", "/token", "/revoke", "/oauth", "/admin/login", "/admin/google")
         rules.append(Rule(auth_paths, RateLimiter(per_min, max(per_min // 2, 5))))
     if settings.rate_limit_mcp:
         per_min = settings.rate_limit_mcp
@@ -113,6 +117,36 @@ def build_oauth(
     return provider, oauth_routes(provider, upstream, signer, settings.google_allowed_domains)
 
 
+def build_admin_ui(
+    settings: Settings, tokens: TokenStore, get_services: Callable[[], Services]
+) -> list[Route]:
+    directory = UserDirectory(AtomicJsonFile(settings.users_path, default=[]))
+    key = settings.secret_key.get_secret_value() if settings.secret_key else None
+    secret = load_secret_key(key, settings.data_dir / "secret.key")
+    upstream = None
+    if settings.oauth_enabled:
+        assert settings.google_client_id and settings.google_client_secret  # noqa: S101
+        upstream = GoogleOidc(
+            client_id=settings.google_client_id,
+            client_secret=settings.google_client_secret.get_secret_value(),
+            issuer=settings.google_issuer,
+            callback_url=f"{settings.public_url.rstrip('/')}/admin/google/callback",
+        )
+    signin = SignIn(
+        get_services,
+        AdminAuth(directory, tokens),
+        SessionCodec(secret),
+        CookieSigner(secret),
+        public_url=settings.public_url,
+        upstream=upstream,
+        allowed_domains=settings.google_allowed_domains,
+        directory=directory,
+    )
+    quota = (settings.quota_items_per_user, settings.quota_chars_per_user)
+    ui = AdminUi(get_services, signin, quota)
+    return ui.routes()
+
+
 def create_app(
     settings: Settings | None = None,
     lifecycle: Lifecycle | None = None,
@@ -150,11 +184,14 @@ def create_app(
             holder.pop("services", None)
             await services.close()
 
-    static = StaticTokenVerifier(TokenStore(settings.tokens_path), resource=settings.resource_url)
+    tokens = TokenStore(settings.tokens_path)
+    static = StaticTokenVerifier(tokens, resource=settings.resource_url)
     extra_routes: list[Route] = []
     provider: HiveOAuthProvider | None = None
     if settings.oauth_enabled and verifier is None:
         provider, extra_routes = build_oauth(settings, static, lambda: get_services().backend.kv)
+    if settings.admin_ui:
+        extra_routes += build_admin_ui(settings, tokens, get_services)
     auth = AuthSettings(
         issuer_url=settings.public_url,
         resource_server_url=settings.resource_url,

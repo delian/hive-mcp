@@ -25,29 +25,34 @@ Identity comes only from the token (`sub` plus the claims `hive_org`, `hive_role
 user or organisation argument**; extra arguments are ignored. A missing role means read-only; an unknown role also means read-only.
 
 ## Tools
-| Tool | Purpose |
+| Area | Tools |
 |---|---|
-| `kb_consult(query, limit, kinds, tags, other_groups)` | Search before starting a task. Returns `results` (your scopes) and `from_other_groups` (labelled EXTERNAL) |
-| `kb_get(id)` | Read one item in full (body capped at 20,000 characters, `truncated` flag) |
-| `kb_remember(title, body, kind, tags, share_with_project, idempotency_key, source)` | Store knowledge, private unless `share_with_project` names one of your projects |
-| `kb_update(id, expected_revision, ...)` | Edit with optimistic concurrency; also retags, archives, supersedes |
-| `kb_share(id, expected_revision, project)` | Move a private item into a project you belong to |
-| `kb_report_session` / `kb_report_compaction` | Record a session or the summary a context was compacted into; optional full log stored as a redacted file |
-| `kb_get_log(id)` | Read a stored log |
+| Core | `kb_consult(query, limit, kinds, tags, other_groups)` search first (results from your scopes plus `from_other_groups`, labelled EXTERNAL; related links and supersede/contradict notes included); `kb_get(id)`; `kb_remember(title, body, kind, tags, share_with_project, idempotency_key, source)` private unless shared; `kb_update(id, expected_revision, ...)`; `kb_share(id, expected_revision, project)` |
+| Reports | `kb_report_session`, `kb_report_compaction` (optional full log stored redacted), `kb_get_log(id)` |
+| Approvals | `kb_request_promotion`, `kb_list_promotions`, `kb_decide_promotion` - see [PROMOTION.md](PROMOTION.md) |
+| Graph | `kb_link`, `kb_unlink`, `kb_graph` - see [GRAPH.md](GRAPH.md) |
+| Entities | `kb_entity_save`, `kb_entity_resolve`, `kb_entity_mention` - see [ENTITIES.md](ENTITIES.md) |
+| History | `kb_history`, `kb_version`, `kb_diff`, `kb_restore` - see [HISTORY.md](HISTORY.md) |
+| Curation | `kb_tags`, `kb_rename_tag`, `kb_retag`, `kb_similar`, `kb_merge`, `kb_list` - see [CURATION.md](CURATION.md) |
+| Ingestion | `kb_ingest` (PDF, Office, text, code), `kb_ingest_url` (off by default) - see [INGEST.md](INGEST.md) |
+| Deletion | `kb_purge` - see [RETENTION.md](RETENTION.md) |
+| Admin | `kb_admin_usage`, `kb_admin_audit` - see [ADMIN.md](ADMIN.md) |
 
-Prompts: `consult_before_task`, `end_of_session_report`. The server `instructions` tell agents the workflow (consult first,
-remember reusable results, report sessions, never store secrets, say when results are external).
+Prompts cover consulting, end-of-session reports, saving context before compaction, tidying a tag and reviewing promotions. Resources: `kb://guide`, `kb://item/{id}`, `kb://recent`.
+The server `instructions` tell agents the workflow (consult first, remember reusable results, report sessions, never
+store secrets, say when results are external).
 
 ## Behaviour agents can rely on
 - Errors are readable and never leak internals: not-found and not-visible look identical; stale revisions say to re-read with `kb_get`;
   unexpected failures say only "internal error".
 - Retrying writes with the same `idempotency_key` never stores twice.
 - Detected secrets are masked before storage and the response says what kind (never the value).
-- Writes beyond a project (team/org scope, org-wide visibility) are refused until the approval workflow exists.
+- Writes beyond a project (team/org scope, org-wide visibility) go through an approval request (`kb_request_promotion`).
 
 ## Configuration (environment)
 `HIVE_DATA_DIR` (default `/data`), `HIVE_PORT`, `HIVE_PUBLIC_URL` (the externally visible URL, used for Host/Origin checks and
 OAuth metadata), `HIVE_PROFILE` (`embedded` | `external`), `HIVE_DATABASE_URL` (external profile), `HIVE_TOKENS_FILE`,
 `HIVE_ALLOWED_ORIGINS`, `HIVE_RUN_JOBS`, `HIVE_DRAIN_SECONDS`, `HIVE_SHUTDOWN_TIMEOUT`, and for OAuth sign-in
 `HIVE_GOOGLE_CLIENT_ID`, `HIVE_GOOGLE_CLIENT_SECRET`, `HIVE_GOOGLE_ALLOWED_DOMAINS`, `HIVE_USERS_FILE`, `HIVE_SECRET_KEY`
-(see [OAUTH.md](OAUTH.md)).
+(see [OAUTH.md](OAUTH.md)). Everything else (embedders, reranker, quotas, retention, URL ingestion, notifications, rate
+limits, `HIVE_ADMIN_UI`) is documented next to its feature and listed in `src/hive_mcp/config.py`.

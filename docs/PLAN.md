@@ -3,6 +3,13 @@
 Working name: **hive-mcp** (placeholder). Python, remote-first MCP server that stores, catalogs, searches
 and shares team knowledge (session logs, compactions, research, formulas, measurements, docs) between agents.
 
+> **Status (current):** phases 0-6 and most of 7 are implemented (see the README documentation table for each
+> feature). This document is the original design plus revisions; where it disagrees with the feature pages, the
+> pages win. Differences worth knowing: the project package is `hive_mcp` (not `hive`); storage is SQLite + filesystem
+> or Postgres + pgvector (DuckDB/LanceDB were not adopted); the rerank, graph, entity, history, admin and web pages are built.
+> **Still open:** real Google/assistant/Azure verification, Workspace group sync, multi-replica readiness (quota cache,
+> rate limits and job runner assume one process), OCR for scanned documents, a LanceDB adapter, newest-first audit paging.
+
 ---------------------------------------------------------------------------------------------------
 
 ## 1. Research findings that shape the design

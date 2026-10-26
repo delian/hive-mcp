@@ -3,7 +3,24 @@
 A remote MCP server that lets agents and teams share knowledge: session logs, compactions, research,
 formulas, measurements and best practices, stored once and found again by any connected agent.
 
-Status: early development. Design and roadmap: [docs/PLAN.md](docs/PLAN.md); storage interfaces: [docs/STORAGE.md](docs/STORAGE.md); services: [docs/SERVICES.md](docs/SERVICES.md); storage benchmark: [docs/BENCHMARK.md](docs/BENCHMARK.md).
+Private by default: what an agent learns stays with its author until someone shares it; wider sharing needs an
+approver. Sign in with Google Workspace (claude.ai, ChatGPT, Gemini) or bearer tokens (pipelines, CLI). SQLite
+(one container, one volume) or Postgres + pgvector; hybrid keyword + vector search with optional reranking.
+
+Status: feature complete for a first deployment, tested against fakes of Google and of the clients. **Not yet verified
+against real Google, real assistants or a real Azure deployment** - see the open items in [docs/PLAN.md](docs/PLAN.md).
+
+## Documentation
+
+| Topic | Page |
+|---|---|
+| Tools, auth, configuration | [MCP](docs/MCP.md), [OAuth / Google sign-in](docs/OAUTH.md) |
+| Deploy (Docker, Azure, Tailscale), backup and restore | [DEPLOY](docs/DEPLOY.md), [BACKUP](docs/BACKUP.md), [HARDENING](docs/HARDENING.md) |
+| Search quality, embedders, reranker | [EVALUATION](docs/EVALUATION.md), [EMBEDDINGS](docs/EMBEDDINGS.md) |
+| Sharing and approvals | [PROMOTION](docs/PROMOTION.md) |
+| Knowledge work | [CURATION](docs/CURATION.md), [GRAPH](docs/GRAPH.md), [ENTITIES](docs/ENTITIES.md), [HISTORY](docs/HISTORY.md), [INGEST](docs/INGEST.md) |
+| Operating | [ADMIN](docs/ADMIN.md) (audit, usage, quotas, web page), [RETENTION](docs/RETENTION.md) |
+| Design | [PLAN](docs/PLAN.md), [STORAGE](docs/STORAGE.md), [SERVICES](docs/SERVICES.md), [BENCHMARK](docs/BENCHMARK.md) |
 
 ## Quick start
 

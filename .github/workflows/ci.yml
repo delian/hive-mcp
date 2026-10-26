@@ -21,6 +21,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr poppler-utils
+      - name: pg_dump/pg_restore of the same major version as the service container (16)
+        run: |
+          [ -x /usr/lib/postgresql/16/bin/pg_dump ] || sudo apt-get install -y --no-install-recommends postgresql-client-16
+          echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
       - run: uv sync --frozen
       - run: uv run ruff format --check .
       - run: uv run ruff check .

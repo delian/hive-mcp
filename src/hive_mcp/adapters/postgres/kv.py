@@ -79,4 +79,8 @@ class PgKv:
                 "DELETE FROM kv WHERE expires_at IS NOT NULL AND expires_at <= %s",
                 (self._clock.now(),),
             )
-            return cur.rowcount
+            expired = cur.rowcount
+            await conn.execute(  # idle rate-limit buckets have long since refilled
+                "DELETE FROM rate_buckets WHERE seen < clock_timestamp() - interval '1 hour'"
+            )
+            return expired

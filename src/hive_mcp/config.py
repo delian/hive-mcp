@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from pathlib import Path
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     ingest_url_hosts: list[str] = Field(default_factory=list)  # empty = any public host
     ingest_url_allow_private: bool = False  # let the server reach private/internal addresses
     admin_ui: bool = False  # serve the small web admin pages under /admin (opt-in)
+    # Number of server processes sharing one database (external profile). Above 1: rate limits are
+    # shared through Postgres, quota reads are fresh, and a fixed HIVE_SECRET_KEY is required.
+    replicas: int = Field(default=1, ge=1)
     run_jobs: bool = True  # run the background job runner inside the server process
     # Interactive sign-in (claude.ai, ChatGPT, Gemini) via Google Workspace; needs id and secret.
     google_client_id: str | None = None
@@ -94,6 +97,16 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = Field(default_factory=list)
     drain_seconds: float = Field(default=5.0, ge=0)  # readiness-fail window before shutdown
     shutdown_timeout: float = Field(default=30.0, ge=1)  # max wait for in-flight requests
+
+    @model_validator(mode="after")
+    def _check_replicas(self) -> Settings:
+        if self.replicas > 1 and self.profile is Profile.EMBEDDED:
+            raise ValueError(
+                "HIVE_REPLICAS > 1 needs the external profile (SQLite is single-process)"
+            )
+        if self.replicas > 1 and self.secret_key is None:
+            raise ValueError("HIVE_REPLICAS > 1 needs HIVE_SECRET_KEY so all replicas sign alike")
+        return self
 
     @property
     def models_path(self) -> Path:

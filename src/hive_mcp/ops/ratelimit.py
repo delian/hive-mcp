@@ -1,8 +1,7 @@
 """Per-key request limits (token buckets) as ASGI middleware.
 
-In-process: with several replicas each enforces its own bucket, so the effective limit is
-per replica. That is enough to stop floods of anonymous client registrations and runaway agents;
-put a gateway in front for harder guarantees.
+RateLimiter is in-process (one bucket set per replica); with HIVE_REPLICAS > 1 the Postgres-backed
+limiter (adapters/postgres/ratelimit.py) is used instead so the limit holds across replicas.
 """
 
 from __future__ import annotations
@@ -10,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from starlette.responses import JSONResponse
 
@@ -20,6 +19,10 @@ if TYPE_CHECKING:
     from starlette.types import ASGIApp, Receive, Scope, Send
 
 MAX_KEYS = 50_000
+
+
+class Limiter(Protocol):
+    async def ahit(self, key: str) -> float: ...
 
 
 class RateLimiter:
@@ -43,6 +46,9 @@ class RateLimiter:
         self._buckets[key] = (tokens, now)
         return (1.0 - tokens) / self._rate if self._rate > 0 else 3600.0
 
+    async def ahit(self, key: str) -> float:
+        return self.hit(key)
+
     def _trim(self, now: float) -> None:
         if len(self._buckets) <= MAX_KEYS:
             return
@@ -59,7 +65,7 @@ class RateLimiter:
 @dataclass(frozen=True, slots=True)
 class Rule:
     prefixes: tuple[str, ...]
-    limiter: RateLimiter
+    limiter: Limiter
     by_token: bool = False  # key on the bearer token (hashed) when present, else on the address
     methods: frozenset[str] = frozenset()  # empty = all
 
@@ -86,7 +92,7 @@ class RateLimitMiddleware:
             for rule in self.rules:
                 if path.startswith(rule.prefixes) and (not rule.methods or method in rule.methods):
                     key = (token_key(scope) if rule.by_token else None) or client_key(scope)
-                    wait = rule.limiter.hit(f"{rule.prefixes[0]}|{key}")
+                    wait = await rule.limiter.ahit(f"{rule.prefixes[0]}|{key}")
                     if wait > 0:
                         response = JSONResponse(
                             {"error": "rate_limited", "error_description": "slow down and retry"},

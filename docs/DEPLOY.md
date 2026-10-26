@@ -53,3 +53,26 @@ Create an OAuth client (type: Web application) with redirect URI `<HIVE_PUBLIC_U
 `HIVE_GOOGLE_CLIENT_ID/SECRET` and `HIVE_GOOGLE_ALLOWED_DOMAINS=["yourdomain.com"]`, then add people:
 `hive user add a@yourdomain.com --org acme --role member --project p1`. In claude.ai add a custom
 connector with the URL `<HIVE_PUBLIC_URL>/mcp`.
+
+## Running several replicas
+
+Set `HIVE_REPLICAS=N` (N > 1) when N server processes share one Postgres (`HIVE_PROFILE=external`). The embedded
+SQLite profile is single-process and refuses this setting.
+
+What is shared through Postgres, so replicas agree: items, search indexes, OAuth state (clients, codes, tokens, consent),
+background jobs (each job is leased to exactly one worker, crashed workers' jobs are reclaimed), audit, **and stored logs
+(blobs)**. With `HIVE_REPLICAS > 1` the rate limits also live in Postgres (a database outage lets requests through rather
+than blocking them) and quota checks read fresh usage on every write.
+
+What you must provide:
+- `HIVE_SECRET_KEY` (the same value everywhere; startup fails without it), so every replica verifies the others' cookies.
+- `tokens.json` and `users.json` are files: keep them on a share all replicas see (for example an Azure Files mount at
+  `HIVE_DATA_DIR`, which holds only these small files in this profile) or distribute the same files with your deploy.
+  They are re-read when they change, so edits reach all replicas without restarts.
+- Sticky sessions are **not** needed: login transactions, sessions and tokens are stateless or in Postgres.
+
+Housekeeping (expired-record purge, retention sweep) runs on every replica; it is idempotent, so the only cost is
+duplicate work. Set `HIVE_RUN_JOBS=false` on replicas that should only serve requests.
+
+Upgrading from a single-process deployment that stored blobs on disk: blobs now live in the database, so run
+`hive backup` first; logs written earlier on disk are not copied automatically.

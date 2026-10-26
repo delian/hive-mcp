@@ -17,7 +17,7 @@ from hive_mcp.domain.clock import SystemClock
 from hive_mcp.domain.errors import StorageBusy
 from hive_mcp.mcp_api.server import build_mcp
 from hive_mcp.ops.health import health_routes
-from hive_mcp.ops.ratelimit import RateLimiter, RateLimitMiddleware, Rule
+from hive_mcp.ops.ratelimit import Limiter, RateLimiter, RateLimitMiddleware, Rule
 from hive_mcp.ops.state import Lifecycle
 from hive_mcp.security.directory import UserDirectory
 from hive_mcp.security.jsonfile import AtomicJsonFile
@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from starlette.applications import Starlette
     from starlette.routing import Route
 
+    from hive_mcp.adapters.postgres.db import PgDatabase
     from hive_mcp.ports.kv import KeyValueStore
 
 
@@ -59,22 +60,25 @@ PURGE_INTERVAL_SECONDS = 600
 BURST_SECONDS = 10  # a client may use this many seconds of its allowance at once
 
 
-def rate_limit_rules(settings: Settings) -> list[Rule]:
+def rate_limit_rules(
+    settings: Settings, make: Callable[[float, int], Limiter] | None = None
+) -> list[Rule]:
     """Registration is the only anonymous write, so it is the tightest; 0 turns a limit off."""
+    make = make or (RateLimiter)
     rules = []
     if settings.rate_limit_register:
         per_hour = settings.rate_limit_register
         rules.append(
-            Rule(("/register",), RateLimiter(per_hour / 60, per_hour), methods=frozenset({"POST"}))
+            Rule(("/register",), make(per_hour / 60, per_hour), methods=frozenset({"POST"}))
         )
     if settings.rate_limit_auth:
         per_min = settings.rate_limit_auth
         auth_paths = ("/authorize", "/token", "/revoke", "/oauth", "/admin/login", "/admin/google")
-        rules.append(Rule(auth_paths, RateLimiter(per_min, max(per_min // 2, 5))))
+        rules.append(Rule(auth_paths, make(per_min, max(per_min // 2, 5))))
     if settings.rate_limit_mcp:
         per_min = settings.rate_limit_mcp
         burst = max(per_min * BURST_SECONDS // 60, 10)
-        rules.append(Rule((settings.mcp_path,), RateLimiter(per_min, burst), by_token=True))
+        rules.append(Rule((settings.mcp_path,), make(per_min, burst), by_token=True))
     return rules
 
 
@@ -85,6 +89,20 @@ async def purge_loop(services: Services, retention_days: int = 0) -> None:
         with contextlib.suppress(StorageBusy):
             await services.backend.kv.purge_expired()
             await services.purge.sweep(retention_days)
+
+
+def shared_limiter(
+    settings: Settings, get_services: Callable[[], Services]
+) -> Callable[[float, int], Limiter] | None:
+    """Buckets in Postgres when several replicas run; None keeps the in-process default."""
+    if settings.replicas <= 1:
+        return None
+    from hive_mcp.adapters.postgres.ratelimit import PgRateLimiter  # noqa: PLC0415 - postgres extra
+
+    def db() -> PgDatabase:
+        return get_services().backend.db  # type: ignore[attr-defined,no-any-return]
+
+    return lambda per_min, burst: PgRateLimiter(db, per_min, burst)
 
 
 def build_oauth(
@@ -220,6 +238,9 @@ def create_app(
     )
     app.router.routes.extend(health_routes(lifecycle))
     app.router.routes[0:0] = extra_routes  # ours first: /revoke must shadow the SDK's version
-    app.add_middleware(RateLimitMiddleware, rules=rate_limit_rules(settings))
+    app.add_middleware(
+        RateLimitMiddleware,
+        rules=rate_limit_rules(settings, shared_limiter(settings, get_services)),
+    )
     app.state.lifecycle = lifecycle
     return app

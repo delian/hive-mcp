@@ -40,7 +40,7 @@ Indexes denormalise the item's `Acl`; after any `relocate` the service must call
 |---|---|---|
 | In-memory | `adapters/memory` | Reference implementation and test double |
 | SQLite (embedded profile) | `adapters/sqlite` + `adapters/fs` | Items, FTS5 text search, exact vector search, jobs, audit; blobs on the filesystem |
-| Postgres + pgvector (external profile) | `adapters/postgres` | Done; blobs still use the filesystem adapter (Azure Blob adapter planned) |
+| Postgres + pgvector (external profile) | `adapters/postgres` | Done; blobs are rows in a `blobs` table (shared by replicas, covered by pg_dump) |
 | LanceDB vectors (scalable embedded vectors) | `adapters/lance` | Planned; SQLite vectors are exact and fine up to about 200k chunks (about 130 ms) |
 
 ### SQLite specifics

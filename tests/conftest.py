@@ -40,7 +40,7 @@ async def backend(request: pytest.FixtureRequest, tmp_path: Path) -> AsyncIterat
         schema = (
             "t_" + uuid.uuid4().hex[:12]
         )  # one schema per test: isolation without recreating the database
-        pg = await PostgresBackend.connect(PG_DSN, tmp_path / "blobs", schema=schema)
+        pg = await PostgresBackend.connect(PG_DSN, schema=schema)
         yield pg
         await pg.close()
         async with await psycopg.AsyncConnection.connect(PG_DSN, autocommit=True) as admin:

@@ -91,6 +91,13 @@ MIGRATIONS = [
         PRIMARY KEY (item_id, revision)
     );
     """,
+    """
+    CREATE TABLE blobs (
+        org_id text NOT NULL, sha256 text NOT NULL, size bigint NOT NULL, data bytea NOT NULL,
+        PRIMARY KEY (org_id, sha256)
+    );
+    CREATE TABLE rate_buckets (key text PRIMARY KEY, tokens double precision NOT NULL, seen timestamptz NOT NULL);
+    """,
 ]
 
 

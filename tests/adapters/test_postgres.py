@@ -35,25 +35,25 @@ async def schema():
 
 
 async def test_data_survives_reconnect(schema, tmp_path):
-    first = await PostgresBackend.connect(DSN, tmp_path, schema=schema)
+    first = await PostgresBackend.connect(DSN, schema=schema)
     item = make_item(first.clock)
     await first.items.create(ALICE, item, idempotency_key="k")
     await first.close()
-    second = await PostgresBackend.connect(DSN, tmp_path, schema=schema)
+    second = await PostgresBackend.connect(DSN, schema=schema)
     assert (await second.items.get(ALICE, item.id)).item == item
     assert not (await second.items.create(ALICE, item, idempotency_key="k")).created
     await second.close()
 
 
 async def test_refuses_database_from_the_future(schema, tmp_path):
-    first = await PostgresBackend.connect(DSN, tmp_path, schema=schema)
+    first = await PostgresBackend.connect(DSN, schema=schema)
     await first.close()
     async with await psycopg.AsyncConnection.connect(DSN, autocommit=True) as admin:
         await admin.execute(
             f'INSERT INTO "{schema}".schema_migrations VALUES ({len(MIGRATIONS) + 4})'  # noqa: S608
         )
     with pytest.raises(HiveError, match="newer"):
-        await PostgresBackend.connect(DSN, tmp_path, schema=schema)
+        await PostgresBackend.connect(DSN, schema=schema)
 
 
 async def test_simultaneous_app_starts_migrate_once(schema):
@@ -87,7 +87,7 @@ async def test_pool_exhaustion_is_a_retryable_error(schema):
 
 
 async def test_invalid_data_becomes_a_validation_error(schema, tmp_path):
-    pg = await PostgresBackend.connect(DSN, tmp_path, schema=schema)
+    pg = await PostgresBackend.connect(DSN, schema=schema)
     with pytest.raises(ValidationError):
         await pg.jobs.enqueue("org1", "ingest", {"k": "nul\x00byte"})
     assert (await pg.jobs.enqueue("org1", "ingest", {"k": "fine"})).payload == {"k": "fine"}
@@ -95,7 +95,7 @@ async def test_invalid_data_becomes_a_validation_error(schema, tmp_path):
 
 
 async def test_vector_tables_per_model_with_hnsw_index(schema, tmp_path):
-    pg = await PostgresBackend.connect(DSN, tmp_path, schema=schema)
+    pg = await PostgresBackend.connect(DSN, schema=schema)
     acl = Acl("org1", P1, Visibility.SCOPE)
     for model in ("m'one", 'm"two', "m;DROP TABLE items;--", "модел"):
         await pg.vectors.replace("a", model, acl, [np.array([1, 0, 0], dtype=np.float32)])

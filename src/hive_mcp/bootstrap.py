@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import socket
 from dataclasses import dataclass
 
@@ -26,7 +27,7 @@ from hive_mcp.services.knowledge import KnowledgeService
 from hive_mcp.services.notifications import NOTIFY_JOB, NotificationService
 from hive_mcp.services.promotions import APPLY_JOB, PromotionService
 from hive_mcp.services.purge import PURGE_JOB, PurgeService
-from hive_mcp.services.quota import QuotaGuard
+from hive_mcp.services.quota import CACHE_SECONDS, QuotaGuard
 from hive_mcp.services.runner import JobRunner
 from hive_mcp.services.sessions import SessionService
 from hive_mcp.services.vector_admin import VectorAdmin
@@ -64,9 +65,7 @@ async def build_services(settings: Settings) -> Services:
         # imported lazily: the postgres extra (hive-mcp[postgres]) is optional
         from hive_mcp.adapters.postgres import PostgresBackend  # noqa: PLC0415
 
-        backend = await PostgresBackend.connect(
-            settings.database_url, settings.data_dir / "blobs", clock=clock
-        )
+        backend = await PostgresBackend.connect(settings.database_url, clock=clock)
     embedder = make_embedder(settings)
     indexing = IndexService(
         backend.items,
@@ -80,6 +79,7 @@ async def build_services(settings: Settings) -> Services:
         backend.maintenance,
         max_items=settings.quota_items_per_user,
         max_chars=settings.quota_chars_per_user,
+        cache_seconds=0.0 if settings.replicas > 1 else CACHE_SECONDS,
     )
     knowledge = KnowledgeService(
         items=backend.items,
@@ -137,7 +137,9 @@ async def build_services(settings: Settings) -> Services:
         clock=clock,
     )
     handlers[PURGE_JOB] = purge.handle_cleanup
-    runner = JobRunner(backend.jobs, handlers, worker_id=f"{socket.gethostname()}-runner")
+    runner = JobRunner(
+        backend.jobs, handlers, worker_id=f"{socket.gethostname()}-{os.getpid()}-runner"
+    )
     graph = GraphService(items=backend.items, edges=backend.edges, audit=backend.audit, clock=clock)
     entities = EntityService(
         items=backend.items, text=backend.text, knowledge=knowledge, graph=graph

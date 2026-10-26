@@ -56,6 +56,16 @@ class SqliteEdges:
 
         return await self._db.run(tx, write=True)
 
+    async def remove_item(self, org_id: str, item_id: str) -> int:
+        def tx(conn: sqlite3.Connection) -> int:
+            cur = conn.execute(
+                "DELETE FROM edges WHERE org_id = ? AND (src = ? OR dst = ?)",
+                (org_id, item_id, item_id),
+            )
+            return cur.rowcount
+
+        return await self._db.run(tx, write=True)
+
     async def incident(
         self,
         org_id: str,

@@ -1,0 +1,64 @@
+"""PostgreSQL ItemMaintenance."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from hive_mcp.adapters.postgres.codec import ITEM_COLS, row_to_item
+from hive_mcp.domain.scope import ScopeLevel
+
+if TYPE_CHECKING:
+    from hive_mcp.adapters.postgres.db import PgDatabase
+    from hive_mcp.domain.item import Item
+    from hive_mcp.ports.maintenance import ItemFilter
+
+
+class PgMaintenance:
+    def __init__(self, db: PgDatabase) -> None:
+        self._db = db
+
+    async def purge_system(self, org_id: str, item_id: str) -> Item | None:
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                f"DELETE FROM items WHERE id = %s AND org_id = %s RETURNING {ITEM_COLS}",  # noqa: S608
+                (item_id, org_id),
+            )
+            row = await cur.fetchone()
+            if row is None:
+                return None
+            await conn.execute(
+                "DELETE FROM idempotency WHERE org_id = %s AND item_id = %s", (org_id, item_id)
+            )
+            return row_to_item(row)
+
+    async def find_system(
+        self, flt: ItemFilter, *, after_id: str | None = None, limit: int = 100
+    ) -> list[Item]:
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                f"SELECT {ITEM_COLS} FROM items WHERE id > %s "  # noqa: S608
+                "AND (%s::text IS NULL OR org_id = %s) "
+                "AND (%s::text IS NULL OR author_id = %s) "
+                "AND (%s OR kind = ANY(%s)) "
+                "AND (%s::timestamptz IS NULL OR created_at < %s) "
+                "AND (NOT %s OR scope_level = %s) ORDER BY id LIMIT %s",
+                (
+                    after_id or "",
+                    flt.org_id, flt.org_id,
+                    flt.author_id, flt.author_id,
+                    not flt.kinds, sorted(str(k) for k in flt.kinds),
+                    flt.created_before, flt.created_before,
+                    flt.private_only, int(ScopeLevel.PRIVATE),
+                    limit,
+                ),
+            )  # fmt: skip
+            return [row_to_item(r) for r in await cur.fetchall()]
+
+    async def count_by_source(self, org_id: str, source: str) -> int:
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                "SELECT count(*) AS n FROM items WHERE org_id = %s AND source = %s",
+                (org_id, source),
+            )
+            row = await cur.fetchone()
+            return int(row["n"]) if row else 0

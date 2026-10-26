@@ -11,6 +11,7 @@ from hive_mcp.adapters.postgres.edges import PgEdges
 from hive_mcp.adapters.postgres.items import PgItems
 from hive_mcp.adapters.postgres.jobs import PgJobs
 from hive_mcp.adapters.postgres.kv import PgKv
+from hive_mcp.adapters.postgres.maintenance import PgMaintenance
 from hive_mcp.adapters.postgres.promotions import PgPromotions
 from hive_mcp.adapters.postgres.text import PgText
 from hive_mcp.adapters.postgres.vectors import PgVectors
@@ -29,6 +30,7 @@ class PostgresBackend:
         self.kv = PgKv(db, self.clock)
         self.promotions = PgPromotions(db)
         self.edges = PgEdges(db)
+        self.maintenance = PgMaintenance(db)
         self.blobs = FsBlobs(Path(blobs_root))
 
     @classmethod

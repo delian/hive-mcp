@@ -457,3 +457,31 @@ async def test_browse_and_tag_tools(live: Live) -> None:
         assert (await call(alice, "kb_list", limit=0)).is_error
         assert (await call(alice, "kb_list", cursor="garbage")).is_error
         assert (await call(alice, "kb_tags", limit=9999)).is_error
+
+
+async def test_purge_tool_over_mcp(live: Live) -> None:
+    async with live.client(live.token_for(ALICE)) as alice, live.client(live.token_for(BOB)) as bob:
+        mine = (
+            await call(alice, "kb_remember", title="Doomed", body="to be erased")
+        ).structured_content
+        shared = (
+            await call(alice, "kb_remember", title="Shared", body="in p1", share_with_project="p1")
+        ).structured_content
+        assert (
+            await call(alice, "kb_purge", id=mine["id"], confirm="wrong")
+        ).is_error  # must confirm
+        assert (
+            await call(bob, "kb_purge", id=shared["id"], confirm=shared["id"])
+        ).is_error  # not his
+        assert (
+            await call(bob, "kb_purge", id=mine["id"], confirm=mine["id"])
+        ).is_error  # cannot even see it
+        gone = await call(alice, "kb_purge", id=mine["id"], confirm=mine["id"])
+        assert gone.structured_content["title"] == "Doomed"
+        assert (await call(alice, "kb_get", id=mine["id"])).is_error
+        assert (await call(alice, "kb_consult", query="erased")).structured_content["results"] == []
+        assert (
+            await call(alice, "kb_purge", id=mine["id"], confirm=mine["id"])
+        ).is_error  # already gone
+        tools = {t.name: t for t in (await alice.list_tools()).tools}
+        assert tools["kb_purge"].annotations.destructive_hint is True

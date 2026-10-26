@@ -22,6 +22,7 @@ from hive_mcp.services.ingest import IngestService
 from hive_mcp.services.knowledge import KnowledgeService
 from hive_mcp.services.notifications import NOTIFY_JOB, NotificationService
 from hive_mcp.services.promotions import APPLY_JOB, PromotionService
+from hive_mcp.services.purge import PURGE_JOB, PurgeService
 from hive_mcp.services.runner import JobRunner
 from hive_mcp.services.sessions import SessionService
 
@@ -38,6 +39,7 @@ class Services:
     graph: GraphService
     ingest: IngestService
     curation: CurationService
+    purge: PurgeService
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -101,6 +103,19 @@ async def build_services(settings: Settings) -> Services:
     handlers = {INDEX_JOB: indexing.handle_job, APPLY_JOB: promotions.handle_apply}
     if notifications:
         handlers[NOTIFY_JOB] = notifications.handle
+    purge = PurgeService(
+        items=backend.items,
+        maintenance=backend.maintenance,
+        text=backend.text,
+        vectors=backend.vectors,
+        edges=backend.edges,
+        promotions=backend.promotions,
+        blobs=backend.blobs,
+        jobs=backend.jobs,
+        audit=backend.audit,
+        clock=clock,
+    )
+    handlers[PURGE_JOB] = purge.handle_cleanup
     runner = JobRunner(backend.jobs, handlers, worker_id=f"{socket.gethostname()}-runner")
     graph = GraphService(items=backend.items, edges=backend.edges, audit=backend.audit, clock=clock)
     ingest = IngestService(knowledge, graph)
@@ -112,5 +127,15 @@ async def build_services(settings: Settings) -> Services:
         graph=graph,
     )
     return Services(
-        knowledge, consult, sessions, indexing, runner, backend, promotions, graph, ingest, curation
+        knowledge,
+        consult,
+        sessions,
+        indexing,
+        runner,
+        backend,
+        promotions,
+        graph,
+        ingest,
+        curation,
+        purge,
     )

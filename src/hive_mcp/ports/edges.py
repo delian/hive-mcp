@@ -18,6 +18,9 @@ class EdgeRepository(Protocol):
 
     async def remove(self, org_id: str, src: str, dst: str, relation: str) -> bool: ...
 
+    async def remove_item(self, org_id: str, item_id: str) -> int:
+        """Delete every edge that starts or ends at the item; returns how many."""
+
     async def incident(
         self,
         org_id: str,

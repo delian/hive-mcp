@@ -16,6 +16,7 @@ from hive_mcp.mcp_api.tools_curation import register_curation_tools
 from hive_mcp.mcp_api.tools_graph import register_graph_tools
 from hive_mcp.mcp_api.tools_ingest import register_ingest_tools
 from hive_mcp.mcp_api.tools_promotion import register_promotion_tools
+from hive_mcp.mcp_api.tools_purge import register_purge_tools
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
@@ -51,6 +52,7 @@ def build_mcp(
     register_ingest_tools(mcp, get_services)
     register_curation_tools(mcp, get_services)
     register_browse_tools(mcp, get_services)
+    register_purge_tools(mcp, get_services)
     register_prompts(mcp)
     register_resources(mcp, get_services)
 

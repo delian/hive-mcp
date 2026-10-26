@@ -81,6 +81,10 @@ MIGRATIONS = [
     );
     CREATE INDEX edges_dst ON edges (org_id, dst);
     """,
+    """
+    CREATE INDEX items_source ON items (org_id, source) WHERE source IS NOT NULL;
+    CREATE INDEX items_author ON items (org_id, author_id);
+    """,
 ]
 
 

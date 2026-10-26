@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     embedding_min_scope: str | None = None
     embedding_azure: bool = False  # openai: send `api-key` header (Azure OpenAI)
     embedding_min_similarity: float = Field(default=0.3, ge=0, le=1)  # openai relevance floor
+    retention_session_days: int = Field(
+        default=0, ge=0
+    )  # purge session/compaction logs older than this; 0 = keep
     run_jobs: bool = True  # run the background job runner inside the server process
     # Interactive sign-in (claude.ai, ChatGPT, Gemini) via Google Workspace; needs id and secret.
     google_client_id: str | None = None

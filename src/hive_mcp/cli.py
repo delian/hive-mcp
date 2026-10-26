@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from pathlib import Path  # noqa: TC003 - typer reads the annotation at runtime
+from typing import TYPE_CHECKING
 
 import typer
 import uvicorn
@@ -23,6 +24,10 @@ from hive_mcp.ops.state import Lifecycle
 from hive_mcp.security.directory import DirectoryUser, UserDirectory, normalize_email
 from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.security.tokens import TokenStore
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
+    from typing import Any
 
 cli = typer.Typer(no_args_is_help=True, add_completion=False)
 tokens = typer.Typer(
@@ -247,3 +252,67 @@ def ingest(  # noqa: PLR0913, PLR0917 - one option per identity claim
         raise typer.Exit(1) from exc
     if failed:
         raise typer.Exit(1)
+
+
+def _admin(org: str) -> Principal:
+    return Principal("cli-admin", org, Role.ADMIN)
+
+
+@cli.command()
+def forget(
+    org: str = typer.Option(..., help="Organisation id."),
+    user: str = typer.Option(
+        ..., help="User id (the email for Google sign-in) whose knowledge to erase."
+    ),
+    include_shared: bool = typer.Option(
+        False, help="Also erase items they shared with projects/teams."
+    ),
+    yes: bool = typer.Option(
+        False, help="Actually delete (without it, only report what would go)."
+    ),
+) -> None:
+    """Erase a person's private knowledge (and with --include-shared, everything they wrote).
+
+    The audit log and promotion records keep their id; remove the user from the directory and
+    revoke their tokens separately (`hive user remove`, `hive token revoke`)."""
+
+    async def run() -> None:
+        services = await build_services(Settings())
+        try:
+            r = await services.purge.forget_user(
+                _admin(org), user, include_shared=include_shared, dry_run=not yes
+            )
+        finally:
+            await services.close()
+        verb = "erased" if yes else "would erase"
+        typer.echo(f"{verb} {len(r.purged)} items; {len(r.kept_shared)} shared items left in place")
+        if not yes:
+            typer.echo("re-run with --yes to delete")
+
+    _run_cli(run)
+
+
+@cli.command()
+def purge(
+    item_id: str = typer.Argument(..., help="Item id."),
+    org: str = typer.Option(..., help="Organisation id."),
+) -> None:
+    """Permanently delete one item (operator override of the author/admin rule)."""
+
+    async def run() -> None:
+        services = await build_services(Settings())
+        try:
+            item = await services.purge.purge(_admin(org), item_id)
+        finally:
+            await services.close()
+        typer.echo(f"deleted {item.id}: {item.title}")
+
+    _run_cli(run)
+
+
+def _run_cli(coro_fn: Callable[[], Coroutine[Any, Any, None]]) -> None:
+    try:
+        asyncio.run(coro_fn())
+    except (KeyError, HiveError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc

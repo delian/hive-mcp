@@ -16,6 +16,7 @@ from hive_mcp.services.indexing import IndexService
 from hive_mcp.services.ingest import IngestService
 from hive_mcp.services.knowledge import KnowledgeService
 from hive_mcp.services.promotions import PromotionService
+from hive_mcp.services.purge import PurgeService
 from hive_mcp.services.sessions import SessionService
 
 
@@ -31,6 +32,7 @@ class Stack:
     graph: GraphService
     ingest: IngestService
     curation: CurationService
+    purge: PurgeService
 
 
 def build_stack(
@@ -70,6 +72,18 @@ def build_stack(
         knowledge=knowledge,
         graph=graph,
     )
+    purge = PurgeService(
+        items=backend.items,
+        maintenance=backend.maintenance,
+        text=backend.text,
+        vectors=backend.vectors,
+        edges=backend.edges,
+        promotions=backend.promotions,
+        blobs=backend.blobs,
+        jobs=backend.jobs,
+        audit=backend.audit,
+        clock=backend.clock,
+    )
     return Stack(
         backend,
         embedder,
@@ -81,6 +95,7 @@ def build_stack(
         graph,
         ingest,
         curation,
+        purge,
     )
 
 

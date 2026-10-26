@@ -32,6 +32,9 @@ class PromotionRepository(Protocol):
         """Atomically move `expected` -> `to` (must be a legal move). None when the request is
         missing or no longer in `expected`: exactly one of several concurrent deciders wins."""
 
+    async def delete_for_item(self, org_id: str, item_id: str) -> int:
+        """Remove every request about the item (it is being purged); returns how many."""
+
     async def list(
         self,
         org_id: str,

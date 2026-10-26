@@ -74,12 +74,13 @@ def rate_limit_rules(settings: Settings) -> list[Rule]:
     return rules
 
 
-async def purge_loop(services: Services) -> None:
-    """Expired records are already invisible; this just reclaims their space."""
+async def purge_loop(services: Services, retention_days: int = 0) -> None:
+    """Expired records are already invisible; this reclaims their space and applies retention."""
     while True:
         await asyncio.sleep(PURGE_INTERVAL_SECONDS)
         with contextlib.suppress(StorageBusy):
             await services.backend.kv.purge_expired()
+            await services.purge.sweep(retention_days)
 
 
 def build_oauth(
@@ -133,7 +134,7 @@ def create_app(
         services = await services_factory(settings)
         holder["services"] = services
         runner = asyncio.create_task(services.runner.run_forever()) if settings.run_jobs else None
-        maintenance = asyncio.create_task(purge_loop(services))
+        maintenance = asyncio.create_task(purge_loop(services, settings.retention_session_days))
         lifecycle.mark_ready()
         try:
             yield

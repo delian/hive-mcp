@@ -47,6 +47,14 @@ class PgEdges:
             )
             return cur.rowcount == 1
 
+    async def remove_item(self, org_id: str, item_id: str) -> int:
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                "DELETE FROM edges WHERE org_id = %s AND (src = %s OR dst = %s)",
+                (org_id, item_id, item_id),
+            )
+            return cur.rowcount
+
     async def incident(
         self,
         org_id: str,

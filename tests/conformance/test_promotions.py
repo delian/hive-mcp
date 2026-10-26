@@ -149,3 +149,24 @@ async def test_list_can_be_limited_to_target_scopes(backend):
     assert ids(await backend.promotions.list("org1", scopes=None)) == ["a", "b", "c"]
     same_owner_other_level = Scope(ScopeLevel.PROJECT, "t1")  # owner ids can coincide across levels
     assert await backend.promotions.list("org1", scopes=frozenset({same_owner_other_level})) == []
+
+
+async def test_delete_for_item_removes_all_its_requests_only(backend):
+    await backend.promotions.create(promo(backend, "a", item_id="i1"))
+    await backend.promotions.transition(
+        "org1",
+        "a",
+        PromotionStatus.PENDING,
+        PromotionStatus.REJECTED,
+        by="r",
+        note="",
+        at=backend.clock.now(),
+    )
+    await backend.promotions.create(promo(backend, "b", item_id="i1"))
+    await backend.promotions.create(promo(backend, "c", item_id="i2"))
+    await backend.promotions.create(promo(backend, "d", item_id="i9", org="org2"))
+    assert await backend.promotions.delete_for_item("org1", "i1") == 2
+    assert await backend.promotions.delete_for_item("org2", "i1") == 0
+    assert [p.id for p in await backend.promotions.list("org1")] == ["c"]
+    assert [p.id for p in await backend.promotions.list("org2")] == ["d"]
+    assert await backend.promotions.delete_for_item("org1", "i1") == 0

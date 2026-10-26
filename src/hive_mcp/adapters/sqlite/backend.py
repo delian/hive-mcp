@@ -11,6 +11,7 @@ from hive_mcp.adapters.sqlite.edges import SqliteEdges
 from hive_mcp.adapters.sqlite.items import SqliteItems
 from hive_mcp.adapters.sqlite.jobs import SqliteJobs
 from hive_mcp.adapters.sqlite.kv import SqliteKv
+from hive_mcp.adapters.sqlite.maintenance import SqliteMaintenance
 from hive_mcp.adapters.sqlite.promotions import SqlitePromotions
 from hive_mcp.adapters.sqlite.text import SqliteText
 from hive_mcp.adapters.sqlite.vectors import SqliteVectors
@@ -33,6 +34,7 @@ class SqliteBackend:
         self.kv = SqliteKv(self.db, self.clock)
         self.promotions = SqlitePromotions(self.db)
         self.edges = SqliteEdges(self.db)
+        self.maintenance = SqliteMaintenance(self.db)
         self.blobs = FsBlobs(self.root / "blobs")
 
     def close(self) -> None:

@@ -102,6 +102,13 @@ class PgPromotions:
             r = await cur.fetchone()
         return _row(r) if r else None
 
+    async def delete_for_item(self, org_id: str, item_id: str) -> int:
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                "DELETE FROM promotions WHERE org_id = %s AND item_id = %s", (org_id, item_id)
+            )
+            return cur.rowcount
+
     async def list(
         self,
         org_id: str,

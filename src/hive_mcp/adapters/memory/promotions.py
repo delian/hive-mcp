@@ -53,6 +53,12 @@ class MemoryPromotions:
         self._rows[promotion_id] = updated
         return updated
 
+    async def delete_for_item(self, org_id: str, item_id: str) -> int:
+        doomed = [k for k, p in self._rows.items() if p.org_id == org_id and p.item_id == item_id]
+        for key in doomed:
+            del self._rows[key]
+        return len(doomed)
+
     async def list(
         self,
         org_id: str,

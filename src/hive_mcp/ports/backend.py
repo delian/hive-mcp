@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from hive_mcp.ports.items import ItemRepository
     from hive_mcp.ports.jobs import JobQueue
     from hive_mcp.ports.kv import KeyValueStore
+    from hive_mcp.ports.maintenance import ItemMaintenance
     from hive_mcp.ports.promotions import PromotionRepository
 
 
@@ -35,6 +36,8 @@ class Backend(Protocol):
     def promotions(self) -> PromotionRepository: ...
     @property
     def edges(self) -> EdgeRepository: ...
+    @property
+    def maintenance(self) -> ItemMaintenance: ...
 
     def close(self) -> object:
         """Sync backends return None, async ones an awaitable; `close_backend` handles both."""

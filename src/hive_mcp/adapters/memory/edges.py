@@ -27,6 +27,14 @@ class MemoryEdges:
     async def remove(self, org_id: str, src: str, dst: str, relation: str) -> bool:
         return self._rows.pop((org_id, src, dst, relation), None) is not None
 
+    async def remove_item(self, org_id: str, item_id: str) -> int:
+        doomed = [
+            k for k, e in self._rows.items() if e.org_id == org_id and item_id in (e.src, e.dst)
+        ]
+        for key in doomed:
+            del self._rows[key]
+        return len(doomed)
+
     async def incident(
         self,
         org_id: str,

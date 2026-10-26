@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from hive_mcp.domain import access
-from hive_mcp.domain.errors import Conflict, PermissionDenied, ValidationError
+from hive_mcp.domain.errors import Conflict, NotFound, PermissionDenied, ValidationError
+from hive_mcp.domain.principal import Role
 
 if TYPE_CHECKING:
     from hive_mcp.domain.item import Item
@@ -47,3 +48,17 @@ def authorize_relocate(
     if not access.can_create(principal, moved.acl):
         raise PermissionDenied("not a member of the target scope")
     check_revision(current, expected_revision)
+
+
+def authorize_purge(principal: Principal, item: Item) -> None:
+    """Permanent deletion: admins (compliance) or the item's own author. Others see "not found"
+    unless they can read it, in which case they are told they lack the right."""
+    if item.org_id != principal.org_id:
+        raise NotFound(item.id)
+    if principal.role >= Role.ADMIN:
+        return
+    if item.author_id == principal.id and access.can_write(principal, item.acl, item.author_id):
+        return
+    if access.read_filter(principal).tier(item.acl) is None:
+        raise NotFound(item.id)
+    raise PermissionDenied("only the author or an admin can permanently delete an item")

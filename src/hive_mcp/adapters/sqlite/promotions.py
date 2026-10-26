@@ -113,6 +113,15 @@ class SqlitePromotions:
 
         return await self._db.run(tx, write=True)
 
+    async def delete_for_item(self, org_id: str, item_id: str) -> int:
+        def tx(conn: sqlite3.Connection) -> int:
+            cur = conn.execute(
+                "DELETE FROM promotions WHERE org_id = ? AND item_id = ?", (org_id, item_id)
+            )
+            return cur.rowcount
+
+        return await self._db.run(tx, write=True)
+
     async def list(
         self,
         org_id: str,

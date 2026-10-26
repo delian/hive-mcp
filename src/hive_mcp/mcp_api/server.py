@@ -11,6 +11,7 @@ from hive_mcp.mcp_api.instructions import INSTRUCTIONS
 from hive_mcp.mcp_api.prompts import register_prompts
 from hive_mcp.mcp_api.resources import register_resources
 from hive_mcp.mcp_api.tools import register_tools
+from hive_mcp.mcp_api.tools_browse import register_browse_tools
 from hive_mcp.mcp_api.tools_curation import register_curation_tools
 from hive_mcp.mcp_api.tools_graph import register_graph_tools
 from hive_mcp.mcp_api.tools_ingest import register_ingest_tools
@@ -49,6 +50,7 @@ def build_mcp(
     register_graph_tools(mcp, get_services)
     register_ingest_tools(mcp, get_services)
     register_curation_tools(mcp, get_services)
+    register_browse_tools(mcp, get_services)
     register_prompts(mcp)
     register_resources(mcp, get_services)
 

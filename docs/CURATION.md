@@ -14,3 +14,10 @@ Rules: you need edit rights on every item you change or merge (nothing is stored
 stays in the sources' shared place only if they all share it and you may publish there directly; otherwise the result
 is private (use `kb_request_promotion`). Retrying an identical merge returns the same item.
 Suggested agent routine: `kb_similar` -> `kb_get` each -> write the merged text -> `kb_merge`.
+
+## Browsing
+`kb_list(kinds, tags, status, mine_only, limit, cursor)` pages through items newest first (stable even when items
+share a timestamp); `kb_tags(prefix, limit)` lists tags in use with counts among items you can see. Look at
+`kb_tags` before tagging so agents reuse existing tags. MCP clients can also use the prompts (`consult_before_task`,
+`end_of_session_report`, `before_compaction`, `tidy_tag`, `review_promotions`) and resources
+(`kb://guide`, `kb://recent`, `kb://item/{id}`).

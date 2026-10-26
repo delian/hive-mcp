@@ -58,6 +58,12 @@ class ItemRepository(Protocol):
     ) -> Item:
         """Promote/demote; caller must write the item and belong to the target."""
 
+    async def tag_counts(
+        self, principal: Principal, *, prefix: str = "", limit: int = 100
+    ) -> list[tuple[str, int]]:
+        """Tags on active/draft items the caller can see, with item counts: most used first, then
+        by name. `prefix` keeps tags that start with it (exact match of the leading characters)."""
+
     async def relocate_system(
         self,
         org_id: str,

@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from hive_mcp.domain.access import Tier
@@ -237,3 +239,40 @@ async def test_system_read_ignores_user_acl_but_never_crosses_orgs(backend):
     assert await backend.items.get_system("org1", private.id) == private  # no principal needed
     assert await backend.items.get_system("org2", private.id) is None  # wrong tenant
     assert await backend.items.get_system("org1", "missing") is None
+
+
+async def test_tag_counts_are_visibility_scoped_ordered_and_prefix_filtered(backend):
+    c = backend.clock
+    rows = [
+        (ALICE, ALICE_PRIVATE, frozenset({"domain/rf", "kind/note"})),
+        (ALICE, P1, frozenset({"domain/rf", "project/x"})),
+        (BOB, P1, frozenset({"domain/rf", "domain/sonar"})),
+        (CAROL, P2, frozenset({"domain/rf", "secret/carol"})),  # alice cannot see it
+    ]
+    for author, scope, tags in rows:
+        await backend.items.create(author, make_item(c, author, scope, tags=tags))
+    await backend.items.create(  # archived items do not count
+        ALICE,
+        replace(make_item(c, ALICE, P1, tags=frozenset({"domain/rf"})), status=Status.ARCHIVED),
+    )
+    counts = await backend.items.tag_counts(ALICE)
+    assert counts[0] == ("domain/rf", 3)
+    assert dict(counts) == {
+        "domain/rf": 3, "kind/note": 1, "project/x": 1, "domain/sonar": 1,
+    }  # fmt: skip
+    assert [t for t, _ in counts] == [
+        "domain/rf",
+        "domain/sonar",
+        "kind/note",
+        "project/x",
+    ]  # ties by name
+    assert await backend.items.tag_counts(ALICE, prefix="domain/") == [
+        ("domain/rf", 3),
+        ("domain/sonar", 1),
+    ]
+    assert await backend.items.tag_counts(ALICE, prefix="domain/rf") == [("domain/rf", 3)]
+    assert await backend.items.tag_counts(ALICE, limit=2) == counts[:2]
+    assert await backend.items.tag_counts(ALICE, prefix="nope") == []
+    assert await backend.items.tag_counts(ZOE) == []  # other tenant sees nothing
+    assert "secret/carol" in dict(await backend.items.tag_counts(CAROL))
+    assert await backend.items.tag_counts(ALICE, prefix="%") == []  # no wildcard semantics

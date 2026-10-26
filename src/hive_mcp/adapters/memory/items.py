@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from hive_mcp.domain import access
 from hive_mcp.domain.errors import Conflict, IdempotencyConflict, NotFound
-from hive_mcp.domain.item import Cursor, Item, ItemView, Page, apply_patch, relocate_item
+from hive_mcp.domain.item import Cursor, Item, ItemView, Page, Status, apply_patch, relocate_item
 from hive_mcp.domain.rules import (
     authorize_create,
     authorize_relocate,
@@ -14,6 +14,8 @@ from hive_mcp.domain.rules import (
     check_revision,
 )
 from hive_mcp.ports.items import CreateResult
+
+LISTED_STATUSES = frozenset({Status.ACTIVE, Status.DRAFT})
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -98,6 +100,19 @@ class MemoryItems:
         authorize_relocate(principal, view.item, moved, expected_revision)
         self._items[item_id] = moved
         return moved
+
+    async def tag_counts(
+        self, principal: Principal, *, prefix: str = "", limit: int = 100
+    ) -> list[tuple[str, int]]:
+        flt = access.read_filter(principal)
+        counts: dict[str, int] = {}
+        for item in self._items.values():
+            if flt.tier(item.acl) is None or item.status not in LISTED_STATUSES:
+                continue
+            for tag in item.tags:
+                if tag.startswith(prefix):
+                    counts[tag] = counts.get(tag, 0) + 1
+        return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:limit]
 
     async def relocate_system(
         self,

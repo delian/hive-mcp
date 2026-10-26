@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from hive_mcp.adapters.sqlite.acl import acl_where
 from hive_mcp.adapters.sqlite.codec import item_params, ts
 from hive_mcp.adapters.sqlite.item_queries import fetch_item, fetch_view, list_page, load_tags
 from hive_mcp.domain import access
@@ -182,6 +183,22 @@ class SqliteItems:
             return moved
 
         return await self._db.run(tx, write=True)
+
+    async def tag_counts(
+        self, principal: Principal, *, prefix: str = "", limit: int = 100
+    ) -> list[tuple[str, int]]:
+        where, params = acl_where(access.read_filter(principal), "i")
+
+        def tx(conn: sqlite3.Connection) -> list[tuple[str, int]]:
+            rows = conn.execute(
+                "SELECT t.tag AS tag, COUNT(*) AS n FROM item_tags t JOIN items i ON i.id = t.item_id "  # noqa: S608
+                f"WHERE {where} AND i.status IN ('active', 'draft') AND substr(t.tag, 1, ?) = ? "
+                "GROUP BY t.tag ORDER BY n DESC, t.tag LIMIT ?",
+                [*params, len(prefix), prefix, limit],
+            ).fetchall()
+            return [(r["tag"], r["n"]) for r in rows]
+
+        return await self._db.run(tx)
 
     async def relocate_system(
         self,

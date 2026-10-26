@@ -167,6 +167,19 @@ class PgItems:
             await _store_update(conn, view.item, moved)
             return moved
 
+    async def tag_counts(
+        self, principal: Principal, *, prefix: str = "", limit: int = 100
+    ) -> list[tuple[str, int]]:
+        where, params = acl_where(access.read_filter(principal))
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                "SELECT tag, count(*) AS n FROM items, unnest(tags) AS tag "  # noqa: S608
+                f"WHERE {where} AND status IN ('active', 'draft') AND starts_with(tag, %s) "
+                "GROUP BY tag ORDER BY n DESC, tag LIMIT %s",
+                [*params, prefix, limit],
+            )
+            return [(r["tag"], r["n"]) for r in await cur.fetchall()]
+
     async def relocate_system(
         self,
         org_id: str,

@@ -5,8 +5,8 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from hive_mcp.domain.errors import PermissionDenied
-from hive_mcp.domain.item import Item, ItemPatch, ItemView
+from hive_mcp.domain.errors import PermissionDenied, ValidationError
+from hive_mcp.domain.item import Item, ItemPatch, ItemQuery, ItemView, Page
 from hive_mcp.domain.principal import Principal, Role
 from hive_mcp.domain.scope import Scope, ScopeLevel, Visibility
 from hive_mcp.domain.tags import normalize_tags
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from hive_mcp.services.indexing import IndexService
 
 SELF_SERVICE_MAX_LEVEL = ScopeLevel.PROJECT
+MAX_TAGS_LISTED = 500
 
 
 def can_share_directly(principal: Principal, scope: Scope, visibility: Visibility) -> bool:
@@ -83,6 +84,17 @@ class KnowledgeService:
 
     async def get(self, principal: Principal, item_id: str) -> ItemView:
         return await self._items.get(principal, item_id)
+
+    async def browse(self, principal: Principal, query: ItemQuery) -> Page:
+        """Newest first, only what the caller can see."""
+        return await self._items.list(principal, query)
+
+    async def tags(
+        self, principal: Principal, prefix: str = "", limit: int = 100
+    ) -> list[tuple[str, int]]:
+        if not 1 <= limit <= MAX_TAGS_LISTED:
+            raise ValidationError(f"limit must be between 1 and {MAX_TAGS_LISTED}")
+        return await self._items.tag_counts(principal, prefix=prefix.strip().lower(), limit=limit)
 
     async def update(
         self, principal: Principal, item_id: str, patch: ItemPatch, expected_revision: int

@@ -419,3 +419,41 @@ def test_prompts_and_resources_need_authentication(live: Live) -> None:
             f"{live.url}/mcp", json={"jsonrpc": "2.0", "id": 1, "method": method}, headers=ACCEPT
         )
         assert r.status_code == 401
+
+
+async def test_browse_and_tag_tools(live: Live) -> None:
+    async with live.client(live.token_for(ALICE)) as alice, live.client(live.token_for(BOB)) as bob:
+        for i in range(5):
+            await call(
+                alice,
+                "kb_remember",
+                title=f"Note {i}",
+                body="words go here",
+                tags=["domain/rf", f"n/{i % 2}"],
+                kind="formula" if i == 0 else "note",
+            )
+        seen, cursor = [], None
+        while True:
+            page = (await call(alice, "kb_list", limit=2, cursor=cursor)).structured_content
+            seen += [i["title"] for i in page["items"]]
+            cursor = page["next_cursor"]
+            if not cursor:
+                break
+        assert seen == [f"Note {i}" for i in (4, 3, 2, 1, 0)]  # newest first, no repeats or gaps
+        formulas = (await call(alice, "kb_list", kinds=["formula"])).structured_content["items"]
+        assert [i["title"] for i in formulas] == ["Note 0"]
+        both = (await call(alice, "kb_list", tags=["domain/rf", "n/1"])).structured_content["items"]
+        assert sorted(i["title"] for i in both) == ["Note 1", "Note 3"]
+        tags = (await call(alice, "kb_tags")).structured_content["result"]
+        assert tags[0] == {"tag": "domain/rf", "items": 5}
+        assert [
+            t["tag"]
+            for t in (await call(alice, "kb_tags", prefix="n/")).structured_content["result"]
+        ] == ["n/0", "n/1"]
+        assert (await call(bob, "kb_tags")).structured_content[
+            "result"
+        ] == []  # alice's notes are private
+        assert (await call(bob, "kb_list")).structured_content["items"] == []
+        assert (await call(alice, "kb_list", limit=0)).is_error
+        assert (await call(alice, "kb_list", cursor="garbage")).is_error
+        assert (await call(alice, "kb_tags", limit=9999)).is_error

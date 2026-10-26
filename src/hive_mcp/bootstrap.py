@@ -20,6 +20,7 @@ from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.services.admin import AdminService
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.curation import CurationService
+from hive_mcp.services.digest import DigestSender, DigestService
 from hive_mcp.services.entities import EntityService
 from hive_mcp.services.feedback import SearchFeedback
 from hive_mcp.services.graph import GraphService
@@ -54,7 +55,9 @@ class Services:
     vector_admin: VectorAdmin
     admin: AdminService
     entities: EntityService
+    digests: DigestService
     feedback: SearchFeedback | None = None
+    digest_sender: DigestSender | None = None
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -178,6 +181,19 @@ async def build_services(settings: Settings) -> Services:
         knowledge=knowledge,
         graph=graph,
     )
+    digests = DigestService(knowledge, promotions, clock)
+    email = channels.get("email")
+    sender = (
+        DigestSender(
+            digests,
+            UserDirectory(AtomicJsonFile(settings.users_path, default=[])),
+            email,
+            backend.kv,
+            clock,
+        )
+        if email and settings.digest_weekday is not None
+        else None
+    )
     return Services(
         knowledge,
         consult,
@@ -193,5 +209,7 @@ async def build_services(settings: Settings) -> Services:
         VectorAdmin(backend.vectors, backend.maintenance, embedder),
         AdminService(backend.maintenance, backend.audit),
         entities,
+        digests,
         SearchFeedback(backend.audit, clock) if settings.search_feedback else None,
+        sender,
     )

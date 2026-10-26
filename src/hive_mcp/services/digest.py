@@ -1,0 +1,203 @@
+"""'What is new for me': items added to the places a person can read, over the last few days.
+
+Built per person from what they may read (the same filter as every other read), so a digest can
+never show more than the person could find themselves. Their own items are left out.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections import Counter
+from dataclasses import dataclass, field
+from datetime import timedelta
+from typing import TYPE_CHECKING
+
+from hive_mcp.domain.access import Tier
+from hive_mcp.domain.errors import HiveError, ValidationError
+from hive_mcp.domain.item import Cursor, ItemQuery
+from hive_mcp.ports.notify import Notification
+from hive_mcp.services.models import provenance
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from hive_mcp.domain.clock import Clock
+    from hive_mcp.domain.item import ItemView
+    from hive_mcp.domain.principal import Principal
+    from hive_mcp.ports.kv import KeyValueStore
+    from hive_mcp.ports.notify import Notifier
+    from hive_mcp.security.directory import UserDirectory
+    from hive_mcp.services.knowledge import KnowledgeService
+    from hive_mcp.services.promotions import PromotionService
+
+log = logging.getLogger(__name__)
+MAX_DAYS = 90
+MAX_SCANNED = 2000  # items examined per digest: bounds the cost on a very busy knowledge base
+PAGE = 100
+SENT_NS = "digest:sent"
+CLAIM_TTL = 14 * 86400  # long enough to cover the week, short enough to be forgotten
+QUIET_KINDS = frozenset({"session", "compaction"})  # reports are personal logs, not news
+
+
+@dataclass(frozen=True, slots=True)
+class DigestItem:
+    id: str
+    title: str
+    kind: str
+    author: str
+    origin: str
+    external: bool
+    tags: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Digest:
+    since: datetime
+    until: datetime
+    items: tuple[DigestItem, ...]
+    total_new: int  # may exceed len(items) when the list was cut at `limit`
+    top_tags: tuple[tuple[str, int], ...] = ()
+    pending_approvals: int = 0
+    scanned_all: bool = True
+    by_origin: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def empty(self) -> bool:
+        return not self.items and not self.pending_approvals
+
+
+class DigestService:
+    def __init__(
+        self,
+        knowledge: KnowledgeService,
+        promotions: PromotionService,
+        clock: Clock,
+    ) -> None:
+        self._knowledge, self._promotions, self._clock = knowledge, promotions, clock
+
+    async def build(
+        self,
+        who: Principal,
+        *,
+        days: int = 7,
+        limit: int = 30,
+        include_external: bool = False,
+    ) -> Digest:
+        if not 1 <= days <= MAX_DAYS or not 1 <= limit <= 100:  # noqa: PLR2004
+            raise ValidationError(f"days must be 1-{MAX_DAYS} and limit 1-100")
+        until = self._clock.now()
+        since = until - timedelta(days=days)
+        found: list[DigestItem] = []
+        tags: Counter[str] = Counter()
+        origins: Counter[str] = Counter()
+        scanned, cursor, complete, reached_older = 0, None, True, False
+        while not reached_older:
+            page = await self._knowledge.browse(
+                who, ItemQuery(limit=PAGE, after=cursor, include_referenced=include_external)
+            )
+            for view in page.items:
+                item = view.item
+                if item.created_at < since:  # newest first: everything after this is older
+                    reached_older = True
+                    break
+                scanned += 1
+                if item.author_id == who.id or str(item.kind) in QUIET_KINDS:
+                    continue
+                label = provenance(item.scope, view.tier, item.author_id)
+                origins[label] += 1
+                tags.update(item.tags)
+                found.append(self._entry(view, label))
+            if not page.next_cursor:
+                break
+            if scanned >= MAX_SCANNED:
+                complete = False
+                break
+            cursor = Cursor.decode(page.next_cursor)
+        pending = len(await self._promotions.list(who)) if who.is_approver else 0
+        top = tuple(tags.most_common(8))
+        return Digest(
+            since, until, tuple(found[:limit]), len(found), top, pending, complete, dict(origins)
+        )
+
+    @staticmethod
+    def _entry(view: ItemView, label: str) -> DigestItem:
+        item = view.item
+        external = view.tier is Tier.REFERENCED
+        return DigestItem(
+            item.id,
+            item.title,
+            str(item.kind),
+            item.author_id,
+            label,
+            external,
+            tuple(sorted(item.tags)),
+        )
+
+
+def render_text(digest: Digest, recipient: str = "") -> str:
+    """Plain text for email and terminals. Titles and origins only: bodies are read in the tool."""
+    lines = [f"What is new in the team knowledge base since {digest.since:%Y-%m-%d}"]
+    if recipient:
+        lines[0] += f" (for {recipient})"
+    lines.append("")
+    if digest.pending_approvals:
+        waiting = f"{digest.pending_approvals} promotion request(s) wait for your decision"
+        lines.append(f"{waiting} (ask your agent to run kb_list_promotions).\n")
+    by_origin: dict[str, list[DigestItem]] = {}
+    for item in digest.items:
+        by_origin.setdefault(item.origin, []).append(item)
+    for origin, items in by_origin.items():
+        lines.append(f"{origin} ({digest.by_origin.get(origin, len(items))} new)")
+        lines += [f"  - {i.title}  [{i.kind}, by {i.author}, id {i.id}]" for i in items]
+        lines.append("")
+    if digest.total_new > len(digest.items):
+        lines.append(f"... and {digest.total_new - len(digest.items)} more (kb_digest lists them).")
+    if digest.top_tags:
+        lines.append("Busiest tags: " + ", ".join(f"{t} ({n})" for t, n in digest.top_tags))
+    if not digest.scanned_all:
+        lines.append("(Very busy week: only the newest items were examined.)")
+    lines.append("\nOpen anything with kb_get <id> in your agent.")
+    return "\n".join(lines).strip() + "\n"
+
+
+class DigestSender:
+    """Emails each person their own digest once per ISO week, when there is something to say."""
+
+    def __init__(  # noqa: PLR0913, PLR0917 - collaborators
+        self,
+        digests: DigestService,
+        directory: UserDirectory,
+        email: Notifier,
+        kv: KeyValueStore,
+        clock: Clock,
+        days: int = 7,
+    ) -> None:
+        self._digests, self._directory, self._email = digests, directory, email
+        self._kv, self._clock, self._days = kv, clock, days
+
+    async def send_all(self) -> tuple[int, int]:
+        """(sent, failed). A person already sent this week is skipped, also across replicas."""
+        year, week, _ = self._clock.now().isocalendar()
+        sent = failed = 0
+        for user in self._directory.list():
+            if user.disabled:
+                continue
+            key = f"{year}-W{week:02d}:{user.email}"
+            if not await self._kv.put_if_absent(
+                SENT_NS, key, {"claimed": True}, ttl_seconds=14 * 86400
+            ):
+                continue
+            try:
+                digest = await self._digests.build(user.principal(), days=self._days)
+                if not digest.empty:
+                    subject = "Team knowledge digest"
+                    note = Notification(
+                        "digest", subject, render_text(digest, user.email), (user.email,)
+                    )
+                    await self._email.send(note)
+                    sent += 1
+            except HiveError:
+                log.exception("digest.failed user=%s", user.email)
+                await self._kv.delete(SENT_NS, key)  # release the claim: the next round retries
+                failed += 1
+        return sent, failed

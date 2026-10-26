@@ -87,6 +87,9 @@ class Settings(BaseSettings):
     # Record searches and the results opened afterwards in the audit trail (admins only) so
     # `hive eval-build` can make an evaluation set from real use. Off by default (shows topics).
     search_feedback: bool = False
+    # Weekly email digest (needs SMTP): day of the week, 0 = Monday ... 6 = Sunday; unset = off.
+    digest_weekday: int | None = Field(default=None, ge=0, le=6)
+    digest_hour_utc: int = Field(default=8, ge=0, le=23)
     admin_ui: bool = False  # serve the small web admin pages under /admin (opt-in)
     # Number of server processes sharing one database (external profile). Above 1: rate limits are
     # shared through Postgres, quota reads are fresh, and a fixed HIVE_SECRET_KEY is required.

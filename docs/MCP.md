@@ -40,6 +40,7 @@ user or organisation argument**; extra arguments are ignored. A missing role mea
 | Curation | `kb_tags`, `kb_rename_tag`, `kb_retag`, `kb_similar`, `kb_merge`, `kb_list` - see [CURATION.md](CURATION.md) |
 | Ingestion | `kb_ingest` (PDF, Office, text, code), `kb_ingest_url` (off by default) - see [INGEST.md](INGEST.md) |
 | Deletion | `kb_purge` - see [RETENTION.md](RETENTION.md) |
+| Catch-up | `kb_digest` - see [DIGEST.md](DIGEST.md) |
 | Admin | `kb_admin_usage`, `kb_admin_audit` - see [ADMIN.md](ADMIN.md) |
 
 Prompts cover consulting, end-of-session reports, saving context before compaction, tidying a tag and reviewing promotions. Resources: `kb://guide`, `kb://item/{id}`, `kb://recent`.

@@ -9,6 +9,7 @@ import uvicorn
 
 from hive_mcp import __version__
 from hive_mcp.app import create_app
+from hive_mcp.cli_eval import app as eval_app
 from hive_mcp.cli_groups import app as groups_app
 from hive_mcp.cli_ingest import app as ingest_app
 from hive_mcp.cli_maint import app as maint_app
@@ -40,6 +41,7 @@ cli.add_typer(ops_app)  # reindex, forget, purge, eval
 cli.add_typer(ingest_app)  # ingest, ingest-git
 cli.add_typer(maint_app)  # vectors, backup, restore
 cli.add_typer(groups_app)  # sync-groups
+cli.add_typer(eval_app)  # eval-build
 
 
 @cli.command()

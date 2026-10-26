@@ -1,0 +1,104 @@
+"""`hive eval-build`: make an evaluation set from real searches (needs HIVE_SEARCH_FEEDBACK)."""
+
+from __future__ import annotations
+
+import json
+import os
+import random
+from datetime import timedelta
+from pathlib import Path  # noqa: TC003 - typer reads the annotation at runtime
+from typing import TYPE_CHECKING, Any
+
+import typer
+
+from hive_mcp.bootstrap import build_services
+from hive_mcp.cli_common import run_cli
+from hive_mcp.config import Settings
+from hive_mcp.domain.clock import SystemClock
+from hive_mcp.evaluation import dataset
+from hive_mcp.evaluation.feedback import build_set, pair_searches_with_opens
+from hive_mcp.services.feedback import OPEN, QUERY
+
+if TYPE_CHECKING:
+    from hive_mcp.bootstrap import Services
+    from hive_mcp.ports.audit import AuditRecord
+
+app = typer.Typer()
+PAGE = 500
+
+
+async def _trail(services: Services, org: str, since: Any) -> list[AuditRecord]:  # noqa: ANN401
+    rows: list[AuditRecord] = []
+    for action in (QUERY, OPEN):
+        after = 0
+        while page := await services.backend.audit.list(
+            org, after_seq=after, limit=PAGE, action=action
+        ):
+            rows += [r for r in page if r.event.at >= since]
+            after = page[-1].seq
+    return sorted(rows, key=lambda r: r.seq)
+
+
+async def _distractors(services: Services, org: str, count: int) -> list[tuple[str, str, str]]:
+    ids: list[str] = []
+    after: str | None = None
+    while page := await services.backend.items.list_ids_system(org, after, 1000):
+        ids += page
+        after = page[-1]
+    chosen = random.Random(0).sample(ids, min(count, len(ids)))  # noqa: S311 - a fixed sample, not security
+    found = [await services.backend.items.get_system(org, i) for i in chosen]
+    return [(i.id, i.title, i.body) for i in found if i and i.status.value != "archived"]
+
+
+@app.command("eval-build")
+def eval_build(
+    out: Path = typer.Argument(..., help="Where to write the evaluation set (JSON)."),  # noqa: B008
+    org: str = typer.Option(..., help="Organisation id."),
+    days: int = typer.Option(30, help="Use searches from the last N days."),
+    distractors: int = typer.Option(50, help="Random other items to add as noise."),
+    negatives: Path | None = typer.Option(  # noqa: B008
+        None, exists=True, help="Take the unrelated ('negative') queries from this set."
+    ),
+) -> None:
+    """Pair searches with the results opened afterwards and write a set for `hive eval`.
+
+    The file contains the text of real items, private ones included: keep it out of version control
+    and delete it when done. Review the pairs; people also open results that were not the answer.
+    """
+
+    async def run() -> None:
+        services = await build_services(Settings())
+        try:
+            since = SystemClock().now() - timedelta(days=days)
+            pairs = pair_searches_with_opens(await _trail(services, org, since))
+            wanted = {i for ids in pairs.relevant.values() for i in ids}
+            docs = {}
+            for item_id in wanted:
+                item = await services.backend.items.get_system(org, item_id)
+                if item:
+                    docs[item_id] = (item.title, item.body)
+            extra = [d for d in await _distractors(services, org, distractors)]
+        finally:
+            await services.close()
+        negs = (
+            [q.text for q in dataset.load(negatives).queries if not q.relevant] if negatives else []
+        )
+        built = build_set(f"feedback-{org}", pairs, docs, extra, negs)
+        fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as handle:
+            json.dump(built, handle, indent=1, ensure_ascii=False)
+        positives = sum(1 for q in built["queries"] if q["relevant"])
+        typer.echo(
+            f"{pairs.searches} searches and {pairs.opens} opens in the last {days} days gave "
+            f"{positives} labelled queries, {len(negs)} negatives, "
+            f"{len(built['docs'])} documents -> {out}"
+        )
+        if positives < 20:  # noqa: PLR2004
+            typer.echo(
+                "Few labels so far: results are anecdotes until there are a few dozen.", err=True
+            )
+        typer.echo(
+            "The file holds real item text; keep it private and delete it when done.", err=True
+        )
+
+    run_cli(run)

@@ -35,3 +35,31 @@ same-language paraphrase query and an English query for the same document, plus 
 bge-small (English-only) reaches recall@3 0.61; multilingual-e5-small 0.82 (same-language and cross-language
 queries together). Floors: the e5 floor of 0.81 is a compromise between the English set (R@3 0.92 there; 0.94 at
 no floor) and this one; e5 separates relevant from unrelated less sharply than bge does.
+
+## Evaluating on your own data
+
+The shipped sets are small and were used to tune the defaults, so measure on your notes before trusting a floor.
+
+**1. Collect real labels** (opt-in): set `HIVE_SEARCH_FEEDBACK=true`. `kb_consult` then records the search text (secrets
+masked, 200 characters at most) with the ids it returned, and `kb_get` records which item was opened, in the audit trail
+(`search.query`, `search.open`; admins can read it with `kb_admin_audit`). Search texts show what people work on, so tell
+them, and leave it off if that is not acceptable.
+
+**2. Build a set** after a few weeks:
+```bash
+hive eval-build real.json --org acme --days 30 --distractors 50 --negatives evals/core.json
+```
+A search followed within 30 minutes by opening one of its results counts as "that result is relevant to that search".
+`--negatives` borrows the unrelated queries from another set, because real use has no "nothing should be found" labels.
+The file contains real item text (private items included): it is written with mode 0600; keep it out of git and delete it
+when done. Labels are weak (people open results that were not the answer): skim the file, delete wrong pairs, and expect
+anecdotes until there are a few dozen queries.
+
+**3. Score it and pick a floor**:
+```bash
+hive eval real.json --recommend
+```
+sweeps the vector relevance floor in steps of 0.01 and prints `Suggested: HIVE_RELEVANCE_FLOOR=0.xx`: the floor with the best
+recall@3 among those that answer at most 5% of the unrelated queries. Set `HIVE_RELEVANCE_FLOOR` to apply it to the
+configured embedder (any kind). Re-run when you change embedder or reranker; compare `hive eval` output before and after
+a change to catch regressions.

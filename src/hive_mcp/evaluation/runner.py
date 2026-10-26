@@ -101,10 +101,37 @@ async def evaluate(
     ranked = await _rankings(dataset, backend, embedder, use_floor)
     modes = [_report(dataset, ranked[m], m) for m in ("keyword", "vector", "hybrid")]
     points = []
-    for f in sweep:
-        r = _report(dataset, (await _rankings(dataset, backend, embedder, f))["vector"], "vector")
-        points.append(FloorPoint(f, r.positives.recall[3], r.false_positive_rate))
+    if sweep:
+        scored = await _scored(dataset, backend, embedder)  # embed once, apply every floor to it
+        for f in sweep:
+            ranked_f = [[i for i, score in hits if score >= f] for hits in scored]
+            r = _report(dataset, ranked_f, "vector")
+            points.append(FloorPoint(f, r.positives.recall[3], r.false_positive_rate))
     return Report(dataset.name, embedder.model_id, modes, points)
+
+
+async def _scored(
+    dataset: Dataset, backend: MemoryBackend, embedder: Embedder
+) -> list[list[tuple[str, float]]]:
+    flt = read_filter(OWNER)
+    out = []
+    for q in dataset.queries:
+        vector = await embedder.embed_query(q.text)
+        hits = await backend.vectors.search(flt, embedder.model_id, vector, POOL)
+        out.append([(h.item_id, h.score) for h in hits])
+    return out
+
+
+def recommend_floor(
+    points: list[FloorPoint], max_false_positives: float = 0.05
+) -> FloorPoint | None:
+    """The floor with the best recall@3 among those that answer at most `max_false_positives` of the
+    unrelated queries; of equally good ones the highest (strictest). None if no floor qualifies."""
+    ok = [p for p in points if p.false_positive_rate <= max_false_positives]
+    if not ok:
+        return None
+    best = max(p.recall_at_3 for p in ok)
+    return max((p for p in ok if p.recall_at_3 >= best - 1e-9), key=lambda p: p.floor)
 
 
 async def consult_check(

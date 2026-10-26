@@ -32,6 +32,13 @@ def embed_min_level(settings: Settings) -> ScopeLevel:
 
 
 def make_embedder(settings: Settings) -> Embedder:
+    embedder = _make_embedder(settings)
+    if settings.relevance_floor is not None:
+        embedder.min_similarity = settings.relevance_floor
+    return embedder
+
+
+def _make_embedder(settings: Settings) -> Embedder:
     kind = settings.embedder
     if kind == "hashing":
         return HashingEmbedder(256)

@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     # local embedders; project and wider for hosted ones, so private notes never leave the server.
     embedding_min_scope: str | None = None
     embedding_azure: bool = False  # openai: send `api-key` header (Azure OpenAI)
+    # Overrides the embedder's relevance floor; `hive eval --recommend` suggests one for your data.
+    relevance_floor: float | None = Field(default=None, ge=0, le=1)
     embedding_min_similarity: float = Field(default=0.3, ge=0, le=1)  # openai relevance floor
     quota_items_per_user: int = Field(default=0, ge=0)  # 0 = unlimited; admins are exempt
     quota_chars_per_user: int = Field(
@@ -80,6 +82,9 @@ class Settings(BaseSettings):
     )
     log_format: Literal["text", "json"] = "text"
     log_level: str = "INFO"
+    # Record searches and the results opened afterwards in the audit trail (admins only) so
+    # `hive eval-build` can make an evaluation set from real use. Off by default (shows topics).
+    search_feedback: bool = False
     admin_ui: bool = False  # serve the small web admin pages under /admin (opt-in)
     # Number of server processes sharing one database (external profile). Above 1: rate limits are
     # shared through Postgres, quota reads are fresh, and a fixed HIVE_SECRET_KEY is required.

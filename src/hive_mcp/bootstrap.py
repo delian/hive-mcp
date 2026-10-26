@@ -20,6 +20,7 @@ from hive_mcp.services.admin import AdminService
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.curation import CurationService
 from hive_mcp.services.entities import EntityService
+from hive_mcp.services.feedback import SearchFeedback
 from hive_mcp.services.graph import GraphService
 from hive_mcp.services.indexing import INDEX_JOB, IndexService
 from hive_mcp.services.ingest import IngestService
@@ -49,6 +50,7 @@ class Services:
     vector_admin: VectorAdmin
     admin: AdminService
     entities: EntityService
+    feedback: SearchFeedback | None = None
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -175,4 +177,5 @@ async def build_services(settings: Settings) -> Services:
         VectorAdmin(backend.vectors, backend.maintenance, embedder),
         AdminService(backend.maintenance, backend.audit),
         entities,
+        SearchFeedback(backend.audit, clock) if settings.search_feedback else None,
     )

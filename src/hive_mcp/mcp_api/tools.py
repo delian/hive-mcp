@@ -186,6 +186,10 @@ def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None
                 with_links=include_links,
             ),
         )
+        feedback = get_services().feedback
+        if feedback:
+            ids = [m.item_id for m in (*result.primary, *result.referenced)]
+            await feedback.queried(current_principal(), query, ids)
         return ConsultOut(
             results=[_match_out(m) for m in result.primary],
             from_other_groups=[_match_out(m) for m in result.referenced],
@@ -197,6 +201,8 @@ def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None
     async def kb_get(id: str) -> ItemOut:
         """Read one item in full (use after kb_consult, or before kb_update to get its revision)."""
         view = await get_services().knowledge.get(current_principal(), id)
+        if feedback := get_services().feedback:
+            await feedback.opened(current_principal(), id)
         return _item_out(view.item, view.tier)
 
     @mcp.tool(annotations=WRITE)

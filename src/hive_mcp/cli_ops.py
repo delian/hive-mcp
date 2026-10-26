@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from pathlib import Path  # noqa: TC003 - typer reads the annotation at runtime
+from typing import Any
 
 import typer
 
@@ -92,6 +94,22 @@ def purge(
     run_cli(run)
 
 
+def _recommend(data: Any, report: Any) -> None:  # noqa: ANN401 - Dataset / Report
+    from hive_mcp.evaluation import runner  # noqa: PLC0415
+
+    if all(q.relevant for q in data.queries):
+        typer.echo('\nNo negative queries in this set: add some ("relevant": []) to pick a floor.')
+        return
+    best = runner.recommend_floor(report.sweep)
+    if best is None:
+        typer.echo("\nNo floor keeps unrelated answers under 5%: poor separation on this data.")
+        return
+    typer.echo(
+        f"\nSuggested: HIVE_RELEVANCE_FLOOR={best.floor:.2f}  "
+        f"(recall@3 {best.recall_at_3:.2f}, unrelated answered {best.false_positive_rate:.2f})"
+    )
+
+
 @app.command("eval")
 def evaluate_command(
     path: Path = typer.Argument(  # noqa: B008
@@ -99,6 +117,9 @@ def evaluate_command(
     ),
     sweep: bool = typer.Option(False, help="Also sweep the vector relevance floor."),
     floor: float | None = typer.Option(None, help="Override the embedder's relevance floor."),
+    recommend: bool = typer.Option(
+        False, help="Sweep finely and suggest HIVE_RELEVANCE_FLOOR (needs negative queries)."
+    ),
 ) -> None:
     """Score keyword, vector and hybrid retrieval with the configured embedder (HIVE_EMBEDDER)."""
     from hive_mcp.embeddings.factory import make_embedder, make_reranker  # noqa: PLC0415
@@ -108,8 +129,16 @@ def evaluate_command(
         embedder = make_embedder(Settings())
         data = dataset.load(path)
         points = tuple(x / 100 for x in range(0, 100, 5)) if sweep else ()
+        if recommend:
+            points = tuple(x / 100 for x in range(20, 96))
         report = await runner.evaluate(data, embedder, floor=floor, sweep=points)
-        typer.echo(runner.format_report(report))
+        typer.echo(
+            runner.format_report(report)
+            if not recommend
+            else runner.format_report(replace(report, sweep=report.sweep[::5]))
+        )
+        if recommend:
+            _recommend(data, report)
         reranker = make_reranker(Settings())
         extra = [await runner.consult_check(data, embedder)]
         if reranker:

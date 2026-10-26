@@ -18,7 +18,7 @@ jobs:
     env:
       HIVE_TEST_PG_DSN: host=localhost port=5432 dbname=postgres user=postgres password=postgres
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen
       - run: uv run ruff format --check .
@@ -30,7 +30,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen
       - name: Known vulnerabilities in the locked dependencies
@@ -39,7 +39,7 @@ jobs:
   client:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
       - name: The slim hooks client builds, installs alone and runs
         run: |
@@ -52,7 +52,7 @@ jobs:
   image:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
       - name: Build image with the offline model baked in
         uses: docker/build-push-action@v6
@@ -77,6 +77,6 @@ jobs:
   bicep:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: az bicep build --file deploy/azure/main.bicep --stdout > /dev/null
       - run: az bicep build-params --file deploy/azure/main.bicepparam --stdout > /dev/null

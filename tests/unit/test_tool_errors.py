@@ -49,3 +49,13 @@ async def test_guarded_converts_expected_errors_and_masks_unexpected_ones():
     assert "internal error" in str(caught.value) and caught.value.__cause__ is None
     assert await fine() == 7
     assert isinstance(Conflict("x"), HiveError)
+
+
+def test_building_the_server_registers_each_prompt_once(caplog):
+    from hive_mcp.mcp_api.server import build_mcp  # noqa: PLC0415
+
+    with caplog.at_level("WARNING"):
+        build_mcp(lambda: None)
+    assert (
+        "already exists" not in caplog.text
+    )  # a duplicate registration is silently ignored by the SDK

@@ -485,3 +485,31 @@ async def test_purge_tool_over_mcp(live: Live) -> None:
         ).is_error  # already gone
         tools = {t.name: t for t in (await alice.list_tools()).tools}
         assert tools["kb_purge"].annotations.destructive_hint is True
+
+
+async def test_admin_tools_over_mcp(live: Live) -> None:
+    async with (
+        live.client(live.token_for(ALICE)) as alice,
+        live.client(live.token_for(ROOT)) as root,
+    ):
+        await call(alice, "kb_remember", title="One", body="some text")
+        await call(alice, "kb_remember", title="Two", body="more text")
+        assert (await call(alice, "kb_admin_usage")).is_error  # members cannot
+        assert (await call(alice, "kb_admin_audit")).is_error
+        usage = (await call(root, "kb_admin_usage")).structured_content["result"]
+        assert usage == [
+            {
+                "user": "alice",
+                "items": 2,
+                "characters": 24,
+                "last_activity": usage[0]["last_activity"],
+            }
+        ]
+        events = (
+            await call(root, "kb_admin_audit", actor="alice", action="item.create")
+        ).structured_content["result"]
+        assert [e["action"] for e in events] == ["item.create", "item.create"] and events[0][
+            "seq"
+        ] < events[1]["seq"]
+        assert "some text" not in str(events)  # ids only, never content
+        assert (await call(root, "kb_admin_audit", limit=0)).is_error

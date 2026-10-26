@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from hive_mcp.adapters.sqlite.codec import ITEM_COLS, row_to_item, ts
+from hive_mcp.adapters.sqlite.codec import ITEM_COLS, parse_ts, row_to_item, ts
 from hive_mcp.adapters.sqlite.item_queries import fetch_item, load_tags
 from hive_mcp.domain.scope import ScopeLevel
+from hive_mcp.ports.maintenance import AuthorUsage
 
 if TYPE_CHECKING:
     import sqlite3
@@ -61,6 +62,18 @@ class SqliteMaintenance:
             ).fetchall()
             tags = load_tags(conn, [r["id"] for r in rows])
             return [row_to_item(r, tags[r["id"]]) for r in rows]
+
+        return await self._db.run(tx)
+
+    async def usage(self, org_id: str, author_id: str | None = None) -> list[AuthorUsage]:
+        def tx(conn: sqlite3.Connection) -> list[AuthorUsage]:
+            rows = conn.execute(
+                "SELECT author_id, COUNT(*) AS n, SUM(LENGTH(title) + LENGTH(body)) AS c, "
+                "MAX(updated_at) AS last FROM items WHERE org_id = ? AND status != 'archived' "
+                "AND (? IS NULL OR author_id = ?) GROUP BY author_id ORDER BY c DESC, author_id",
+                (org_id, author_id, author_id),
+            ).fetchall()
+            return [AuthorUsage(r["author_id"], r["n"], r["c"], parse_ts(r["last"])) for r in rows]
 
         return await self._db.run(tx)
 

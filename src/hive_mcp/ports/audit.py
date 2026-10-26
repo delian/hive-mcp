@@ -26,5 +26,14 @@ class AuditRecord:
 class AuditLog(Protocol):
     async def append(self, event: AuditEvent) -> int: ...
 
-    async def list(self, org_id: str, *, after_seq: int = 0, limit: int = 100) -> list[AuditRecord]:
-        """Oldest first, only this org's events, seq > after_seq."""
+    async def list(  # noqa: PLR0913 - keyword-only filters
+        self,
+        org_id: str,
+        *,
+        after_seq: int = 0,
+        limit: int = 100,
+        actor_id: str | None = None,
+        action: str | None = None,
+        target_id: str | None = None,
+    ) -> list[AuditRecord]:
+        """Oldest first, only this org's events, seq > after_seq, optionally filtered."""

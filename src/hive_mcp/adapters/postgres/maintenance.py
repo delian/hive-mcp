@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from hive_mcp.adapters.postgres.codec import ITEM_COLS, row_to_item
 from hive_mcp.domain.scope import ScopeLevel
+from hive_mcp.ports.maintenance import AuthorUsage
 
 if TYPE_CHECKING:
     from hive_mcp.adapters.postgres.db import PgDatabase
@@ -53,6 +54,20 @@ class PgMaintenance:
                 ),
             )  # fmt: skip
             return [row_to_item(r) for r in await cur.fetchall()]
+
+    async def usage(self, org_id: str, author_id: str | None = None) -> list[AuthorUsage]:
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                "SELECT author_id, count(*) AS n, sum(length(title) + length(body)) AS c, "
+                "max(updated_at) AS last FROM items WHERE org_id = %s AND status != 'archived' "
+                "AND (%s::text IS NULL OR author_id = %s) GROUP BY author_id "
+                "ORDER BY c DESC, author_id",
+                (org_id, author_id, author_id),
+            )
+            return [
+                AuthorUsage(r["author_id"], int(r["n"]), int(r["c"]), r["last"])
+                for r in await cur.fetchall()
+            ]
 
     async def count_system(
         self, org_id: str | None = None, *, include_archived: bool = False

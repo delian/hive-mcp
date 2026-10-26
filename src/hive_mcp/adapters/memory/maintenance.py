@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from hive_mcp.ports.maintenance import AuthorUsage
+
 if TYPE_CHECKING:
     from hive_mcp.adapters.memory.items import MemoryItems
     from hive_mcp.domain.item import Item
@@ -38,6 +40,26 @@ class MemoryMaintenance:
             and (after_id is None or i.id > after_id)
         ]
         return sorted(rows, key=lambda i: i.id)[:limit]
+
+    async def usage(self, org_id: str, author_id: str | None = None) -> list[AuthorUsage]:
+        by: dict[str, list[Item]] = {}
+        for i in self._store._items.values():
+            if (
+                i.org_id == org_id
+                and i.status.value != "archived"
+                and author_id in (None, i.author_id)
+            ):
+                by.setdefault(i.author_id, []).append(i)
+        rows = [
+            AuthorUsage(
+                a,
+                len(its),
+                sum(len(i.title) + len(i.body) for i in its),
+                max(i.updated_at for i in its),
+            )
+            for a, its in by.items()
+        ]
+        return sorted(rows, key=lambda u: (-u.chars, u.author_id))
 
     async def count_system(
         self, org_id: str | None = None, *, include_archived: bool = False

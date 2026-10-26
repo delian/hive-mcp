@@ -21,6 +21,14 @@ class ItemFilter:
     private_only: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class AuthorUsage:
+    author_id: str
+    items: int  # not archived
+    chars: int  # characters of title + body over those items
+    last_at: datetime
+
+
 class ItemMaintenance(Protocol):
     async def purge_system(self, org_id: str, item_id: str) -> Item | None:
         """Permanently delete the item row, its tags and its idempotency records in one
@@ -31,6 +39,10 @@ class ItemMaintenance(Protocol):
         self, flt: ItemFilter, *, after_id: str | None = None, limit: int = 100
     ) -> list[Item]:
         """Items matching the filter (any status), ascending by id, strictly after `after_id`."""
+
+    async def usage(self, org_id: str, author_id: str | None = None) -> list[AuthorUsage]:
+        """Items and text volume per author (archived items excluded), biggest first. With
+        `author_id`, only that author (an empty list if they have nothing)."""
 
     async def count_system(
         self, org_id: str | None = None, *, include_archived: bool = False

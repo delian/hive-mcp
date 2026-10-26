@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from hive_mcp.ports.audit import AuditLog
     from hive_mcp.ports.items import ItemRepository
     from hive_mcp.services.indexing import IndexService
+    from hive_mcp.services.quota import QuotaGuard
 
 SELF_SERVICE_MAX_LEVEL = ScopeLevel.PROJECT
 MAX_TAGS_LISTED = 500
@@ -41,9 +42,16 @@ def _require_sharing_allowed(principal: Principal, scope: Scope, visibility: Vis
 
 class KnowledgeService:
     def __init__(
-        self, *, items: ItemRepository, indexing: IndexService, audit: AuditLog, clock: Clock
+        self,
+        *,
+        items: ItemRepository,
+        indexing: IndexService,
+        audit: AuditLog,
+        clock: Clock,
+        quota: QuotaGuard | None = None,
     ) -> None:
         self._items, self._indexing, self._audit, self._clock = items, indexing, audit, clock
+        self._quota = quota
 
     async def _audit_event(
         self, principal: Principal, action: str, target: str, **details: str
@@ -56,6 +64,9 @@ class KnowledgeService:
         scope = req.scope or Scope(ScopeLevel.PRIVATE, principal.id)
         _require_sharing_allowed(principal, scope, req.visibility)
         title, body = redact(req.title), redact(req.body)
+        size = len(title.text) + len(body.text)
+        if self._quota:
+            await self._quota.check(principal, size)
         findings = {
             k: title.findings.get(k, 0) + body.findings.get(k, 0)
             for k in {*title.findings, *body.findings}
@@ -78,6 +89,8 @@ class KnowledgeService:
         created = await self._items.create(principal, item, req.idempotency_key)
         indexed = True
         if created.created:
+            if self._quota:
+                self._quota.record(principal, size)
             indexed = await self._indexing.index_or_enqueue(created.item)
             await self._audit_event(principal, "item.create", created.item.id, kind=str(item.kind))
         return RememberResult(created.item, created.created, indexed, findings)

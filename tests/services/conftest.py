@@ -36,14 +36,21 @@ class Stack:
 
 
 def build_stack(
-    backend: Any, embedder: Any = None, embed_min_level: ScopeLevel = ScopeLevel.PRIVATE
+    backend: Any,
+    embedder: Any = None,
+    embed_min_level: ScopeLevel = ScopeLevel.PRIVATE,
+    quota: Any = None,
 ) -> Stack:
     embedder = embedder or HashingEmbedder(128)
     indexing = IndexService(
         backend.items, backend.text, backend.vectors, embedder, backend.jobs, embed_min_level
     )
     knowledge = KnowledgeService(
-        items=backend.items, indexing=indexing, audit=backend.audit, clock=backend.clock
+        items=backend.items,
+        indexing=indexing,
+        audit=backend.audit,
+        clock=backend.clock,
+        quota=quota,
     )
     consult = ConsultService(
         items=backend.items,

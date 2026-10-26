@@ -14,6 +14,7 @@ from hive_mcp.notify.factory import make_channels
 from hive_mcp.ports.backend import Backend, close_backend
 from hive_mcp.security.directory import UserDirectory
 from hive_mcp.security.jsonfile import AtomicJsonFile
+from hive_mcp.services.admin import AdminService
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.curation import CurationService
 from hive_mcp.services.graph import GraphService
@@ -23,6 +24,7 @@ from hive_mcp.services.knowledge import KnowledgeService
 from hive_mcp.services.notifications import NOTIFY_JOB, NotificationService
 from hive_mcp.services.promotions import APPLY_JOB, PromotionService
 from hive_mcp.services.purge import PURGE_JOB, PurgeService
+from hive_mcp.services.quota import QuotaGuard
 from hive_mcp.services.runner import JobRunner
 from hive_mcp.services.sessions import SessionService
 from hive_mcp.services.vector_admin import VectorAdmin
@@ -42,6 +44,7 @@ class Services:
     curation: CurationService
     purge: PurgeService
     vector_admin: VectorAdmin
+    admin: AdminService
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -70,8 +73,13 @@ async def build_services(settings: Settings) -> Services:
         backend.jobs,
         embed_min_level(settings),
     )
+    quota = QuotaGuard(
+        backend.maintenance,
+        max_items=settings.quota_items_per_user,
+        max_chars=settings.quota_chars_per_user,
+    )
     knowledge = KnowledgeService(
-        items=backend.items, indexing=indexing, audit=backend.audit, clock=clock
+        items=backend.items, indexing=indexing, audit=backend.audit, clock=clock, quota=quota
     )
     consult = ConsultService(
         items=backend.items,
@@ -141,4 +149,5 @@ async def build_services(settings: Settings) -> Services:
         curation,
         purge,
         VectorAdmin(backend.vectors, backend.maintenance, embedder),
+        AdminService(backend.maintenance, backend.audit),
     )

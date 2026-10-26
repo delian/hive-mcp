@@ -35,11 +35,32 @@ class SqliteAudit:
 
         return await self._db.run(tx, write=True)
 
-    async def list(self, org_id: str, *, after_seq: int = 0, limit: int = 100) -> list[AuditRecord]:
+    async def list(  # noqa: PLR0913
+        self,
+        org_id: str,
+        *,
+        after_seq: int = 0,
+        limit: int = 100,
+        actor_id: str | None = None,
+        action: str | None = None,
+        target_id: str | None = None,
+    ) -> list[AuditRecord]:
         def tx(conn: sqlite3.Connection) -> list[AuditRecord]:
             rows = conn.execute(
-                "SELECT * FROM audit WHERE org_id = ? AND seq > ? ORDER BY seq LIMIT ?",
-                (org_id, after_seq, limit),
+                "SELECT * FROM audit WHERE org_id = ? AND seq > ? "
+                "AND (? IS NULL OR actor_id = ?) AND (? IS NULL OR action = ?) "
+                "AND (? IS NULL OR target_id = ?) ORDER BY seq LIMIT ?",
+                (
+                    org_id,
+                    after_seq,
+                    actor_id,
+                    actor_id,
+                    action,
+                    action,
+                    target_id,
+                    target_id,
+                    limit,
+                ),
             ).fetchall()
             return [
                 AuditRecord(

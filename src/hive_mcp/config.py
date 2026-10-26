@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     embedding_min_scope: str | None = None
     embedding_azure: bool = False  # openai: send `api-key` header (Azure OpenAI)
     embedding_min_similarity: float = Field(default=0.3, ge=0, le=1)  # openai relevance floor
+    quota_items_per_user: int = Field(default=0, ge=0)  # 0 = unlimited; admins are exempt
+    quota_chars_per_user: int = Field(
+        default=0, ge=0
+    )  # characters of title + body, archived excluded
     retention_session_days: int = Field(
         default=0, ge=0
     )  # purge session/compaction logs older than this; 0 = keep

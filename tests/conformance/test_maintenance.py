@@ -98,3 +98,25 @@ async def test_count_system_excludes_archived_and_filters_by_org(backend):
     await backend.items.update(ALICE, items["a_proj"].id, ItemPatch(status=Status.ARCHIVED), 1)
     assert await backend.maintenance.count_system() == 3
     assert await backend.maintenance.count_system(include_archived=True) == 4
+
+
+async def test_usage_per_author_excludes_archived_and_other_orgs(backend):
+    c = backend.clock
+    await backend.items.create(
+        ALICE, make_item(c, ALICE, P1, item_id="u1", title="ab", body="cdef")
+    )
+    c.advance(seconds=10)
+    await backend.items.create(ALICE, make_item(c, ALICE, P1, item_id="u2", title="x", body="y"))
+    await backend.items.create(
+        BOB, make_item(c, BOB, P1, item_id="u3", title="bobtitle", body="bobbody!")
+    )
+    await backend.items.create(
+        ALICE, make_item(c, ALICE, P1, item_id="u4", title="gone", body="gone")
+    )
+    await backend.items.update(ALICE, "u4", ItemPatch(status=Status.ARCHIVED), 1)
+    rows = await backend.maintenance.usage("org1")
+    assert [(u.author_id, u.items, u.chars) for u in rows] == [("bob", 1, 16), ("alice", 2, 8)]
+    assert rows[1].last_at == c.now()  # alice's newest item (u2) was written at the last clock tick
+    assert [u.author_id for u in await backend.maintenance.usage("org1", "alice")] == ["alice"]
+    assert await backend.maintenance.usage("org1", "nobody") == []
+    assert await backend.maintenance.usage("org2") == []

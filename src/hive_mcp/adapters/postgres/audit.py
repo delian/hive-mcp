@@ -33,11 +33,32 @@ class PgAudit:
             row = await cur.fetchone()
             return int(row["seq"]) if row else 0
 
-    async def list(self, org_id: str, *, after_seq: int = 0, limit: int = 100) -> list[AuditRecord]:
+    async def list(  # noqa: PLR0913
+        self,
+        org_id: str,
+        *,
+        after_seq: int = 0,
+        limit: int = 100,
+        actor_id: str | None = None,
+        action: str | None = None,
+        target_id: str | None = None,
+    ) -> list[AuditRecord]:
         async with self._db.tx() as conn:
             cur = await conn.execute(
-                "SELECT * FROM audit WHERE org_id = %s AND seq > %s ORDER BY seq LIMIT %s",
-                (org_id, after_seq, limit),
+                "SELECT * FROM audit WHERE org_id = %s AND seq > %s "
+                "AND (%s::text IS NULL OR actor_id = %s) AND (%s::text IS NULL OR action = %s) "
+                "AND (%s::text IS NULL OR target_id = %s) ORDER BY seq LIMIT %s",
+                (
+                    org_id,
+                    after_seq,
+                    actor_id,
+                    actor_id,
+                    action,
+                    action,
+                    target_id,
+                    target_id,
+                    limit,
+                ),
             )
             return [
                 AuditRecord(

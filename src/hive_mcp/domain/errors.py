@@ -37,3 +37,7 @@ class EmbeddingUnavailable(HiveError):
 
 class NotifyError(HiveError):
     """A notification could not be delivered (the job runner retries)."""
+
+
+class QuotaExceeded(HiveError):
+    """A per-user storage quota would be exceeded."""

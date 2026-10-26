@@ -12,7 +12,15 @@ from hive_mcp.domain.item import Item, ItemPatch, Kind, Status
 from hive_mcp.domain.scope import Scope, ScopeLevel, Visibility
 from hive_mcp.domain.tags import normalize_tags
 from hive_mcp.mcp_api.errors import guarded
-from hive_mcp.mcp_api.schemas import ChangeOut, ConsultOut, ItemOut, LogOut, MatchOut, RememberOut
+from hive_mcp.mcp_api.schemas import (
+    ChangeOut,
+    ConsultOut,
+    ItemOut,
+    LinkOut,
+    LogOut,
+    MatchOut,
+    RememberOut,
+)
 from hive_mcp.security.principals import principal_from_claims
 from hive_mcp.services.models import (
     ConsultRequest,
@@ -81,6 +89,16 @@ def _match_out(m: Match) -> MatchOut:
         author=m.author_id,
         updated_at=m.updated_at.isoformat(),
         revision=m.revision,
+        links=[
+            LinkOut(
+                relation=lk.relation,
+                direction=lk.direction,
+                id=lk.item_id,
+                title=lk.title,
+                external=lk.external,
+            )
+            for lk in m.links
+        ],
     )
 
 
@@ -145,12 +163,15 @@ def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None
         kinds: list[str] | None = None,
         tags: list[str] | None = None,
         other_groups: Literal["auto", "always", "never"] = "auto",
+        include_links: bool = True,
     ) -> ConsultOut:
         """Search the shared knowledge base. Call this BEFORE starting a task, in plain words.
 
         Returns matches from your own scopes plus (when yours are thin) clearly labelled results from other groups.
         `kinds`: note, research, formula, measurement, decision, best_practice, doc, howto, session, compaction.
         `tags`: results must carry all of them (e.g. domain/rf). `other_groups`: auto, always or never.
+        Results carry `links` (sources, newer versions, conflicts); read the notes: they flag results that
+        another item supersedes or contradicts.
         """
         if not 1 <= limit <= 25:  # noqa: PLR2004
             raise ValidationError("limit must be between 1 and 25")
@@ -162,6 +183,7 @@ def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None
                 kinds=_kinds(kinds),
                 tags_all=normalize_tags(tags or []),
                 include_foreign=ForeignPolicy(other_groups),
+                with_links=include_links,
             ),
         )
         return ConsultOut(

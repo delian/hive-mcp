@@ -513,3 +513,32 @@ async def test_admin_tools_over_mcp(live: Live) -> None:
         ] < events[1]["seq"]
         assert "some text" not in str(events)  # ids only, never content
         assert (await call(root, "kb_admin_audit", limit=0)).is_error
+
+
+async def test_consult_returns_links_and_conflict_notes(live: Live) -> None:
+    async with live.client(live.token_for(ALICE)) as alice:
+        a = (
+            await call(alice, "kb_remember", title="Claim A", body="pelican arrival is in spring")
+        ).structured_content
+        b = (
+            await call(alice, "kb_remember", title="Claim B", body="pelican arrival is in autumn")
+        ).structured_content
+        await call(alice, "kb_link", from_id=a["id"], to_id=b["id"], relation="contradicts")
+        res = (await call(alice, "kb_consult", query="pelican arrival")).structured_content
+        top = next(r for r in res["results"] if r["id"] == a["id"])
+        assert top["links"] == [
+            {
+                "relation": "contradicts",
+                "direction": "out",
+                "id": b["id"],
+                "title": "Claim B",
+                "external": False,
+            }
+        ]
+        assert any("contradict" in n for n in res["notes"])
+        plain = (
+            await call(alice, "kb_consult", query="pelican arrival", include_links=False)
+        ).structured_content
+        assert all(r["links"] == [] for r in plain["results"]) and not any(
+            "contradict" in n for n in plain["notes"]
+        )

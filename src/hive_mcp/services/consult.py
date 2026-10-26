@@ -9,12 +9,14 @@ from hive_mcp.domain.errors import EmbeddingUnavailable
 from hive_mcp.search.ranking import RankingConfig, fuse, weight
 from hive_mcp.search.snippets import snippet_for
 from hive_mcp.search.tokenize import tokenize
+from hive_mcp.services.consult_links import attach_links
 from hive_mcp.services.models import ConsultResult, ForeignPolicy, Match, provenance
 
 if TYPE_CHECKING:
     from hive_mcp.domain.clock import Clock
     from hive_mcp.domain.item import ItemView
     from hive_mcp.domain.principal import Principal
+    from hive_mcp.ports.edges import EdgeRepository
     from hive_mcp.ports.embeddings import Embedder
     from hive_mcp.ports.indexes import TextIndex, VectorIndex
     from hive_mcp.ports.items import ItemRepository
@@ -33,7 +35,9 @@ class ConsultService:
         embedder: Embedder,
         clock: Clock,
         ranking: RankingConfig | None = None,
+        edges: EdgeRepository | None = None,
     ) -> None:
+        self._edges = edges
         self._items, self._text, self._vectors = items, text, vectors
         self._embedder, self._clock, self._ranking = embedder, clock, ranking or RankingConfig()
 
@@ -85,6 +89,12 @@ class ConsultService:
                 f"{len(extra)} result(s) come from other groups (marked EXTERNAL) because your own "
                 f"knowledge had fewer than {req.min_primary} matches"
             )
+        if self._edges and req.with_links:
+            linked, link_notes = await attach_links(
+                principal, self._items, self._edges, [*shown, *extra]
+            )
+            shown, extra = linked[: len(shown)], linked[len(shown) :]
+            notes.extend(link_notes)
         return ConsultResult(tuple(shown), tuple(extra), tuple(notes))
 
     @staticmethod

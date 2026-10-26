@@ -58,6 +58,7 @@ def build_stack(
         vectors=backend.vectors,
         embedder=embedder,
         clock=backend.clock,
+        edges=backend.edges,
     )
     sessions = SessionService(knowledge, backend.blobs)
     promotions = PromotionService(

@@ -46,6 +46,18 @@ class ConsultRequest:
     statuses: frozenset[Status] = frozenset({Status.ACTIVE, Status.DRAFT})
     include_foreign: ForeignPolicy = ForeignPolicy.AUTO
     min_primary: int = 3  # AUTO adds foreign results when fewer of your own matched
+    with_links: bool = (
+        True  # attach each result's graph links and warn about supersession/conflicts
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class MatchLink:
+    relation: str  # e.g. derived_from, supersedes, contradicts
+    direction: str  # "out": this result -> other; "in": other -> this result
+    item_id: str
+    title: str
+    external: bool  # the other item belongs to a group the caller is not in
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +75,7 @@ class Match:
     updated_at: datetime
     revision: int
     provenance: str  # human-readable origin, always shown for referenced results
+    links: tuple[MatchLink, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

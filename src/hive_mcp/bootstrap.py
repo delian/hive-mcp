@@ -87,6 +87,7 @@ async def build_services(settings: Settings) -> Services:
         vectors=backend.vectors,
         embedder=embedder,
         clock=clock,
+        edges=backend.edges,
     )
     sessions = SessionService(knowledge, backend.blobs)
     channels = make_channels(settings)

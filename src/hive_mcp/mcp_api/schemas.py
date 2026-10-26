@@ -5,6 +5,16 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+class LinkOut(BaseModel):
+    relation: str = Field(description="e.g. derived_from, supersedes, contradicts, part_of")
+    direction: str = Field(description="'out': this result -> other; 'in': other -> this result")
+    id: str
+    title: str
+    external: bool = Field(
+        description="True when the other item belongs to a group you are not in."
+    )
+
+
 class MatchOut(BaseModel):
     id: str
     title: str
@@ -21,6 +31,9 @@ class MatchOut(BaseModel):
     author: str
     updated_at: str
     revision: int
+    links: list[LinkOut] = Field(
+        default_factory=list, description="How this result connects to other knowledge you can see."
+    )
 
 
 class ConsultOut(BaseModel):

@@ -4,6 +4,7 @@ import base64
 import time
 
 import httpx
+import pytest
 
 from hive_mcp.domain.principal import Principal, Role
 from tests.conformance.factory import ALICE, BOB, CAROL, ROOT, VIVI, ZOE
@@ -352,3 +353,69 @@ async def test_curation_tools_over_mcp(live: Live) -> None:
         assert merged["created"] and sorted(merged["retired"]) == sorted(ids)
         assert (await call(alice, "kb_get", id=ids[0])).structured_content["status"] == "superseded"
         assert (await call(alice, "kb_merge", ids=ids[:1], title="x", body="y")).is_error
+
+
+async def test_prompts_are_listed_and_filled_in(live: Live) -> None:
+    async with live.client(live.token_for(ALICE)) as client:
+        prompts = {p.name: p for p in (await client.list_prompts()).prompts}
+        assert {
+            "consult_before_task",
+            "end_of_session_report",
+            "before_compaction",
+            "tidy_tag",
+            "review_promotions",
+        } <= set(prompts)
+        assert [a.name for a in prompts["consult_before_task"].arguments] == ["task"]
+        got = await client.get_prompt("consult_before_task", {"task": "tune the chirp"})
+        text = got.messages[0].content.text
+        assert "tune the chirp" in text and "kb_consult" in text and "EXTERNAL" in text
+        assert (
+            "kb_report_session"
+            in (await client.get_prompt("end_of_session_report")).messages[0].content.text
+        )
+        assert (
+            'tags=["radar"]'
+            in (await client.get_prompt("tidy_tag", {"tag": "radar"})).messages[0].content.text
+        )
+
+
+async def test_resources_show_items_with_origin_and_respect_access(live: Live) -> None:
+    async with (
+        live.client(live.token_for(ALICE)) as alice,
+        live.client(live.token_for(CAROL)) as carol,
+    ):
+        saved = (
+            await call(
+                alice, "kb_remember", title="Chirp plan", body="use a 20 MHz chirp", tags=["rf"]
+            )
+        ).structured_content
+        uri = f"kb://item/{saved['id']}"
+        text = (await alice.read_resource(uri)).contents[0].text
+        assert (
+            text.startswith("# Chirp plan")
+            and "your private notes" in text
+            and "use a 20 MHz chirp" in text
+        )
+        assert "rf" in text and f"id: {saved['id']}" in text
+        with pytest.raises(Exception, match="Error creating resource"):  # no hint whether it exists
+            await carol.read_resource(uri)  # private to alice
+        recent = (await alice.read_resource("kb://recent")).contents[0].text
+        assert f"[Chirp plan]({uri})" in recent
+        assert "Chirp plan" not in (await carol.read_resource("kb://recent")).contents[0].text
+        assert "kb_consult" in (await alice.read_resource("kb://guide")).contents[0].text
+        templates = [
+            t.uri_template for t in (await alice.list_resource_templates()).resource_templates
+        ]
+        assert "kb://item/{item_id}" in templates
+        assert {str(r.uri) for r in (await alice.list_resources()).resources} >= {
+            "kb://guide",
+            "kb://recent",
+        }
+
+
+def test_prompts_and_resources_need_authentication(live: Live) -> None:
+    for method in ("prompts/list", "resources/list"):
+        r = httpx.post(
+            f"{live.url}/mcp", json={"jsonrpc": "2.0", "id": 1, "method": method}, headers=ACCEPT
+        )
+        assert r.status_code == 401

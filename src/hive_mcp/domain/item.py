@@ -31,6 +31,7 @@ class Kind(StrEnum):
     HOWTO = "howto"
     SESSION = "session"
     COMPACTION = "compaction"
+    ENTITY = "entity"  # a person, system, part or concept other notes can point at
 
 
 class Status(StrEnum):

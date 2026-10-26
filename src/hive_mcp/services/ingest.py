@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import itertools
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -18,11 +19,13 @@ from hive_mcp.services.models import RememberRequest
 if TYPE_CHECKING:
     from hive_mcp.domain.principal import Principal
     from hive_mcp.domain.scope import Scope
+    from hive_mcp.services.entities import EntityService
     from hive_mcp.services.graph import GraphService
     from hive_mcp.services.knowledge import KnowledgeService
 
 MAX_FILE_BYTES = 50 * 1024 * 1024
 MAX_SECTIONS = 200
+log = logging.getLogger(__name__)
 _NON_SLUG = re.compile(r"[^a-z0-9]+")
 
 
@@ -44,8 +47,10 @@ class IngestService:
         knowledge: KnowledgeService,
         graph: GraphService,
         section_chars: int = MAX_SECTION_CHARS,
+        entities: EntityService | None = None,
     ) -> None:
         self._knowledge, self._graph, self._section_chars = knowledge, graph, section_chars
+        self._entities = entities
 
     async def ingest(  # noqa: PLR0913 - keyword-only options
         self,
@@ -56,6 +61,7 @@ class IngestService:
         tags: tuple[str, ...] = (),
         scope: Scope | None = None,
         kind: Kind = Kind.DOC,
+        link_entities: bool = True,
     ) -> IngestResult:
         """Idempotent: ingesting the same bytes with the same name, tags and scope again stores
         nothing new. Parts are linked: each `part_of` the first, and chained with `next`."""
@@ -97,7 +103,21 @@ class IngestService:
             for k, v in result.redactions.items():
                 redactions[k] = redactions.get(k, 0) + v
         await self._link_parts(principal, items)
+        if self._entities and link_entities:
+            await self._link_entities(principal, items, [s.text for s in sections])
         return IngestResult(name, items, created, redactions)
+
+    async def _link_entities(
+        self, principal: Principal, items: list[Item], texts: list[str]
+    ) -> None:
+        """Point each part at the entities (names/aliases you defined) that it mentions."""
+        assert self._entities  # noqa: S101 - guarded by the caller
+        for item, text in zip(items, texts, strict=True):
+            try:
+                for entity_id in await self._entities.detect_mentions(principal, text):
+                    await self._graph.link(principal, item.id, entity_id, "mentions")
+            except HiveError:
+                log.warning("entity linking skipped for %s", item.id)
 
     async def _link_parts(self, principal: Principal, items: list[Item]) -> None:
         head = items[0]

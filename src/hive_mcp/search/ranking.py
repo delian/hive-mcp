@@ -64,6 +64,7 @@ class RankingConfig:
             Kind.BEST_PRACTICE: None,
             Kind.DOC: None,
             Kind.HOWTO: None,
+            Kind.ENTITY: None,
         }
     )
 

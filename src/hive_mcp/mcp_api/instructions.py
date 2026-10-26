@@ -18,6 +18,8 @@ Everything you store is private to the user until they choose to share it (kb_sh
 Sharing wider than a project needs an approver:
 call kb_request_promotion; approvers use kb_list_promotions and kb_decide_promotion. Identity comes from the connection; there is no user argument.
 
+kb_entity_resolve / kb_entity_save record people, systems and parts once (check before creating);
+kb_entity_mention points a note at them.
 kb_ingest adds a whole document (md, html, pdf, text) as linked parts.
 kb_purge permanently deletes (author/admin only; confirm with the user first, archive if unsure).
 kb_list browses newest-first; kb_tags shows tags in use (check it before inventing a tag).

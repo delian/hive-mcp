@@ -33,18 +33,19 @@ class IngestOut(BaseModel):
 def register_ingest_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None:
     @mcp.tool(annotations=WRITE)
     @guarded
-    async def kb_ingest(
+    async def kb_ingest(  # noqa: PLR0913, PLR0917 - one parameter per tool argument
         name: str,
         content: str,
         encoding: Literal["text", "base64"] = "text",
         tags: list[str] | None = None,
         share_with_project: str | None = None,
+        link_entities: bool = True,
     ) -> IngestOut:
         """Add a document (.txt .md .html .pdf, source code...) as searchable, linked knowledge.
 
         `name` is the file name (its extension picks the reader). Send binary files (pdf) as base64.
         Long documents become several parts linked with part_of/next. Private unless
-        `share_with_project`. Re-sending the same file does nothing. Up to 10 MB; use `hive ingest`
+        `share_with_project`. Parts are linked (`mentions`) to your entities named in the text. Re-sending the same file does nothing. Up to 10 MB; use `hive ingest`
         for more. Secrets found in the text are masked.
         """
         try:
@@ -59,7 +60,12 @@ def register_ingest_tools(mcp: MCPServer, get_services: Callable[[], Services]) 
             raise ValidationError("file too large for this tool; use `hive ingest`")
         scope = Scope(ScopeLevel.PROJECT, share_with_project) if share_with_project else None
         result = await get_services().ingest.ingest(
-            current_principal(), name, data, tags=tuple(tags or ()), scope=scope
+            current_principal(),
+            name,
+            data,
+            tags=tuple(tags or ()),
+            scope=scope,
+            link_entities=link_entities,
         )
         return IngestOut(
             ids=[i.id for i in result.items],

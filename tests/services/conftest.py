@@ -11,6 +11,7 @@ from hive_mcp.domain.scope import ScopeLevel
 from hive_mcp.embeddings.hashing import HashingEmbedder
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.curation import CurationService
+from hive_mcp.services.entities import EntityService
 from hive_mcp.services.graph import GraphService
 from hive_mcp.services.indexing import IndexService
 from hive_mcp.services.ingest import IngestService
@@ -33,6 +34,7 @@ class Stack:
     ingest: IngestService
     curation: CurationService
     purge: PurgeService
+    entities: EntityService
 
 
 def build_stack(
@@ -72,7 +74,10 @@ def build_stack(
     graph = GraphService(
         items=backend.items, edges=backend.edges, audit=backend.audit, clock=backend.clock
     )
-    ingest = IngestService(knowledge, graph)
+    entities = EntityService(
+        items=backend.items, text=backend.text, knowledge=knowledge, graph=graph
+    )
+    ingest = IngestService(knowledge, graph, entities=entities)
     curation = CurationService(
         items=backend.items,
         vectors=backend.vectors,
@@ -104,6 +109,7 @@ def build_stack(
         ingest,
         curation,
         purge,
+        entities,
     )
 
 

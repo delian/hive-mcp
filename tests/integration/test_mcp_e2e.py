@@ -542,3 +542,37 @@ async def test_consult_returns_links_and_conflict_notes(live: Live) -> None:
         assert all(r["links"] == [] for r in plain["results"]) and not any(
             "contradict" in n for n in plain["notes"]
         )
+
+
+async def test_entity_tools_over_mcp(live: Live) -> None:
+    async with live.client(live.token_for(ALICE)) as alice:
+        saved = (
+            await call(
+                alice, "kb_entity_save", name="Pulse Doppler Radar", type="system", aliases=["PDR"]
+            )
+        ).structured_content
+        assert saved["created"] and saved["entity"]["aliases"] == ["pdr", "pulse-doppler-radar"]
+        again = (
+            await call(alice, "kb_entity_save", name="pdr", type="system", aliases=["PD radar"])
+        ).structured_content
+        assert (
+            not again["created"]
+            and again["entity"]["id"] == saved["entity"]["id"]
+            and again["added_aliases"] == ["pd-radar"]
+        )
+        found = (
+            await call(alice, "kb_entity_resolve", name="Pulse-Doppler radar")
+        ).structured_content["result"]
+        assert [(f["id"], f["match"]) for f in found] == [(saved["entity"]["id"], "exact")]
+        note = (
+            await call(alice, "kb_remember", title="Flight test", body="Flew it today.")
+        ).structured_content
+        mentioned = (
+            await call(alice, "kb_entity_mention", id=note["id"], entities=["PDR", "nonsense"])
+        ).structured_content
+        assert mentioned == {"PDR": "linked", "nonsense": "not found"}
+        graph = (
+            await call(alice, "kb_graph", id=saved["entity"]["id"], relations=["mentions"])
+        ).structured_content
+        assert {n["title"] for n in graph["nodes"]} == {"Pulse Doppler Radar", "Flight test"}
+        assert (await call(alice, "kb_entity_save", name="!!!", type="system")).is_error

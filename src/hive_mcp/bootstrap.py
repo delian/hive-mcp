@@ -17,6 +17,7 @@ from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.services.admin import AdminService
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.curation import CurationService
+from hive_mcp.services.entities import EntityService
 from hive_mcp.services.graph import GraphService
 from hive_mcp.services.indexing import INDEX_JOB, IndexService
 from hive_mcp.services.ingest import IngestService
@@ -45,6 +46,7 @@ class Services:
     purge: PurgeService
     vector_admin: VectorAdmin
     admin: AdminService
+    entities: EntityService
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -129,7 +131,10 @@ async def build_services(settings: Settings) -> Services:
     handlers[PURGE_JOB] = purge.handle_cleanup
     runner = JobRunner(backend.jobs, handlers, worker_id=f"{socket.gethostname()}-runner")
     graph = GraphService(items=backend.items, edges=backend.edges, audit=backend.audit, clock=clock)
-    ingest = IngestService(knowledge, graph)
+    entities = EntityService(
+        items=backend.items, text=backend.text, knowledge=knowledge, graph=graph
+    )
+    ingest = IngestService(knowledge, graph, entities=entities)
     curation = CurationService(
         items=backend.items,
         vectors=backend.vectors,
@@ -151,4 +156,5 @@ async def build_services(settings: Settings) -> Services:
         purge,
         VectorAdmin(backend.vectors, backend.maintenance, embedder),
         AdminService(backend.maintenance, backend.audit),
+        entities,
     )

@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     ingest_urls_enabled: bool = False
     ingest_url_hosts: list[str] = Field(default_factory=list)  # empty = any public host
     ingest_url_allow_private: bool = False  # let the server reach private/internal addresses
+    # Teams, projects, approvers from Google Workspace groups (docs/GROUPS.md); off without the map.
+    group_map_file: Path | None = None
+    group_sync_key_file: Path | None = None  # service account key (domain-wide delegation)
+    group_sync_admin: str | None = None  # Workspace admin the service account acts as
+    group_sync_minutes: int = Field(default=0, ge=0)  # 0 = only when `hive sync-groups` is run
     admin_ui: bool = False  # serve the small web admin pages under /admin (opt-in)
     # Number of server processes sharing one database (external profile). Above 1: rate limits are
     # shared through Postgres, quota reads are fresh, and a fixed HIVE_SECRET_KEY is required.

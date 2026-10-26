@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -14,12 +15,13 @@ from mcp.server.transport_security import TransportSecuritySettings
 from hive_mcp.bootstrap import Services, build_services
 from hive_mcp.config import Settings
 from hive_mcp.domain.clock import SystemClock
-from hive_mcp.domain.errors import StorageBusy
+from hive_mcp.domain.errors import HiveError, StorageBusy
 from hive_mcp.mcp_api.server import build_mcp
 from hive_mcp.ops.health import health_routes
 from hive_mcp.ops.ratelimit import Limiter, RateLimiter, RateLimitMiddleware, Rule
 from hive_mcp.ops.state import Lifecycle
 from hive_mcp.security.directory import UserDirectory
+from hive_mcp.security.groups.factory import group_sync_configured, run_group_sync
 from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.security.oauth.cookies import CookieSigner, load_secret_key
 from hive_mcp.security.oauth.models import SCOPE, OAuthConfig
@@ -56,6 +58,7 @@ def transport_security(settings: Settings) -> TransportSecuritySettings:
     )
 
 
+log = logging.getLogger("hive.app")
 PURGE_INTERVAL_SECONDS = 600
 BURST_SECONDS = 10  # a client may use this many seconds of its allowance at once
 
@@ -80,6 +83,17 @@ def rate_limit_rules(
         burst = max(per_min * BURST_SECONDS // 60, 10)
         rules.append(Rule((settings.mcp_path,), make(per_min, burst), by_token=True))
     return rules
+
+
+async def group_sync_loop(settings: Settings) -> None:
+    """Failures are logged and retried next round; a sync is all-or-nothing, never half applied."""
+    while True:
+        try:
+            changes = await run_group_sync(settings)
+            log.info("groups.sync_done changes=%d", len(changes))
+        except HiveError:
+            log.exception("groups.sync_failed")
+        await asyncio.sleep(settings.group_sync_minutes * 60)
 
 
 async def purge_loop(services: Services, retention_days: int = 0) -> None:
@@ -187,6 +201,11 @@ def create_app(
         holder["services"] = services
         runner = asyncio.create_task(services.runner.run_forever()) if settings.run_jobs else None
         maintenance = asyncio.create_task(purge_loop(services, settings.retention_session_days))
+        syncing = (
+            asyncio.create_task(group_sync_loop(settings))
+            if settings.group_sync_minutes and group_sync_configured(settings)
+            else None
+        )
         lifecycle.mark_ready()
         try:
             yield
@@ -196,9 +215,11 @@ def create_app(
                 runner.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await runner
-            maintenance.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await maintenance
+            for task in (maintenance, syncing):
+                if task:
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
             holder.pop("services", None)
             await services.close()
 

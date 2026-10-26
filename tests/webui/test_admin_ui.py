@@ -243,8 +243,9 @@ async def test_audit_filters_and_pages(ui: Live) -> None:
     assert only.count("promotion.request") >= 2 and "admin.login" not in only
     assert "alice" in admin.get("/admin/audit", params={"actor": "alice"}).text
     assert "promotion.request" not in admin.get("/admin/audit", params={"actor": "bob"}).text
-    assert admin.get("/admin/audit", params={"after": "junk"}).status_code == 200
-    assert "promotion.request" not in admin.get("/admin/audit", params={"after": "9999"}).text
+    assert admin.get("/admin/audit", params={"before": "junk"}).status_code == 200
+    assert "promotion.request" not in admin.get("/admin/audit", params={"before": "1"}).text
+    assert "Newest first" in page
 
 
 async def test_usage_lists_authors(ui: Live) -> None:

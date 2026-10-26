@@ -36,11 +36,17 @@ class AdminService:
         action: str | None = None,
         target: str | None = None,
         after_seq: int = 0,
+        before_seq: int | None = None,
+        newest_first: bool = False,
         limit: int = 100,
     ) -> list[AuditRecord]:
         self._require_admin(admin)
         if not 1 <= limit <= MAX_AUDIT_PAGE or after_seq < 0:
             raise ValidationError(f"limit must be 1-{MAX_AUDIT_PAGE} and after_seq >= 0")
+        if before_seq is not None and (before_seq < 1 or after_seq):
+            raise ValidationError(
+                "before_seq must be positive and cannot be combined with after_seq"
+            )
         return await self._audit.list(
             admin.org_id,
             after_seq=after_seq,
@@ -48,4 +54,6 @@ class AdminService:
             actor_id=actor or None,
             action=action or None,
             target_id=target or None,
+            before_seq=before_seq,
+            newest_first=newest_first,
         )

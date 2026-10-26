@@ -35,5 +35,8 @@ class AuditLog(Protocol):
         actor_id: str | None = None,
         action: str | None = None,
         target_id: str | None = None,
+        before_seq: int | None = None,
+        newest_first: bool = False,
     ) -> list[AuditRecord]:
-        """Oldest first, only this org's events, seq > after_seq, optionally filtered."""
+        """Only this org's events with after_seq < seq < before_seq, optionally filtered. Oldest
+        first, unless `newest_first` (or `before_seq`, which pages backwards) is given."""

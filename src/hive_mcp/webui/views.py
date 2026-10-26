@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from html import escape as esc
 from typing import TYPE_CHECKING
+from urllib.parse import urlencode
 
 from hive_mcp.webui.layout import hidden, table
 
@@ -95,10 +96,10 @@ def audit(records: list[AuditRecord], filters: dict[str, str], next_seq: int | N
     ]
     more = ""
     if next_seq is not None:
-        query = "&".join(f"{k}={esc(v, quote=True)}" for k, v in filters.items() if v)
-        more = f"<p><a href='/admin/audit?{query}&amp;after={next_seq}'>Next page</a></p>"
+        query = urlencode({**{k: v for k, v in filters.items() if v}, "before": next_seq})
+        more = f"<p><a href='/admin/audit?{esc(query, quote=True)}'>Older events</a></p>"
     cols = ["#", "when (UTC)", "who", "what", "target", "details"]
-    return form + table(cols, rows) + more + "<p class=muted>Oldest first.</p>"
+    return form + table(cols, rows) + more + "<p class=muted>Newest first.</p>"
 
 
 def usage(rows: list[AuthorUsage], max_items: int, max_chars: int) -> str:

@@ -5,7 +5,7 @@
 | Tool | What |
 |---|---|
 | `kb_admin_usage` | items and characters stored per person (archived excluded), biggest first |
-| `kb_admin_audit(actor, action, target, after_seq, limit)` | the audit trail, oldest first, 500 per page; page with the last `seq` |
+| `kb_admin_audit(actor, action, target, after_seq, limit)` | the audit trail, 500 per page; oldest first, or `newest_first`; page with the last `seq` as `after_seq` (or `before_seq` when newest first) |
 
 Audit actions include `item.create/update/relocate/purge`, `promotion.request/approved/rejected/withdrawn/stale`,
 `edge.add/remove`, `user.forget`. Events hold ids and short facts (kind, scope), never content.
@@ -23,7 +23,7 @@ JavaScript and uses the same data and rules as the tools; nothing here is a seco
 | Page | Who | What |
 |---|---|---|
 | `/admin/promotions` | approvers and admins | pending requests with the item text; **Approve** / **Reject** with an optional note |
-| `/admin/audit` | admins | audit trail, filters for who / what / target, oldest first, 100 per page |
+| `/admin/audit` | admins | audit trail, newest first, filters for who / what / target, 100 per page |
 | `/admin/usage` | admins | items and characters per person, plus the quota limits in force |
 
 **Signing in:** with Google (the same Workspace accounts and `hive user` directory as the assistants; add

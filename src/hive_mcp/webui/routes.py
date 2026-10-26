@@ -130,14 +130,16 @@ class AdminUi:
         q = request.query_params
         filters = {k: q.get(k, "").strip() for k in ("actor", "action", "target")}
         try:
-            after = max(int(q.get("after", "0")), 0)
+            before = max(int(q.get("before", "0")), 0) or None
         except ValueError:
-            after = 0
+            before = None
         rows = await self.get_services().admin.audit(
             gate[1], actor=filters["actor"], action=filters["action"], target=filters["target"],
-            after_seq=after, limit=AUDIT_PAGE,
+            before_seq=before, newest_first=True, limit=AUDIT_PAGE,
         )  # fmt: skip
-        more = rows[-1].seq if len(rows) == AUDIT_PAGE else None
+        more = (
+            rows[-1].seq if len(rows) == AUDIT_PAGE else None
+        )  # newest first: the last is the oldest
         return self._page("Audit log", views.audit(rows, filters, more), gate)
 
     async def usage(self, request: Request) -> Response:

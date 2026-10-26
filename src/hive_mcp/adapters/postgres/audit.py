@@ -12,6 +12,9 @@ if TYPE_CHECKING:
     from hive_mcp.adapters.postgres.db import PgDatabase
 
 
+MAX_SEQ = 2**62
+
+
 class PgAudit:
     def __init__(self, db: PgDatabase) -> None:
         self._db = db
@@ -42,15 +45,19 @@ class PgAudit:
         actor_id: str | None = None,
         action: str | None = None,
         target_id: str | None = None,
+        before_seq: int | None = None,
+        newest_first: bool = False,
     ) -> list[AuditRecord]:
+        order = "DESC" if newest_first or before_seq is not None else "ASC"
         async with self._db.tx() as conn:
             cur = await conn.execute(
-                "SELECT * FROM audit WHERE org_id = %s AND seq > %s "
+                f"SELECT * FROM audit WHERE org_id = %s AND seq > %s AND seq < %s "  # noqa: S608
                 "AND (%s::text IS NULL OR actor_id = %s) AND (%s::text IS NULL OR action = %s) "
-                "AND (%s::text IS NULL OR target_id = %s) ORDER BY seq LIMIT %s",
+                f"AND (%s::text IS NULL OR target_id = %s) ORDER BY seq {order} LIMIT %s",
                 (
                     org_id,
                     after_seq,
+                    MAX_SEQ if before_seq is None else before_seq,
                     actor_id,
                     actor_id,
                     action,

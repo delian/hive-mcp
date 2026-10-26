@@ -25,7 +25,9 @@ class UsageOut(BaseModel):
 
 
 class AuditOut(BaseModel):
-    seq: int = Field(description="Pass the last seq as after_seq to get the next page.")
+    seq: int = Field(
+        description="Next page: pass the last seq as after_seq (oldest first) or before_seq (newest first)."
+    )
     at: str
     actor: str
     action: str
@@ -51,14 +53,17 @@ def register_admin_tools(mcp: MCPServer, get_services: Callable[[], Services]) -
 
     @mcp.tool(annotations=READ)
     @guarded
-    async def kb_admin_audit(
+    async def kb_admin_audit(  # noqa: PLR0913, PLR0917 - one parameter per filter
         actor: str | None = None,
         action: str | None = None,
         target: str | None = None,
         after_seq: int = 0,
+        before_seq: int | None = None,
+        newest_first: bool = False,
         limit: int = 100,
     ) -> list[AuditOut]:
-        """Admins only: the audit trail, oldest first. Filter by who (actor), what (action such as
+        """Admins only: the audit trail, oldest first (or newest first with `newest_first`; page
+        backwards by passing the last seq as `before_seq`). Filter by who (actor), what (action such as
         item.purge, promotion.approved, edge.add) or which item (target). Contains ids, never content."""
         rows = await get_services().admin.audit(
             current_principal(),
@@ -66,6 +71,8 @@ def register_admin_tools(mcp: MCPServer, get_services: Callable[[], Services]) -
             action=action,
             target=target,
             after_seq=after_seq,
+            before_seq=before_seq,
+            newest_first=newest_first,
             limit=limit,
         )
         return [

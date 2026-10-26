@@ -23,14 +23,19 @@ class MemoryAudit:
         actor_id: str | None = None,
         action: str | None = None,
         target_id: str | None = None,
+        before_seq: int | None = None,
+        newest_first: bool = False,
     ) -> list[AuditRecord]:
         rows = [
             r
             for r in self._rows
             if r.event.org_id == org_id
             and r.seq > after_seq
+            and (before_seq is None or r.seq < before_seq)
             and (actor_id is None or r.event.actor_id == actor_id)
             and (action is None or r.event.action == action)
             and (target_id is None or r.event.target_id == target_id)
         ]
+        if newest_first or before_seq is not None:
+            rows.reverse()
         return rows[:limit]

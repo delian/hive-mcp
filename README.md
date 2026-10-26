@@ -14,6 +14,7 @@ against real Google, real assistants or a real Azure deployment** - see the open
 
 | Topic | Page |
 |---|---|
+| Agent setup (Claude Code hooks, AGENTS.md) | [AGENTS](docs/AGENTS.md) |
 | Tools, auth, configuration | [MCP](docs/MCP.md), [OAuth / Google sign-in](docs/OAUTH.md) |
 | Deploy (Docker, Azure, Tailscale), backup and restore | [DEPLOY](docs/DEPLOY.md), [BACKUP](docs/BACKUP.md), [HARDENING](docs/HARDENING.md) |
 | Search quality, embedders, reranker | [EVALUATION](docs/EVALUATION.md), [EMBEDDINGS](docs/EMBEDDINGS.md) |

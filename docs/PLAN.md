@@ -7,7 +7,7 @@ and shares team knowledge (session logs, compactions, research, formulas, measur
 > feature). This document is the original design plus revisions; where it disagrees with the feature pages, the
 > pages win. Differences worth knowing: the project package is `hive_mcp` (not `hive`); storage is SQLite + filesystem
 > or Postgres + pgvector (DuckDB/LanceDB were not adopted); the rerank, graph, entity, history, admin and web pages are built.
-> **Still open:** real Google/assistant/Azure verification, OCR for scanned documents, a LanceDB adapter.
+> **Still open:** real Google/assistant/Azure verification, OCR for scanned documents, (a LanceDB adapter exists but is experimental and slower than the default; see STORAGE.md).
 
 ---------------------------------------------------------------------------------------------------
 

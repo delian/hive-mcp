@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from hive_mcp.adapters.fs.blobs import FsBlobs
 from hive_mcp.adapters.sqlite.audit import SqliteAudit
@@ -18,10 +19,17 @@ from hive_mcp.adapters.sqlite.text import SqliteText
 from hive_mcp.adapters.sqlite.vectors import SqliteVectors
 from hive_mcp.domain.clock import Clock, FixedClock
 
+if TYPE_CHECKING:
+    from hive_mcp.ports.indexes import VectorIndex
+
 
 class SqliteBackend:
     def __init__(
-        self, root: Path | str, clock: Clock | None = None, busy_seconds: float = BUSY_SECONDS
+        self,
+        root: Path | str,
+        clock: Clock | None = None,
+        busy_seconds: float = BUSY_SECONDS,
+        vectors: VectorIndex | None = None,
     ) -> None:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
@@ -29,7 +37,7 @@ class SqliteBackend:
         self.db = Database(self.root / "hive.db", busy_seconds)
         self.items = SqliteItems(self.db, self.clock)
         self.text = SqliteText(self.db)
-        self.vectors = SqliteVectors(self.db)
+        self.vectors: VectorIndex = vectors or SqliteVectors(self.db)  # derived data: swappable
         self.jobs = SqliteJobs(self.db, self.clock)
         self.audit = SqliteAudit(self.db)
         self.kv = SqliteKv(self.db, self.clock)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import socket
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from hive_mcp.adapters.sqlite import SqliteBackend
 from hive_mcp.config import Profile, Settings
@@ -33,6 +34,9 @@ from hive_mcp.services.runner import JobRunner
 from hive_mcp.services.sessions import SessionService
 from hive_mcp.services.vector_admin import VectorAdmin
 
+if TYPE_CHECKING:
+    from hive_mcp.ports.indexes import VectorIndex
+
 
 @dataclass
 class Services:
@@ -56,12 +60,24 @@ class Services:
         await close_backend(self.backend)
 
 
+def _vector_store(settings: Settings) -> VectorIndex | None:
+    if settings.vector_store == "default":
+        return None
+    from hive_mcp.adapters.lance.vectors import LanceVectors  # noqa: PLC0415 - optional extra
+
+    return LanceVectors(settings.data_dir / "lance")
+
+
 async def build_services(settings: Settings) -> Services:
     clock = SystemClock()
     backend: Backend
     if settings.profile is Profile.EMBEDDED:
-        backend = SqliteBackend(settings.data_dir, clock)
+        backend = SqliteBackend(settings.data_dir, clock, vectors=_vector_store(settings))
     else:
+        if settings.vector_store != "default":
+            raise ValidationError(
+                "HIVE_VECTOR_STORE=lancedb is for the embedded profile; Postgres uses pgvector"
+            )
         if not settings.database_url:
             raise ValidationError("HIVE_DATABASE_URL is required for the external profile")
         # imported lazily: the postgres extra (hive-mcp[postgres]) is optional

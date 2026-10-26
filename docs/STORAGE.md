@@ -88,3 +88,25 @@ export HIVE_TEST_PG_DSN="host=localhost port=5432 dbname=postgres user=postgres 
 uv run pytest
 ```
 Without `HIVE_TEST_PG_DSN` the Postgres cases are skipped. CI runs them against the `pgvector/pgvector:pg16` image.
+
+
+## Optional: LanceDB for vectors (experimental)
+`uv sync --extra lancedb` and `HIVE_VECTOR_STORE=lancedb` keep vectors in a LanceDB directory (`<data_dir>/lance`) instead of
+SQLite; items, text search and everything else stay in SQLite. Embedded profile only (Postgres uses pgvector). The adapter
+passes the shared vector conformance suite, applies the access filter *before* picking neighbours, and escapes scope names
+in its filter (tested with hostile names).
+
+**Measured here (384 dimensions, 30 queries, visible set = 2.5% of the data, exact search):**
+
+| | SQLite | LanceDB |
+|---|---|---|
+| search at 50k vectors, p50 | 34 ms | 65 ms |
+| search at 200k vectors, p50 / p95 | 143 / 157 ms | 306 / 1151 ms |
+| one item written at a time | about 4,000 / s | about 70 / s (every write adds a file; compacted every 100 writes) |
+
+So **LanceDB is slower than the default at every size tested, and about 60 times slower to write**, because no ANN index is
+built: it scans exactly like SQLite does. It would only pay off with an IVF index (the Phase 0 benchmark on real embeddings:
+13 ms at 220k, recall 0.99), which this adapter does not create, because recall must be verified on your data first.
+Without compaction, search degraded from 10 ms to 450 ms after 2,000 writes: that is why the adapter compacts. Vectors are
+derived data: after switching stores or restoring a backup run `hive reindex`. Backups do not include the Lance directory.
+**Recommendation: stay on the default for the embedded profile and use Postgres + pgvector when you outgrow it.**

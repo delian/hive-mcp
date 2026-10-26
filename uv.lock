@@ -695,6 +695,9 @@ dependencies = [
 documents = [
     { name = "pypdf" },
 ]
+lancedb = [
+    { name = "lancedb" },
+]
 local-embeddings = [
     { name = "onnxruntime" },
     { name = "tokenizers" },
@@ -736,6 +739,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
+    { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.40" },
     { name = "mcp", specifier = ">=2,<3" },
     { name = "numpy", specifier = ">=2" },
     { name = "onnxruntime", marker = "extra == 'local-embeddings'", specifier = ">=1.31.0" },
@@ -749,7 +753,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.27.3" },
     { name = "uvicorn", specifier = ">=0.54.0" },
 ]
-provides-extras = ["postgres", "documents", "local-embeddings"]
+provides-extras = ["postgres", "documents", "local-embeddings", "lancedb"]
 
 [package.metadata.requires-dev]
 bench = [

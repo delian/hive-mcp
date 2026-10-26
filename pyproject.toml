@@ -32,6 +32,9 @@ local-embeddings = [
     "onnxruntime>=1.31.0",
     "tokenizers>=0.23.3",
 ]
+lancedb = [
+    "lancedb>=0.40",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.32,<0.12.0"]
@@ -83,6 +86,8 @@ select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC", "S", "PL", "RUF", "TCH", "AN
 "src/hive_mcp/mcp_api/*.py" = ["E501"]  # agent-facing text is clearer unwrapped
 "src/hive_mcp/security/oauth/*.py" = ["E501"]  # long RFC references and log formats read better unwrapped
 "src/hive_mcp/webui/*.py" = ["E501"]  # inline HTML and CSS read better unwrapped
+"src/hive_mcp/cli_client.py" = ["E501"]  # CLI help and echo text reads better unwrapped
+"src/hive_mcp/client/install.py" = ["E501"]  # the agent-facing note is prose
 "src/hive_mcp/mcp_api/tools.py" = ["PLR0913", "PLR0917"]
 "tests/**" = ["S101", "PLR2004", "ANN", "S105", "S106", "E501"]  # fake secrets and long fixtures are fine in tests
 
@@ -92,7 +97,7 @@ python_version = "3.12"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["onnxruntime", "onnxruntime.*"]
+module = ["onnxruntime", "onnxruntime.*", "pyarrow", "pyarrow.*", "lancedb", "lancedb.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

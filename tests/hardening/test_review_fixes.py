@@ -34,8 +34,8 @@ def identity(email="ada@acme.com", sub="g-1"):
 def test_non_ascii_cookies_are_simply_invalid():
     signer = CookieSigner(b"k" * 32)
     assert signer.verify("é.é", "txn") is False
-    assert SessionCodec(b"k" * 32).read("a.é") is None
-    assert SessionCodec(b"k" * 32).read("é") is None
+    assert SessionCodec(b"k" * 32).verify("a.é") is None
+    assert SessionCodec(b"k" * 32).verify("é") is None
 
 
 def test_non_ascii_cookie_headers_never_cause_a_500(tmp_path):

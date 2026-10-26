@@ -59,7 +59,7 @@ class MemoryPromotions:
             del self._rows[key]
         return len(doomed)
 
-    async def list(
+    async def list(  # noqa: PLR0913 - keyword-only filters
         self,
         org_id: str,
         *,
@@ -67,6 +67,7 @@ class MemoryPromotions:
         requester_id: str | None = None,
         scopes: frozenset[Scope] | None = None,
         limit: int = 100,
+        newest_first: bool = False,
     ) -> list[Promotion]:
         rows = [
             p
@@ -76,5 +77,5 @@ class MemoryPromotions:
             and (requester_id is None or p.requester_id == requester_id)
             and (scopes is None or p.scope in scopes)
         ]
-        rows.sort(key=lambda p: (p.created_at, p.id))
+        rows.sort(key=lambda p: (p.created_at, p.id), reverse=newest_first)
         return rows[:limit]

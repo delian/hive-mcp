@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from hive_mcp.security.oauth.cookies import CookieSigner
     from hive_mcp.security.oauth.upstream import GoogleOidc
     from hive_mcp.webui.auth import AdminAuth
-    from hive_mcp.webui.session import AdminSession, SessionCodec
+    from hive_mcp.webui.session import AdminSession, SessionStore
 
 log = logging.getLogger("hive.security")
 NS_TXN = "admin:txn"
@@ -43,7 +43,7 @@ class SignIn:
         self,
         get_services: Callable[[], Services],
         auth: AdminAuth,
-        codec: SessionCodec,
+        sessions: SessionStore,
         signer: CookieSigner,
         *,
         public_url: str,
@@ -51,7 +51,12 @@ class SignIn:
         allowed_domains: list[str] | None = None,
         directory: UserDirectory | None = None,
     ) -> None:
-        self.get_services, self.auth, self.codec, self.signer = get_services, auth, codec, signer
+        self.get_services, self.auth, self.sessions, self.signer = (
+            get_services,
+            auth,
+            sessions,
+            signer,
+        )
         self.upstream, self.allowed_domains, self.directory = (
             upstream,
             allowed_domains or [],
@@ -76,11 +81,12 @@ class SignIn:
         await services.backend.audit.append(event)
         log.info("admin.login kind=%s subject=%s", kind, subject)
         response = redirect("/admin")
-        self.set_cookie(response, COOKIE_NAME, self.codec.issue(kind, subject), SESSION_SECONDS)
+        cookie = await self.sessions.create(kind, subject)
+        self.set_cookie(response, COOKIE_NAME, cookie, SESSION_SECONDS)
         return response
 
-    def current(self, request: Request) -> tuple[AdminSession, Principal] | None:
-        session = self.codec.read(request.cookies.get(COOKIE_NAME))
+    async def current(self, request: Request) -> tuple[AdminSession, Principal] | None:
+        session = await self.sessions.load(request.cookies.get(COOKIE_NAME))
         principal = self.auth.principal(session) if session else None
         return (session, principal) if session and principal else None
 
@@ -105,7 +111,7 @@ class SignIn:
         return await self.start_session("token", label, principal)
 
     async def logout(self, request: Request) -> Response:
-        current = self.current(request)
+        current = await self.current(request)
         if (
             current
             and self.origin_ok(request)
@@ -113,6 +119,7 @@ class SignIn:
                 str((await request.form()).get("csrf", "")).encode(), current[0].csrf.encode()
             )
         ):
+            await self.sessions.destroy(request.cookies.get(COOKIE_NAME))
             response = redirect("/admin/login")
             response.delete_cookie(COOKIE_NAME, path="/admin")
             return response

@@ -19,9 +19,10 @@ from the directory takes effect immediately.
 
 ## Secrets and sessions
 `HIVE_SECRET_KEY` (signs login and admin cookies) must be at least 32 characters (`openssl rand -hex 32`); when it is not set a
-random key is generated into `<data_dir>/secret.key`, created with mode 0600. Admin sessions are signed cookies and stateless:
-signing out removes the cookie from that browser, but a stolen cookie stays valid until it expires (8 h) unless the account's
-role is withdrawn, the user is removed/disabled, or the token it was created from is revoked (all checked on every request).
+random key is generated into `<data_dir>/secret.key`, created with mode 0600. Admin sessions are kept on
+the server (only a signed random id is in the cookie, and only its hash in the store): signing out destroys the session, so a
+copied cookie stops working at once; "sign out everywhere" ends all of a person's sessions; sessions also end after 8 h, when
+the person is removed or disabled, or when the token they signed in with is revoked (checked on every request).
 OAuth refresh tokens live 30 days from login and are not extended by use; client registrations also expire after 30 days.
 
 ## Untrusted input: what is bounded

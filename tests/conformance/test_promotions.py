@@ -170,3 +170,30 @@ async def test_delete_for_item_removes_all_its_requests_only(backend):
     assert [p.id for p in await backend.promotions.list("org1")] == ["c"]
     assert [p.id for p in await backend.promotions.list("org2")] == ["d"]
     assert await backend.promotions.delete_for_item("org1", "i1") == 0
+
+
+async def test_listing_can_be_newest_first_and_limited(backend):
+    from datetime import timedelta  # noqa: PLC0415
+
+    from hive_mcp.domain.promotion import Promotion  # noqa: PLC0415
+    from hive_mcp.domain.scope import Visibility  # noqa: PLC0415
+    from tests.conformance.factory import P1  # noqa: PLC0415
+
+    ids = []
+    for n in range(5):
+        promo = Promotion(
+            f"p{n}",
+            "org1",
+            f"item{n}",
+            "alice",
+            P1,
+            Visibility.SCOPE,
+            1,
+            backend.clock.now() + timedelta(minutes=n),
+        )
+        await backend.promotions.create(promo)
+        ids.append(promo.id)
+    oldest = await backend.promotions.list("org1", limit=3)
+    newest = await backend.promotions.list("org1", limit=3, newest_first=True)
+    assert [p.id for p in oldest] == ids[:3] and [p.id for p in newest] == ids[::-1][:3]
+    assert [p.id for p in await backend.promotions.list("org1", newest_first=True)] == ids[::-1]

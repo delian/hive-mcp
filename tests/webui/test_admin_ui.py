@@ -140,6 +140,16 @@ def test_logout_needs_the_csrf_token_and_ends_the_session(ui: Live) -> None:
     assert client.get("/admin/usage").status_code == 303
 
 
+def test_a_stolen_cookie_dies_with_the_sign_out(ui: Live) -> None:
+    client = sign_in(ui, ROOT)
+    stolen = httpx.Client(base_url=ui.url, headers={"Origin": ui.url})
+    stolen.cookies.set("hive_admin", client.cookies["hive_admin"], path="/admin")
+    assert stolen.get("/admin/usage").status_code == 200
+    token = csrf(client, "/admin")
+    assert client.post("/admin/logout", data={"csrf": token}).status_code == 303
+    assert stolen.get("/admin/usage").status_code == 303  # the copy no longer works
+
+
 # ---------------------------------------------------------------- roles
 def test_pages_follow_the_role(ui: Live) -> None:
     member = sign_in(ui, BOB)
@@ -322,3 +332,68 @@ def test_a_different_google_account_behind_the_same_address_is_refused(
     callback = httpx.get(start.headers["location"], follow_redirects=False)
     denied = client.get(callback.headers["location"].removeprefix(google_ui.url))
     assert denied.status_code == 403 and not client.cookies.get("hive_admin")
+
+
+# ---------------------------------------------------------------- promotion history
+async def test_history_lists_every_decision_newest_first_with_filters(ui: Live) -> None:
+    first = await make_request(ui, title="First plan")
+    second = await make_request(ui, title="Second plan")
+    third = await make_request(ui, title="Third plan")
+    client = sign_in(ui, APPROVER)
+    token = csrf(client)
+    decide = "/admin/promotions/decide"
+    client.post(
+        decide,
+        data={"csrf": token, "promotion": first, "decision": "approve", "note": "looks good"},
+    )
+    client.post(
+        decide,
+        data={"csrf": token, "promotion": second, "decision": "reject", "note": "needs work"},
+    )
+    page = client.get("/admin/promotions/history").text
+    assert (
+        page.index("Third plan") < page.index("Second plan") < page.index("First plan")
+    )  # newest first
+    assert "looks good" in page and "needs work" in page and "tina" in page
+    approved = client.get("/admin/promotions/history", params={"status": "approved"}).text
+    assert (
+        "First plan" in approved and "Second plan" not in approved and "Third plan" not in approved
+    )
+    pending = client.get("/admin/promotions/history", params={"status": "pending"}).text
+    assert "Third plan" in pending and "First plan" not in pending
+    assert client.get("/admin/promotions/history", params={"status": "<script>"}).status_code == 200
+    assert third
+
+
+async def test_history_is_limited_to_what_the_viewer_may_decide(ui: Live) -> None:
+    await make_request(ui, title="Team one request")
+    other = Principal(
+        "olga", "org1", Role.MEMBER, approves=frozenset({Scope(ScopeLevel.TEAM, "t9")})
+    )
+    assert "Team one request" not in sign_in(ui, other).get("/admin/promotions/history").text
+    assert (
+        "Team one request" in sign_in(ui, ROOT).get("/admin/promotions/history").text
+    )  # admins see all
+    assert (
+        sign_in(ui, BOB).get("/admin/promotions/history").status_code == 403
+    )  # plain members do not
+
+
+async def test_history_pages_and_survives_deleted_items(ui: Live, monkeypatch) -> None:
+    from hive_mcp.webui import routes  # noqa: PLC0415
+
+    monkeypatch.setattr(routes, "HISTORY_PAGE", 2)  # the server runs in this process
+    for n in range(3):
+        await make_request(ui, title=f"Request {n}")
+    client = sign_in(ui, ROOT)
+    first = client.get("/admin/promotions/history").text
+    assert (
+        "Request 2" in first
+        and "Request 1" in first
+        and "Request 0" not in first
+        and "Older" in first
+    )
+    second = client.get("/admin/promotions/history", params={"page": "2"}).text
+    assert "Request 0" in second and "Newer" in second and "Older" not in second
+    assert client.get("/admin/promotions/history", params={"page": "junk"}).status_code == 200
+    assert "Request 2" in client.get("/admin/promotions/history", params={"page": "-4"}).text

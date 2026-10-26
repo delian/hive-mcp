@@ -32,9 +32,11 @@ from hive_mcp.security.oauth.provider import HiveOAuthProvider
 from hive_mcp.security.oauth.routes import oauth_routes
 from hive_mcp.security.oauth.upstream import GoogleOidc
 from hive_mcp.security.tokens import StaticTokenVerifier, TokenStore
+from hive_mcp.webui.account_routes import AccountPages
+from hive_mcp.webui.accounts import AccountAdmin
 from hive_mcp.webui.auth import AdminAuth
 from hive_mcp.webui.routes import AdminUi
-from hive_mcp.webui.session import SessionCodec
+from hive_mcp.webui.session import SessionCodec, SessionStore
 from hive_mcp.webui.signin import SignIn
 
 if TYPE_CHECKING:
@@ -150,7 +152,7 @@ def build_admin_ui(
     signin = SignIn(
         get_services,
         AdminAuth(directory, tokens),
-        SessionCodec(secret),
+        SessionStore(SessionCodec(secret), lambda: get_services().backend.kv),
         CookieSigner(secret),
         public_url=settings.public_url,
         upstream=upstream,
@@ -159,6 +161,10 @@ def build_admin_ui(
     )
     quota = (settings.quota_items_per_user, settings.quota_chars_per_user)
     ui = AdminUi(get_services, signin, quota)
+    sessions = signin.sessions
+    ui.accounts = AccountPages(
+        ui, AccountAdmin(directory, tokens, sessions, lambda: get_services().backend.audit)
+    )
     return ui.routes()
 
 

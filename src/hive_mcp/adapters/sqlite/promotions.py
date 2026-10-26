@@ -122,7 +122,7 @@ class SqlitePromotions:
 
         return await self._db.run(tx, write=True)
 
-    async def list(
+    async def list(  # noqa: PLR0913 - keyword-only filters
         self,
         org_id: str,
         *,
@@ -130,6 +130,7 @@ class SqlitePromotions:
         requester_id: str | None = None,
         scopes: frozenset[Scope] | None = None,
         limit: int = 100,
+        newest_first: bool = False,
     ) -> list[Promotion]:
         if scopes is not None and not scopes:
             return []
@@ -145,7 +146,9 @@ class SqlitePromotions:
                 pairs = sorted((int(s.level), s.owner) for s in scopes)
                 sql += f" AND (scope_level, scope_owner) IN (VALUES {','.join('(?,?)' for _ in pairs)})"
                 params = [*params, *(v for pair in pairs for v in pair)]
-            rows = conn.execute(sql + " ORDER BY created_at, id LIMIT ?", [*params, limit])
+            order = "DESC" if newest_first else "ASC"
+            sql += f" ORDER BY created_at {order}, id {order} LIMIT ?"
+            rows = conn.execute(sql, [*params, limit])
             return [_row(r) for r in rows.fetchall()]
 
         return await self._db.run(tx)

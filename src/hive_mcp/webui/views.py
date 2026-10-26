@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 from hive_mcp.webui.layout import hidden, table
 
 if TYPE_CHECKING:
+    from hive_mcp.domain.promotion import Promotion
     from hive_mcp.ports.audit import AuditRecord
     from hive_mcp.ports.maintenance import AuthorUsage
     from hive_mcp.services.promotions import PromotionView
@@ -112,3 +113,48 @@ def usage(rows: list[AuthorUsage], max_items: int, max_chars: int) -> str:
         for u in rows
     ]
     return limits + table(["author", "items", "characters", "last write"], body)
+
+
+def promotion_history(
+    rows: list[tuple[Promotion, str]], status: str, page: int, has_more: bool
+) -> str:
+    """`rows`: (request, item title or '' when the item no longer exists), newest request first."""
+    options = "".join(
+        f"<option{' selected' if s == status else ''}>{s}</option>"
+        for s in ("all", "pending", "approved", "rejected", "withdrawn", "stale")
+    )
+    form = f"<form method=get action=/admin/promotions/history><select name=status>{options}</select> <button>Show</button></form>"
+    body = []
+    for promo, title in rows:
+        scope = promo.scope
+        body.append(
+            [
+                esc(promo.created_at.isoformat(timespec="minutes")),
+                f"{esc(title) or '<span class=muted>(deleted)</span>'}<br><code>{esc(promo.item_id)}</code>",
+                esc(promo.requester_id),
+                esc(f"{scope.level.name.lower()}:{scope.owner} ({promo.visibility})"),
+                esc(str(promo.status)),
+                esc(promo.decided_by or "-"),
+                esc(promo.decided_at.isoformat(timespec="minutes") if promo.decided_at else "-"),
+                esc(promo.note or promo.reason or "-"),
+            ]
+        )
+    cols = ["requested", "item", "by", "to", "status", "decided by", "decided", "note / reason"]
+    nav = ""
+    if page > 1 or has_more:
+        links = []
+        if page > 1:
+            links.append(
+                f"<a href='/admin/promotions/history?status={esc(status)}&amp;page={page - 1}'>Newer</a>"
+            )
+        if has_more:
+            links.append(
+                f"<a href='/admin/promotions/history?status={esc(status)}&amp;page={page + 1}'>Older</a>"
+            )
+        nav = "<p>" + " · ".join(links) + "</p>"
+    return (
+        form
+        + table(cols, body)
+        + nav
+        + "<p class=muted>Newest first. Notes are the decider's; the reason is the requester's.</p>"
+    )

@@ -109,7 +109,7 @@ class PgPromotions:
             )
             return cur.rowcount
 
-    async def list(
+    async def list(  # noqa: PLR0913 - keyword-only filters
         self,
         org_id: str,
         *,
@@ -117,10 +117,12 @@ class PgPromotions:
         requester_id: str | None = None,
         scopes: frozenset[Scope] | None = None,
         limit: int = 100,
+        newest_first: bool = False,
     ) -> list[Promotion]:
         if scopes is not None and not scopes:
             return []
         pairs = sorted((int(s.level), s.owner) for s in scopes or ())
+        order = "DESC" if newest_first else "ASC"
         async with self._db.tx() as conn:
             cur = await conn.execute(
                 f"SELECT {COLS} FROM promotions WHERE org_id = %s "  # noqa: S608
@@ -128,7 +130,7 @@ class PgPromotions:
                 "AND (%s::text IS NULL OR requester_id = %s) "
                 "AND (%s OR (scope_level, scope_owner) IN "
                 "(SELECT * FROM unnest(%s::smallint[], %s::text[]))) "
-                "ORDER BY created_at, id LIMIT %s",
+                f"ORDER BY created_at {order}, id {order} LIMIT %s",
                 (
                     org_id,
                     status and str(status),

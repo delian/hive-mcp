@@ -23,8 +23,16 @@ JavaScript and uses the same data and rules as the tools; nothing here is a seco
 | Page | Who | What |
 |---|---|---|
 | `/admin/promotions` | approvers and admins | pending requests with the item text; **Approve** / **Reject** with an optional note |
+| `/admin/promotions/history` | approvers (their scopes) and admins (all) | every request, newest first: status, who decided, when, note; filter by status, 50 per page, most recent 1,000 considered |
 | `/admin/audit` | admins | audit trail, newest first, filters for who / what / target, 100 per page |
 | `/admin/usage` | admins | items and characters per person, plus the quota limits in force |
+| `/admin/users` | admins | add or change a person (role, teams, projects, approver scopes), disable / enable, remove, **sign out everywhere**, forget a pinned Google account |
+| `/admin/tokens` | admins | list tokens of the organisation, create one (shown **once**, never listed again), revoke |
+
+**Guards on people and tokens:** you cannot remove, disable or demote yourself; the last enabled admin of the organisation
+cannot be removed, disabled or demoted; people and tokens of other organisations are invisible and untouchable; a new token
+belongs to your organisation. Disabling or removing someone ends their sessions at once. Every change is in the audit trail
+(`admin.user.save/disable/enable/remove/signout`, `admin.token.create/revoke`, `admin.login`); token secrets are never logged.
 
 **Signing in:** with Google (the same Workspace accounts and `hive user` directory as the assistants; add
 `<HIVE_PUBLIC_URL>/admin/google/callback` to the OAuth client's authorised redirect URIs), or by pasting a static
@@ -33,7 +41,7 @@ every request: disabling a user or revoking/expiring a token ends their session 
 
 **Protections:** session cookie is `HttpOnly`, `SameSite=Lax` (strict would be dropped on Google's redirect back),
 `Secure` on https, path `/admin`, signed with `HIVE_SECRET_KEY`. Every POST must carry the session's CSRF token *and*
-a matching `Origin` header. Pages send `no-store`, a CSP without scripts, `frame-ancestors 'none'` and cannot be framed.
+a matching `Origin` header. Sessions are kept on the server, so signing out (or an admin's *sign out everywhere*) ends them for real. Pages send `no-store`, a CSP without scripts, `frame-ancestors 'none'` and cannot be framed.
 Sign-in attempts share the login rate limit. Each sign-in is written to the audit log (`admin.login`).
 
 The page is as exposed as the MCP endpoint; with Tailscale Serve or a private network, keep it off the public funnel.

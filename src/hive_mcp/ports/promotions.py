@@ -35,7 +35,7 @@ class PromotionRepository(Protocol):
     async def delete_for_item(self, org_id: str, item_id: str) -> int:
         """Remove every request about the item (it is being purged); returns how many."""
 
-    async def list(
+    async def list(  # noqa: PLR0913 - keyword-only filters
         self,
         org_id: str,
         *,
@@ -43,6 +43,7 @@ class PromotionRepository(Protocol):
         requester_id: str | None = None,
         scopes: frozenset[Scope] | None = None,
         limit: int = 100,
+        newest_first: bool = False,
     ) -> list[Promotion]:
-        """Oldest first (a review queue), only this org's requests. `scopes` keeps requests whose
-        target is one of them (None = any; an empty set = none)."""
+        """Oldest first (a review queue) unless `newest_first`; only this org's requests. `scopes`
+        keeps requests whose target is one of them (None = any; an empty set = none)."""

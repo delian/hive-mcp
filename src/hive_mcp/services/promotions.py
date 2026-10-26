@@ -106,6 +106,8 @@ class PromotionService:
         status: PromotionStatus | None = PromotionStatus.PENDING,
         *,
         mine: bool = False,
+        limit: int = 100,
+        newest_first: bool = False,
     ) -> list[PromotionView]:
         approver = principal.is_approver and not mine
         admin = principal.role >= Role.ADMIN
@@ -114,6 +116,8 @@ class PromotionService:
             status=status,
             requester_id=None if approver else principal.id,
             scopes=principal.approves if approver and not admin else None,
+            limit=limit,
+            newest_first=newest_first,
         )
         views = []
         for promo in found:

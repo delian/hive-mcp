@@ -23,7 +23,7 @@ hive = "hive_mcp.cli:main"
 
 [project.optional-dependencies]
 postgres = [
-    "psycopg[binary,pool]>=3.2",
+    "psycopg[binary,pool]>=3.3.6",
 ]
 documents = [
     "pypdf>=5.0",
@@ -55,7 +55,7 @@ dev = [
     "tokenizers>=0.23.3",
     "hypothesis>=6.170.8",
     "mypy>=2.4.0",
-    "psycopg[binary,pool]>=3.2",
+    "psycopg[binary,pool]>=3.3.6",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",

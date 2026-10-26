@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path  # noqa: TC003 - typer reads the annotation at runtime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import typer
@@ -273,3 +273,56 @@ def restore(
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(1) from exc
     typer.echo(f"restored {summary.files} files from {archive.name}; start the server again")
+
+
+@app.command("ingest-git")
+def ingest_git(  # noqa: PLR0913, PLR0917 - one option per identity claim
+    url: str = typer.Argument(..., help="Repository address (https://..., git@host:org/repo.git)."),
+    org: str = typer.Option(..., help="Organisation id."),
+    user: str = typer.Option(..., help="User id that will own the knowledge."),
+    ref: str | None = typer.Option(None, help="Branch or tag (default: the repository's default)."),
+    project: str | None = typer.Option(None, help="Share into this project (user must be in it)."),
+    tag: list[str] = typer.Option([], help="Tag for every file (repeatable)."),  # noqa: B008
+    exclude: list[str] = typer.Option([], help="Extra glob to skip (repeatable)."),  # noqa: B008
+) -> None:
+    """Read a repository's documents and code as knowledge (shallow clone; nothing is executed)."""
+    import tempfile  # noqa: PLC0415
+
+    from hive_mcp.ingest.git import DEFAULT_EXCLUDES, clone, repo_name, select_files  # noqa: PLC0415
+
+    async def run() -> int:
+        services = await build_services(Settings())
+        who = Principal(
+            user, org, Role.MEMBER, frozenset(), frozenset({project} if project else ())
+        )
+        scope = Scope(ScopeLevel.PROJECT, project) if project else None
+        name, failures = repo_name(url), 0
+        try:
+            with tempfile.TemporaryDirectory(prefix="hive-git-") as tmp:
+                root = Path(tmp) / "repo"
+                clone(url, root, ref)
+                files, skipped = select_files(root, (*DEFAULT_EXCLUDES, *exclude))
+                typer.echo(f"{len(files)} files to read, {skipped} skipped")
+                for path in files:
+                    rel = path.relative_to(root).as_posix()
+                    try:
+                        done = await services.ingest.ingest(
+                            who, rel, path.read_bytes(), tags=(*tag, f"repo/{name}"), scope=scope,
+                            source=f"git:{url}#{rel}"[:400],
+                        )  # fmt: skip
+                    except (HiveError, OSError) as exc:
+                        failures += 1
+                        typer.echo(f"FAILED {rel}: {exc}", err=True)
+                        continue
+                    typer.echo(f"{rel}: {len(done.items)} parts, {done.created} new")
+        finally:
+            await services.close()
+        return failures
+
+    try:
+        failed = asyncio.run(run())
+    except (KeyError, HiveError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    if failed:
+        raise typer.Exit(1)

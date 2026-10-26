@@ -7,18 +7,20 @@ import itertools
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from hive_mcp.domain.errors import HiveError, ValidationError
 from hive_mcp.domain.item import MAX_TITLE, Item, Kind
 from hive_mcp.domain.tags import normalize_tags
 from hive_mcp.ingest.extract import extract_text
+from hive_mcp.ingest.fetch import fetch
 from hive_mcp.ingest.sections import MAX_SECTION_CHARS, split_sections
 from hive_mcp.services.models import RememberRequest
 
 if TYPE_CHECKING:
     from hive_mcp.domain.principal import Principal
     from hive_mcp.domain.scope import Scope
+    from hive_mcp.ingest.fetch import FetchPolicy
     from hive_mcp.services.entities import EntityService
     from hive_mcp.services.graph import GraphService
     from hive_mcp.services.knowledge import KnowledgeService
@@ -42,13 +44,17 @@ def file_slug(name: str) -> str:
 
 
 class IngestService:
-    def __init__(
+    def __init__(  # noqa: PLR0913 - collaborators and options
         self,
         knowledge: KnowledgeService,
         graph: GraphService,
+        *,
         section_chars: int = MAX_SECTION_CHARS,
         entities: EntityService | None = None,
+        url_policy: FetchPolicy | None = None,
+        fetch_hooks: dict[str, Any] | None = None,
     ) -> None:
+        self._url_policy, self._fetch_hooks = url_policy, fetch_hooks or {}
         self._knowledge, self._graph, self._section_chars = knowledge, graph, section_chars
         self._entities = entities
 
@@ -62,6 +68,7 @@ class IngestService:
         scope: Scope | None = None,
         kind: Kind = Kind.DOC,
         link_entities: bool = True,
+        source: str | None = None,
     ) -> IngestResult:
         """Idempotent: ingesting the same bytes with the same name, tags and scope again stores
         nothing new. Parts are linked: each `part_of` the first, and chained with `next`."""
@@ -95,7 +102,7 @@ class IngestService:
                     tags=file_tags,
                     scope=scope,
                     idempotency_key=f"ingest:{fingerprint}:{index}",
-                    source=f"file:{name[:200]}",
+                    source=source or f"file:{name[:200]}",
                 ),
             )
             items.append(result.item)
@@ -106,6 +113,27 @@ class IngestService:
         if self._entities and link_entities:
             await self._link_entities(principal, items, [s.text for s in sections])
         return IngestResult(name, items, created, redactions)
+
+    async def ingest_url(
+        self,
+        principal: Principal,
+        url: str,
+        *,
+        tags: tuple[str, ...] = (),
+        scope: Scope | None = None,
+    ) -> IngestResult:
+        """Fetch a web page or document and ingest it (only if the operator enabled this)."""
+        if self._url_policy is None:
+            raise ValidationError("fetching URLs is not enabled on this server")
+        fetched = await fetch(url, self._url_policy, **self._fetch_hooks)
+        return await self.ingest(
+            principal,
+            fetched.name,
+            fetched.data,
+            tags=tags,
+            scope=scope,
+            source=f"url:{fetched.url}"[:400],
+        )
 
     async def _link_entities(
         self, principal: Principal, items: list[Item], texts: list[str]

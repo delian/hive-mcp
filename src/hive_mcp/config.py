@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     retention_session_days: int = Field(
         default=0, ge=0
     )  # purge session/compaction logs older than this; 0 = keep
+    # Fetching documents from URLs on users' behalf (kb_ingest_url): off unless enabled.
+    ingest_urls_enabled: bool = False
+    ingest_url_hosts: list[str] = Field(default_factory=list)  # empty = any public host
+    ingest_url_allow_private: bool = False  # let the server reach private/internal addresses
     run_jobs: bool = True  # run the background job runner inside the server process
     # Interactive sign-in (claude.ai, ChatGPT, Gemini) via Google Workspace; needs id and secret.
     google_client_id: str | None = None

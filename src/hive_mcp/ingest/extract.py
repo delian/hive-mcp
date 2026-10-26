@@ -1,4 +1,4 @@
-"""File bytes -> plain text. Text formats and HTML are built in; PDF needs the `documents` extra."""
+"""File bytes -> plain text: text, HTML and Office are built in; PDF needs the `documents` extra."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from html.parser import HTMLParser
 from pathlib import PurePosixPath
 
 from hive_mcp.domain.errors import ValidationError
+from hive_mcp.ingest.office import LEGACY, OFFICE
 
 TEXT_SUFFIXES = frozenset(
     {
@@ -128,6 +129,13 @@ def extract_text(name: str, data: bytes) -> Extracted:
         parser.close()
         text = _BLANKS.sub("\n\n", "".join(parser.parts)).strip()
         result = Extracted(text, "html", parser.title.strip() or None)
+    elif suffix in OFFICE:
+        fmt, reader = OFFICE[suffix]
+        result = Extracted(_BLANKS.sub("\n\n", reader(data)).strip(), fmt)
+    elif suffix in LEGACY:
+        raise ValidationError(
+            f"old binary Office files ({suffix}) are not supported; save as {suffix}x"
+        )
     elif suffix in TEXT_SUFFIXES:
         result = Extracted(_decode(data).replace("\r\n", "\n").strip(), "text")
     else:

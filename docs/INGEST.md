@@ -3,9 +3,12 @@
 `kb_ingest` (MCP, up to 10 MB, text or base64) and `hive ingest PATH... --org O --user U [--project P] [--tag T]`
 (CLI, directories recursively, up to 50 MB per file) add documents as searchable, linked knowledge.
 
-- **Formats:** text and source code, markdown, HTML (scripts/styles dropped, headings kept) and PDF
-  (needs `pip install hive-mcp[documents]`; encrypted PDFs are refused). Binary or unknown types are refused
-  with a message; nothing is stored for a refused file.
+- **Formats:** text and source code, markdown, HTML (scripts/styles dropped, headings kept), Word `.docx`
+  (headings, paragraphs, tables), Excel `.xlsx` (every sheet in workbook order, rows as `a | b | c`, capped at
+  20,000 rows per sheet), PowerPoint `.pptx` (slides, titles, speaker notes) and PDF (needs
+  `pip install hive-mcp[documents]`; encrypted PDFs are refused). The Office readers use only the standard
+  library and refuse zip/XML bombs (size caps, DTDs). Old binary `.doc/.xls/.ppt`, images and scans are refused with
+  a message (no OCR: text in images is not read); nothing is stored for a refused file.
 - **Parts:** text longer than ~40 KB is split at headings, then paragraphs, into items titled `name (i/n)`.
   Part `i` is linked `part_of` part 1 and part `i-1` is linked `next` to part `i` (see GRAPH.md).
   A document may have at most 200 parts.
@@ -15,5 +18,21 @@
   can simply be repeated. Changing any of them stores new items (old ones are kept; archive them with `kb_update`).
 - Each item records `source = file:<name>`; the original file is not kept.
 
-Not done yet: automatic entity extraction (the server has no LLM; agents add entities and `kb_link`s),
-Office formats, OCR, and ingestion from URLs.
+## From a URL: `kb_ingest_url`
+Off by default (`HIVE_INGEST_URLS_ENABLED=true`) because a server that fetches addresses for its users can be
+aimed at things only the server can reach. Safeguards on every hop of every redirect: http(s) only, no credentials in
+the URL, the name is resolved by the server and **every** address must be public (private, loopback, link-local
+such as the cloud metadata address, CGNAT and multicast ranges are refused; `HIVE_INGEST_URL_ALLOW_PRIVATE=true`
+opts in for an intranet), the connection goes to the address that was checked (a DNS answer that changes between check
+and connect cannot redirect it; TLS still verifies the real host name), 15 s and 20 MB limits, documents only
+(no images/video). `HIVE_INGEST_URL_HOSTS=["docs.acme.com"]` restricts to a list (subdomains included). It
+connects directly, ignoring proxy environment variables, so the egress rules of your network apply.
+The stored item's `source` is `url:<final address>`.
+
+## From a Git repository: `hive ingest-git URL`
+Operator command (never an agent tool): shallow-clones (`--depth 1`, no submodules, no hooks run, ext:: transport
+off), reads documents, markdown, code and Office files under 1 MB, skips binaries, `node_modules`, `vendor`,
+`dist`, `build`, lock files, minified/generated files (`--exclude GLOB` adds more), tags everything `repo/<name>`
+and records `git:<url>#<path>` as the source. Safe to re-run. Needs `git` (Docker build arg `WITH_GIT=true`).
+
+Not done: automatic entity *discovery* (the server has no LLM; agents add entities), OCR, legacy Office formats.

@@ -73,3 +73,25 @@ def register_ingest_tools(mcp: MCPServer, get_services: Callable[[], Services]) 
             new_parts=result.created,
             redactions=result.redactions,
         )
+
+    @mcp.tool(annotations=WRITE)
+    @guarded
+    async def kb_ingest_url(
+        url: str, tags: list[str] | None = None, share_with_project: str | None = None
+    ) -> IngestOut:
+        """Fetch a web page or document (html, pdf, text, Office) from a URL and add it as linked knowledge.
+
+        Only works if the operator enabled URL fetching; the server refuses private or internal
+        addresses unless they allowed them, and may restrict hosts. The item remembers the URL as its
+        source. Re-fetching the same content does nothing. Private unless `share_with_project`.
+        """
+        scope = Scope(ScopeLevel.PROJECT, share_with_project) if share_with_project else None
+        result = await get_services().ingest.ingest_url(
+            current_principal(), url, tags=tuple(tags or ()), scope=scope
+        )
+        return IngestOut(
+            ids=[i.id for i in result.items],
+            parts=len(result.items),
+            new_parts=result.created,
+            redactions=result.redactions,
+        )

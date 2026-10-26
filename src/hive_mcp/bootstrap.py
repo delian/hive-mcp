@@ -10,6 +10,7 @@ from hive_mcp.config import Profile, Settings
 from hive_mcp.domain.clock import SystemClock
 from hive_mcp.domain.errors import ValidationError
 from hive_mcp.embeddings.factory import embed_min_level, make_embedder, make_reranker
+from hive_mcp.ingest.fetch import FetchPolicy
 from hive_mcp.notify.factory import make_channels
 from hive_mcp.ports.backend import Backend, close_backend
 from hive_mcp.security.directory import UserDirectory
@@ -141,7 +142,15 @@ async def build_services(settings: Settings) -> Services:
     entities = EntityService(
         items=backend.items, text=backend.text, knowledge=knowledge, graph=graph
     )
-    ingest = IngestService(knowledge, graph, entities=entities)
+    url_policy = (
+        FetchPolicy(
+            allow_private=settings.ingest_url_allow_private,
+            allowed_hosts=frozenset(h.lower() for h in settings.ingest_url_hosts),
+        )
+        if settings.ingest_urls_enabled
+        else None
+    )
+    ingest = IngestService(knowledge, graph, entities=entities, url_policy=url_policy)
     curation = CurationService(
         items=backend.items,
         vectors=backend.vectors,

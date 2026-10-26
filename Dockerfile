@@ -2,6 +2,7 @@
 # One image for local use and Azure. Build args:
 #   EXTRAS     optional dependency groups to install (default: all runtime extras)
 #   PYTHON_IMAGE base image (e.g. a registry mirror)
+#   WITH_GIT   install git so `hive ingest-git` works in the container (default false)
 #   PG_CLIENT  install pg_dump/pg_restore for backups of the Postgres profile (default true)
 #   EXTRA_MODELS space-separated model names to bake in besides the default embedder
 #   BAKE_MODEL download + verify the offline embedding model into the image (needs network at build time)
@@ -34,8 +35,12 @@ RUN --mount=type=secret,id=cacert,required=false \
 FROM ${PYTHON_IMAGE}
 # pg_dump/pg_restore for `hive backup` on the Postgres profile (must be at least the server's major version)
 ARG PG_CLIENT=true
-RUN if [ "$PG_CLIENT" = "true" ]; then apt-get update \
- && apt-get install -y --no-install-recommends postgresql-client \
+# git for `hive ingest-git` (off by default: most deployments ingest from files or URLs)
+ARG WITH_GIT=false
+RUN PKGS=""; \
+    [ "$PG_CLIENT" = "true" ] && PKGS="$PKGS postgresql-client"; \
+    [ "$WITH_GIT" = "true" ] && PKGS="$PKGS git"; \
+    if [ -n "$PKGS" ]; then apt-get update && apt-get install -y --no-install-recommends $PKGS \
  && rm -rf /var/lib/apt/lists/*; fi
 RUN useradd --system --uid 10001 --create-home hive && mkdir /data && chown hive /data
 COPY --from=build /app/.venv /app/.venv

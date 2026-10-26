@@ -609,3 +609,37 @@ async def test_history_tools_over_mcp(live: Live) -> None:
         ).is_error  # no-op
         assert (await call(bob, "kb_history", id=item["id"])).is_error  # private to alice
         assert (await call(alice, "kb_version", id=item["id"], revision=77)).is_error
+
+
+async def test_office_and_url_ingestion_over_mcp(live: Live) -> None:
+    import io  # noqa: PLC0415
+
+    from docx import Document  # noqa: PLC0415
+
+    doc = Document()
+    doc.add_heading("Calibration log", level=1)
+    doc.add_paragraph("The receiver chain gain was measured at thirty-five decibels.")
+    buf = io.BytesIO()
+    doc.save(buf)
+    async with live.client(live.token_for(ALICE)) as alice:
+        done = (
+            await call(
+                alice,
+                "kb_ingest",
+                name="log.docx",
+                content=base64.b64encode(buf.getvalue()).decode(),
+                encoding="base64",
+            )
+        ).structured_content
+        assert done["parts"] == 1
+        found = (
+            await call(alice, "kb_consult", query="receiver chain gain decibels")
+        ).structured_content["results"]
+        assert [r["id"] for r in found] == done["ids"] and found[0]["title"].startswith(
+            "Calibration log"
+        )
+        refused = await call(alice, "kb_ingest_url", url="http://169.254.169.254/latest/meta-data/")
+        assert refused.is_error and "not enabled" in str(
+            refused.content
+        )  # off unless the operator enables it
+        assert (await call(alice, "kb_ingest", name="old.doc", content="x")).is_error

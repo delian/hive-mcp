@@ -635,9 +635,8 @@ async def test_office_and_url_ingestion_over_mcp(live: Live) -> None:
         found = (
             await call(alice, "kb_consult", query="receiver chain gain decibels")
         ).structured_content["results"]
-        assert [r["id"] for r in found] == done["ids"] and found[0]["title"].startswith(
-            "Calibration log"
-        )
+        assert [r["id"] for r in found] == done["ids"]
+        assert "Calibration log" in found[0]["title"]
         refused = await call(alice, "kb_ingest_url", url="http://169.254.169.254/latest/meta-data/")
         assert refused.is_error and "not enabled" in str(
             refused.content

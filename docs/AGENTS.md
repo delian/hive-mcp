@@ -21,8 +21,21 @@ hive hooks status                                # shows where hooks are install
 
 Reports are **private to you** and secrets in them are masked on the server. They contain your conversation text, so
 decide whether you want that stored; remove the `PreCompact` and `SessionEnd` entries from the settings file if not. A report is
-idempotent (the same session and content is never stored twice); the summary is mechanical (first request, last reply,
-counts), because no model runs in a hook. Ask the agent to call `kb_report_session` itself for a real summary.
+idempotent (the same session and content is never stored twice).
+
+**What the summary contains.** No model runs in a hook, so the summary is extracted: the first request, up to five of the
+agent's most informative sentences (changes, decisions, causes, numbers; chatter and code are skipped; in the order they
+happened), the files it edited and the messages of the commits it made (also stored as the report's *outcomes*). If you have a
+model at hand, plug it in with `HIVE_HOOK_SUMMARIZER`, a command that receives the conversation on stdin and prints a summary:
+
+```bash
+export HIVE_HOOK_SUMMARIZER='claude -p "Summarise this coding session for a team knowledge base in under 120 words: what was asked, what was decided and why, what changed."'
+export HIVE_HOOK_SUMMARIZER_TIMEOUT=20      # seconds (max 25: Claude Code stops the hook at its own timeout, 30 s)
+```
+
+The command is run directly (no shell) with the last 30,000 characters on stdin; if it fails, prints nothing, or is too slow
+it is killed and the extracted summary is used. The conversation text goes to whatever that command talks to: choose it
+accordingly.
 
 **Hooks fail open.** They have short deadlines, never print errors into the session, and do nothing when `HIVE_URL`/`HIVE_TOKEN`
 are missing or the server is down. Set `HIVE_DEBUG=1` to see why a hook stayed silent (on stderr).

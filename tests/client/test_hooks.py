@@ -7,7 +7,7 @@ from typer.testing import CliRunner
 
 from hive_mcp.cli import cli
 from hive_mcp.client import hooks
-from hive_mcp.client.transcript import mechanical_summary, read_turns, render_log
+from hive_mcp.client.transcript import read_turns, render_log
 from tests.conformance.factory import ALICE
 from tests.integration.conftest import Live
 
@@ -196,7 +196,7 @@ def test_transcripts_yield_conversation_text_only(tmp_path):
     assert read_turns(tmp_path / "missing.jsonl") == []
 
 
-def test_long_logs_keep_the_end_and_summaries_stay_short(tmp_path):
+def test_long_logs_keep_the_end(tmp_path):
     path = tmp_path / "t.jsonl"
     write_transcript(
         path,
@@ -210,9 +210,47 @@ def test_long_logs_keep_the_end_and_summaries_stay_short(tmp_path):
     log = render_log(turns)
     assert len(log) < 61_000 and log.startswith("[...earlier") and log.endswith("LAST-WORD")
     assert "first request" not in log  # the oldest turns are what gets dropped
-    summary = mechanical_summary(turns, "radar", "other")
-    assert (
-        summary.startswith("Session in radar: 2 requests, 1 replies (ended: other).")
-        and len(summary) <= 1500
-    )
-    assert "first request" in summary
+
+
+async def test_session_reports_carry_what_was_changed_and_committed(connected, tmp_path):
+    transcript = tmp_path / "t.jsonl"
+    entries = [
+        {"type": "user", "message": {"role": "user", "content": "Fix the dwell time bug"}},
+        {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "The root cause was an off-by-one in the dwell loop, which I fixed.",
+                    },
+                    {
+                        "type": "tool_use",
+                        "name": "Edit",
+                        "input": {"file_path": "/work/radar/dwell.py"},
+                    },
+                    {
+                        "type": "tool_use",
+                        "name": "Bash",
+                        "input": {"command": 'git commit -m "Fix dwell off-by-one"'},
+                    },
+                ],
+            },
+        },
+    ]
+    transcript.write_text("\n".join(json.dumps(e) for e in entries))
+    payload = {
+        "transcript_path": str(transcript),
+        "cwd": "/work/radar",
+        "session_id": "s-9",
+        "reason": "other",
+    }
+    await hooks.run("session-end", json.dumps(payload))
+    async with connected.client(connected.token_for(ALICE)) as client:
+        (row,) = (await client.call_tool("kb_list", {"kinds": ["session"]})).structured_content[
+            "items"
+        ]
+        stored = (await client.call_tool("kb_get", {"id": row["id"]})).structured_content
+    assert "root cause" in stored["body"] and "Fix dwell off-by-one" in stored["body"]
+    assert "/work/radar/dwell.py" in stored["body"]

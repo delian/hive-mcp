@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from hive_mcp.client.connection import call_tool
-from hive_mcp.client.transcript import mechanical_summary, read_turns, render_log
+from hive_mcp.client.summary import outcomes, summarize
+from hive_mcp.client.transcript import read_activity, read_turns, render_log
 
 log = logging.getLogger("hive.hook")
 MIN_PROMPT_WORDS = 6
@@ -65,16 +66,19 @@ async def prompt_submit(payload: dict[str, Any]) -> str | None:
 
 
 async def _report(tool: str, payload: dict[str, Any], reason: str) -> None:
-    turns = read_turns(str(payload.get("transcript_path", "")))
+    path = str(payload.get("transcript_path", ""))
+    turns = read_turns(path)
     if not turns:
         return
     project = project_name(str(payload.get("cwd", "")))
     session = str(payload.get("session_id", "")) or "unknown"
+    activity = read_activity(path)
     await call_tool(
         tool,
         {
-            "summary": mechanical_summary(turns, project, reason),
+            "summary": await summarize(turns, activity, project, reason),
             "log": render_log(turns),
+            "outcomes": outcomes(activity),
             "idempotency_key": f"hook-{tool}-{session}-{len(turns)}"[:120],
         },
         deadline=15.0,

@@ -7,10 +7,9 @@ import textwrap
 import time
 
 import pytest
-
-from hive_mcp.client import summary
-from hive_mcp.client.summary import extractive_summary, key_points, outcomes, summarize
-from hive_mcp.client.transcript import Activity, Turn, read_activity
+from hive_hooks import summary
+from hive_hooks.summary import extractive_summary, key_points, outcomes, summarize
+from hive_hooks.transcript import Activity, Turn, read_activity
 
 
 def entry(role, content, **extra):

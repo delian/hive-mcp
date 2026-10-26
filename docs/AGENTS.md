@@ -4,13 +4,19 @@ Agents use the knowledge base when something prompts them: the server `instructi
 Claude Code) hooks that run at fixed moments. Hooks do not depend on the model remembering.
 
 ## Claude Code
-On the machine where the agent runs (needs the `hive` CLI: `uv tool install hive-mcp`):
+On the machine where the agent runs. The client is a separate small package, **`hive-hooks`** (38 packages, 46 MB, against
+100 MB for the server): it needs only `mcp` and `typer`. It is not on PyPI yet; install it from the repository:
+```bash
+uv tool install "hive-hooks @ git+https://github.com/delian/hive-mcp#subdirectory=clients/hooks"   # gives the command `hive-hooks`
+```
+Everything below works the same with `hive-hooks ...` in place of `hive ...` (a full server install also has the same
+commands under `hive`). `install` writes the command name you started it with into the hook entries.
 ```bash
 export HIVE_URL=https://kb.example.com/mcp      # the server's /mcp address
 export HIVE_TOKEN=hive_...                       # a token for you: `hive token create` on the server, or a file at ~/.config/hive/token
 claude mcp add --transport http hive "$HIVE_URL" --header "Authorization: Bearer $HIVE_TOKEN"
-hive hooks install                               # --scope project to share via git, --no-prompt-hook to skip per-prompt search
-hive hooks status                                # shows where hooks are installed and whether the server answers
+hive-hooks hooks install                         # --scope project to share via git, --no-prompt-hook to skip per-prompt search
+hive-hooks hooks status                          # shows where hooks are installed and whether the server answers
 ```
 | Hook | What it does |
 |---|---|
@@ -42,13 +48,13 @@ are missing or the server is down. Set `HIVE_DEBUG=1` to see why a hook stayed s
 
 `hive hooks install` merges into `~/.claude/settings.json` (or the project/local file), keeps your other hooks and
 settings, can be run again safely, keeps the original once as `settings.json.hive-backup`, and refuses to touch a file it
-cannot parse. `hive hooks remove` takes exactly our entries out again. `--command "uvx --from hive-mcp hive"` changes how
+cannot parse. `hive hooks remove` takes exactly our entries out again. `--command "uvx --from hive-hooks hive-hooks"` changes how
 Claude Code starts the CLI when it is not on its `PATH`. `--dry-run` shows the result without writing.
 
 ## Other agents (Codex, Gemini CLI, Cursor, ...)
 They have no hook system that fits, so give them the instructions note:
 ```bash
-hive hooks snippet --file AGENTS.md      # or CLAUDE.md / GEMINI.md; --remove takes it out again
+hive-hooks hooks snippet --file AGENTS.md      # or CLAUDE.md / GEMINI.md; --remove takes it out again
 ```
 The note sits between `<!-- hive-mcp:begin -->` and `<!-- hive-mcp:end -->`; running the command again updates it in place.
 Add the server as an MCP server in the agent's own configuration.

@@ -3,11 +3,11 @@
 import json
 
 import pytest
+from hive_hooks import hooks
+from hive_hooks.transcript import read_turns, render_log
 from typer.testing import CliRunner
 
 from hive_mcp.cli import cli
-from hive_mcp.client import hooks
-from hive_mcp.client.transcript import read_turns, render_log
 from tests.conformance.factory import ALICE
 from tests.integration.conftest import Live
 
@@ -143,7 +143,7 @@ async def test_unconfigured_malformed_and_unknown_inputs_are_ignored(monkeypatch
     monkeypatch.delenv("HIVE_URL", raising=False)
     monkeypatch.delenv("HIVE_TOKEN", raising=False)
     monkeypatch.setattr(
-        "hive_mcp.client.connection.TOKEN_FILE", __import__("pathlib").Path("/nonexistent/token")
+        "hive_hooks.connection.TOKEN_FILE", __import__("pathlib").Path("/nonexistent/token")
     )
     assert await hooks.run("session-start", "{}") is None
     assert await hooks.run("session-start", "not json") is None

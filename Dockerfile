@@ -13,6 +13,7 @@ WORKDIR /app
 ARG EXTRAS="--extra postgres --extra local-embeddings --extra documents"
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 COPY pyproject.toml uv.lock ./
+COPY clients ./clients
 # Behind a TLS-inspecting proxy, build with: --secret id=cacert,src=/path/to/ca-bundle.crt
 RUN --mount=type=cache,target=/root/.cache/uv --mount=type=secret,id=cacert,required=false \
     if [ -f /run/secrets/cacert ]; then export SSL_CERT_FILE=/run/secrets/cacert UV_SYSTEM_CERTS=1; fi; \

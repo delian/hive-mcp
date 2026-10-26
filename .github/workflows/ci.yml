@@ -23,8 +23,8 @@ jobs:
       - run: uv sync --frozen
       - run: uv run ruff format --check .
       - run: uv run ruff check .
-      - run: uv run mypy src
-      - run: uv run python scripts/check_file_size.py src
+      - run: uv run mypy src clients/hooks/src
+      - run: uv run python scripts/check_file_size.py src clients/hooks/src
       - run: uv run pytest
 
   audit:
@@ -35,6 +35,19 @@ jobs:
       - run: uv sync --frozen
       - name: Known vulnerabilities in the locked dependencies
         run: uv run pip-audit
+
+  client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: The slim hooks client builds, installs alone and runs
+        run: |
+          uv build --package hive-hooks --out-dir dist-client
+          uv venv /tmp/client-venv
+          uv pip install --python /tmp/client-venv/bin/python dist-client/*.whl
+          /tmp/client-venv/bin/python -c "import hive_hooks.cli, sys; assert 'hive_mcp' not in sys.modules"
+          cd "$(mktemp -d)" && /tmp/client-venv/bin/hive-hooks hooks install --scope project --dry-run
 
   image:
     runs-on: ubuntu-latest

@@ -14,10 +14,10 @@ import re
 import shlex
 from typing import TYPE_CHECKING
 
-from hive_mcp.client.transcript import render_log
+from hive_hooks.transcript import render_log
 
 if TYPE_CHECKING:
-    from hive_mcp.client.transcript import Activity, Turn
+    from hive_hooks.transcript import Activity, Turn
 
 MAX_SUMMARY = 1_500
 MAX_EXTERNAL = 2_000

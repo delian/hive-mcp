@@ -3,11 +3,11 @@
 import json
 
 import pytest
+from hive_hooks import install
+from hive_hooks.install import HooksError
 from typer.testing import CliRunner
 
 from hive_mcp.cli import cli
-from hive_mcp.client import install
-from hive_mcp.domain.errors import ValidationError
 
 runner = CliRunner()
 OTHER = {"matcher": "Bash", "hooks": [{"type": "command", "command": "./audit.sh"}]}
@@ -87,10 +87,10 @@ def test_files_are_written_atomically_with_the_original_backed_up_once(tmp_path)
 def test_a_broken_settings_file_is_refused_not_overwritten(tmp_path):
     path = tmp_path / "settings.json"
     path.write_text("{not json")
-    with pytest.raises(ValidationError, match="not valid JSON"):
+    with pytest.raises(HooksError, match="not valid JSON"):
         install.load(path)
     path.write_text("[1]")
-    with pytest.raises(ValidationError, match="JSON object"):
+    with pytest.raises(HooksError, match="JSON object"):
         install.load(path)
     assert path.read_text() == "[1]"
 
@@ -102,7 +102,7 @@ def test_scopes():
         == tmp / ".claude/settings.json"
     )
     assert install.settings_path("local", tmp).name == "settings.local.json"
-    with pytest.raises(ValidationError):
+    with pytest.raises(HooksError):
         install.settings_path("galaxy")
 
 
@@ -141,3 +141,12 @@ def test_install_command_end_to_end(tmp_path, monkeypatch):
     assert install.BEGIN in note.read_text()
     runner.invoke(cli, ["hooks", "snippet", "--file", str(note), "--remove"])
     assert install.BEGIN not in note.read_text()
+
+
+def test_the_default_command_is_the_program_that_was_started(monkeypatch):
+    for argv0, expected in (
+        ("/usr/local/bin/hive-hooks", "hive-hooks"), ("/x/hive", "hive"),
+        ("/x/pytest", "hive"), ("python -m foo", "hive"),
+    ):  # fmt: skip
+        monkeypatch.setattr("sys.argv", [argv0])
+        assert install.default_command() == expected

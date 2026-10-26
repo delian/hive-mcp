@@ -6,10 +6,10 @@ import time
 
 import typer
 import uvicorn
+from hive_hooks.cli import app as client_app
 
 from hive_mcp import __version__
 from hive_mcp.app import create_app
-from hive_mcp.cli_client import app as client_app
 from hive_mcp.cli_digest import app as digest_app
 from hive_mcp.cli_eval import app as eval_app
 from hive_mcp.cli_groups import app as groups_app

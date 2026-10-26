@@ -8,8 +8,8 @@ from pathlib import Path  # noqa: TC003 - typer reads the annotation at runtime
 
 import typer
 
-from hive_mcp.client import hooks, install
-from hive_mcp.domain.errors import HiveError
+from hive_hooks import hooks, install
+from hive_hooks.install import HooksError
 
 app = typer.Typer()
 hooks_app = typer.Typer(no_args_is_help=True, help="Connect coding agents to the knowledge base.")
@@ -27,7 +27,7 @@ def hook(
         typer.echo(output)
 
 
-def _fail(exc: HiveError) -> None:
+def _fail(exc: HooksError) -> None:
     typer.echo(f"error: {exc}", err=True)
     raise typer.Exit(1) from exc
 
@@ -38,7 +38,8 @@ def hooks_install(
         "user", help="user (all projects), project (shared in git) or local."
     ),
     command: str = typer.Option(
-        "hive", help='How Claude Code starts the CLI, e.g. "uvx --from hive-mcp hive".'
+        None,
+        help='How Claude Code starts the CLI, e.g. "uvx --from hive-hooks hive-hooks" (default: this program).',
     ),
     prompt_hook: bool = typer.Option(
         True, help="Search with every substantial prompt (--no-prompt-hook: off)."
@@ -50,8 +51,12 @@ def hooks_install(
     """Add the session hooks to Claude Code's settings. Needs HIVE_URL and HIVE_TOKEN where it runs."""
     try:
         path = install.settings_path(scope)
-        merged = install.merge(install.load(path), command=command, prompt_hook=prompt_hook)
-    except HiveError as exc:
+        merged = install.merge(
+            install.load(path),
+            command=command or install.default_command(),
+            prompt_hook=prompt_hook,
+        )
+    except HooksError as exc:
         _fail(exc)
         return
     if dry_run:
@@ -75,7 +80,7 @@ def hooks_remove(scope: str = typer.Option("user", help="user, project or local.
     try:
         path = install.settings_path(scope)
         settings = install.load(path)
-    except HiveError as exc:
+    except HooksError as exc:
         _fail(exc)
         return
     if not install.installed_events(settings):
@@ -88,12 +93,12 @@ def hooks_remove(scope: str = typer.Option("user", help="user, project or local.
 @hooks_app.command("status")
 def hooks_status() -> None:
     """Which scopes have hooks, and whether this machine can reach the server."""
-    from hive_mcp.client.connection import NotConfigured, call_tool  # noqa: PLC0415
+    from hive_hooks.connection import NotConfigured, call_tool  # noqa: PLC0415
 
     for scope in ("user", "project", "local"):
         try:
             events = install.installed_events(install.load(install.settings_path(scope)))
-        except HiveError as exc:
+        except HooksError as exc:
             events = [f"unreadable ({exc})"]
         typer.echo(f"{scope:<8} {', '.join(events) or '-'}")
     try:
@@ -119,3 +124,7 @@ def hooks_snippet(
     text = file.read_text() if file.exists() else ""
     file.write_text(install.strip_snippet(text) if remove else install.apply_snippet(text))
     typer.echo(f"{'removed from' if remove else 'written to'} {file}")
+
+
+def main() -> None:
+    app()

@@ -9,9 +9,9 @@ import os
 from pathlib import Path
 from typing import Any
 
-from hive_mcp.client.connection import call_tool
-from hive_mcp.client.summary import outcomes, summarize
-from hive_mcp.client.transcript import read_activity, read_turns, render_log
+from hive_hooks.connection import call_tool
+from hive_hooks.summary import outcomes, summarize
+from hive_hooks.transcript import read_activity, read_turns, render_log
 
 log = logging.getLogger("hive.hook")
 MIN_PROMPT_WORDS = 6

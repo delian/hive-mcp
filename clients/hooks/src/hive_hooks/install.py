@@ -8,11 +8,15 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
-from hive_mcp.domain.errors import ValidationError
+
+class HooksError(Exception):
+    """A problem the user can fix; the message says how."""
+
 
 MARKER = " hook "  # our commands look like "hive hook <event>"
 BEGIN = "<!-- hive-mcp:begin -->"
@@ -34,6 +38,12 @@ A shared knowledge base is available through the `hive` MCP server.
 - At the end of a session call `kb_report_session`; before the context is compacted call `kb_report_compaction`.
 {END}
 """
+
+
+def default_command() -> str:
+    """How Claude Code should start us: the name this program was started with (hive or hive-hooks)."""
+    name = Path(sys.argv[0]).name
+    return name if name in {"hive", "hive-hooks"} else "hive"
 
 
 def is_ours(entry: Any) -> bool:  # noqa: ANN401 - settings.json content
@@ -98,7 +108,7 @@ def settings_path(scope: str, cwd: Path | None = None) -> Path:
         return (cwd or Path.cwd()) / ".claude" / "settings.json"
     if scope == "local":
         return (cwd or Path.cwd()) / ".claude" / "settings.local.json"
-    raise ValidationError("scope must be user, project or local")
+    raise HooksError("scope must be user, project or local")
 
 
 def load(path: Path) -> dict[str, Any]:
@@ -107,11 +117,9 @@ def load(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text())
     except ValueError as exc:
-        raise ValidationError(
-            f"{path} is not valid JSON; fix it first (nothing was changed)"
-        ) from exc
+        raise HooksError(f"{path} is not valid JSON; fix it first (nothing was changed)") from exc
     if not isinstance(data, dict):
-        raise ValidationError(f"{path} does not hold a JSON object; nothing was changed")
+        raise HooksError(f"{path} does not hold a JSON object; nothing was changed")
     return data
 
 

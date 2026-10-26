@@ -7,6 +7,12 @@ resolution-markers = [
     "python_full_version < '3.14'",
 ]
 
+[manifest]
+members = [
+    "hive-hooks",
+    "hive-mcp",
+]
+
 [[package]]
 name = "annotated-doc"
 version = "0.0.5"
@@ -676,10 +682,26 @@ wheels = [
 ]
 
 [[package]]
+name = "hive-hooks"
+version = "0.1.0"
+source = { editable = "clients/hooks" }
+dependencies = [
+    { name = "mcp" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mcp", specifier = ">=2,<3" },
+    { name = "typer", specifier = ">=0.27.3" },
+]
+
+[[package]]
 name = "hive-mcp"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "hive-hooks" },
     { name = "httpx" },
     { name = "mcp" },
     { name = "numpy" },
@@ -738,6 +760,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "hive-hooks", editable = "clients/hooks" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.40" },
     { name = "mcp", specifier = ">=2,<3" },

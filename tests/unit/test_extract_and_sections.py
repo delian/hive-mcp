@@ -114,3 +114,16 @@ def test_merging_respects_the_limit_exactly():
     text = "# A\n" + "a" * 46 + "\n\n# B\n" + "b" * 46  # two sections of 50 chars each
     assert len(split_sections(text, limit=102)) == 1  # 50 + 2 + 50 fits
     assert len(split_sections(text, limit=101)) == 2  # one more character would not
+
+
+def test_pdfs_with_too_many_pages_are_refused(monkeypatch):
+    from hive_mcp.ingest import extract  # noqa: PLC0415
+
+    class Reader:
+        def __init__(self, _):
+            self.is_encrypted, self.metadata, self.pages = False, None, [object()] * 4
+
+    monkeypatch.setattr("pypdf.PdfReader", Reader)
+    monkeypatch.setattr(extract, "MAX_PDF_PAGES", 3)
+    with pytest.raises(ValidationError, match="more than 3 pages"):
+        extract.extract_text("a.pdf", b"%PDF-1.4")

@@ -64,6 +64,7 @@ dev = [
     "python-docx>=1.2.0",
     "openpyxl>=3.1.5",
     "python-pptx>=1.0.2",
+    "pip-audit>=2.10.1",
 ]
 
 [tool.ruff]

@@ -1,3 +1,4 @@
+import asyncio
 import ipaddress
 
 import httpx
@@ -18,6 +19,9 @@ PUBLIC = "93.184.216.34"
         ("224.0.0.1", False),
         ("::1", False), ("fe80::1", False), ("fc00::1", False), ("::ffff:10.0.0.1", False),
         ("::ffff:127.0.0.1", False), ("fe80::1%eth0", False), ("::ffff:8.8.8.8", True),
+        ("64:ff9b::a00:1", False), ("64:ff9b::7f00:1", False), ("64:ff9b::a9fe:a9fe", False),  # NAT64 to private
+        ("64:ff9b::808:808", True),
+        ("2002:a00:1::", False), ("2002:7f00:1::", False), ("2002:808:808::", True),  # 6to4 to private
     ],
 )  # fmt: skip
 def test_which_addresses_count_as_public(address, public):
@@ -229,3 +233,22 @@ def test_file_names_get_an_extension_the_extractor_understands():
         == "e.org/dl.docx"
     )
     assert str(ipaddress.ip_address("::1")) == "::1"
+
+
+async def test_a_server_that_dribbles_data_is_cut_off_by_the_overall_deadline():
+    class Slow(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for _ in range(100):
+                await asyncio.sleep(0.05)
+                yield b"x"
+
+    transport = httpx.MockTransport(
+        lambda r: httpx.Response(200, stream=Slow(), headers={"content-type": "text/plain"})
+    )
+    with pytest.raises(ValidationError, match="took longer"):
+        await fetch(
+            "https://example.org/",
+            FetchPolicy(deadline=0.2),
+            resolve=resolver({"example.org": [PUBLIC]}),
+            transport=transport,
+        )

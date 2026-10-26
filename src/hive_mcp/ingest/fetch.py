@@ -46,7 +46,8 @@ class FetchPolicy:
     allow_private: bool = False  # let the server reach private addresses (an intranet wiki)
     allowed_hosts: frozenset[str] = field(default_factory=frozenset)  # empty = any public host
     max_bytes: int = MAX_BYTES
-    timeout: float = 15.0
+    timeout: float = 15.0  # per network operation
+    deadline: float = 60.0  # for the whole fetch: a server dribbling bytes cannot hold us forever
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,9 +64,27 @@ async def system_resolver(host: str) -> list[str]:
 
 def is_public(address: str) -> bool:
     ip = ipaddress.ip_address(address.split("%", maxsplit=1)[0])
-    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
-        ip = ip.ipv4_mapped  # ::ffff:10.0.0.1 is the private address 10.0.0.1
+    if isinstance(ip, ipaddress.IPv6Address):
+        embedded = _embedded_ipv4(ip)
+        if (
+            embedded is not None
+        ):  # ::ffff:10.0.0.1, 64:ff9b::10.0.0.1 and 2002:0a00:1:: all reach 10.0.0.1
+            return is_public(str(embedded))
     return ip.is_global and not ip.is_multicast
+
+
+NAT64 = ipaddress.ip_network("64:ff9b::/96")
+SIX_TO_FOUR = ipaddress.ip_network("2002::/16")
+
+
+def _embedded_ipv4(ip: ipaddress.IPv6Address) -> ipaddress.IPv4Address | None:
+    if ip.ipv4_mapped:
+        return ip.ipv4_mapped
+    if ip in NAT64:
+        return ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+    if ip in SIX_TO_FOUR:
+        return ipaddress.IPv4Address((int(ip) >> 80) & 0xFFFFFFFF)
+    return None
 
 
 def _host_allowed(host: str, allowed: frozenset[str]) -> bool:
@@ -135,6 +154,19 @@ async def fetch(
     *,
     resolve: Callable[[str], Awaitable[list[str]]] = system_resolver,
     transport: httpx.AsyncBaseTransport | None = None,
+) -> Fetched:
+    try:
+        async with asyncio.timeout(policy.deadline):
+            return await _fetch(url, policy, resolve, transport)
+    except TimeoutError as exc:
+        raise ValidationError(f"fetching took longer than {policy.deadline:.0f} seconds") from exc
+
+
+async def _fetch(
+    url: str,
+    policy: FetchPolicy,
+    resolve: Callable[[str], Awaitable[list[str]]],
+    transport: httpx.AsyncBaseTransport | None,
 ) -> Fetched:
     current = url
     async with httpx.AsyncClient(

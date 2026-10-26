@@ -1,5 +1,9 @@
 name: ci
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 1"  # weekly: new advisories can appear without any change of ours
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -23,6 +27,15 @@ jobs:
       - run: uv run python scripts/check_file_size.py src
       - run: uv run pytest
 
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: Known vulnerabilities in the locked dependencies
+        run: uv run pip-audit
+
   image:
     runs-on: ubuntu-latest
     steps:
@@ -41,6 +54,13 @@ jobs:
         run: scripts/smoke_docker.sh hive-mcp:ci
       - name: Smoke test with the real offline embedder
         run: HIVE_EMBEDDER=onnx scripts/smoke_docker.sh hive-mcp:ci
+      - name: Scan the image for known vulnerabilities (fixable high/critical only)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: hive-mcp:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
       - name: Compose file is valid
         run: POSTGRES_PASSWORD=x TUNNEL_TOKEN=x TS_AUTHKEY=x docker compose --profile postgres --profile cloudflare --profile tailscale config -q
 

@@ -101,6 +101,9 @@ def _decode(data: bytes) -> str:
         return data.decode("latin-1")  # never fails; better than refusing legacy text files
 
 
+MAX_PDF_PAGES = 2000
+
+
 def _pdf(data: bytes) -> Extracted:
     try:
         from pypdf import PdfReader  # noqa: PLC0415 - optional extra
@@ -110,6 +113,8 @@ def _pdf(data: bytes) -> Extracted:
         reader = PdfReader(io.BytesIO(data))
         if reader.is_encrypted:
             raise ValidationError("encrypted PDFs are not supported")
+        if len(reader.pages) > MAX_PDF_PAGES:
+            raise ValidationError(f"PDF has more than {MAX_PDF_PAGES} pages; split it first")
         pages = [(page.extract_text() or "").strip() for page in reader.pages]
         title = (reader.metadata.title if reader.metadata else None) or None
     except ValidationError:

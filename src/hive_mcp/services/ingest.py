@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import itertools
 import logging
@@ -76,8 +77,9 @@ class IngestService:
             raise ValidationError("file name is required")
         if len(data) > MAX_FILE_BYTES:
             raise ValidationError(f"file larger than {MAX_FILE_BYTES // (1024 * 1024)} MB")
-        extracted = extract_text(name, data)
-        sections = split_sections(extracted.text, self._section_chars)
+        # Parsing untrusted PDFs/Office files is CPU-bound: keep it off the event loop.
+        extracted = await asyncio.to_thread(extract_text, name, data)
+        sections = await asyncio.to_thread(split_sections, extracted.text, self._section_chars)
         if len(sections) > MAX_SECTIONS:
             raise ValidationError(f"document too long ({len(sections)} parts, max {MAX_SECTIONS})")
         base = (extracted.title or name).strip()[: MAX_TITLE - 24]

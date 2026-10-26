@@ -21,12 +21,6 @@ def _rule(name: str, regex: str, group: int = 0, flags: int = 0) -> Rule:
 
 
 RULES = (
-    _rule(
-        "private-key",
-        r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
-        0,
-        re.S,
-    ),
     _rule("aws-access-key", r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
     _rule("aws-secret", r"(?i)aws_secret_access_key\s*[=:]\s*[\"']?([A-Za-z0-9/+=]{40})", 1),
     _rule("github-token", r"\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{50,})\b"),
@@ -45,6 +39,28 @@ RULES = (
 )
 
 
+PEM_BEGIN = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
+PEM_END = re.compile(r"-----END [A-Z ]*PRIVATE KEY-----")
+UNTERMINATED_KEY_CHARS = (
+    8000  # a key block whose end is missing (truncated paste) is masked this far
+)
+
+
+def _private_keys(text: str, findings: dict[str, int]) -> str:
+    """Mask PEM private keys in one linear pass. (A single regex with a lazy `.*?` is quadratic on
+    input that repeats the BEGIN line, which would freeze the server for seconds.)"""
+    marker, parts, pos = "[REDACTED:private-key]", [], 0
+    while match := PEM_BEGIN.search(text, pos):
+        end = PEM_END.search(text, match.end())
+        stop = (
+            end.end() if end else len(text)
+        )  # a truncated paste: mask to the end, never leak the rest
+        parts += [text[pos : match.start()], marker]
+        findings["private-key"] = findings.get("private-key", 0) + 1
+        pos = stop
+    return text if not parts else "".join([*parts, text[pos:]])
+
+
 @dataclass(frozen=True, slots=True)
 class Redaction:
     text: str
@@ -57,6 +73,7 @@ class Redaction:
 
 def redact(text: str) -> Redaction:
     findings: dict[str, int] = {}
+    text = _private_keys(text, findings)
     for rule in RULES:
         marker = f"[REDACTED:{rule.name}]"
 

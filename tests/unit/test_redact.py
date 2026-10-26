@@ -64,3 +64,29 @@ def test_findings_never_contain_the_secret():
 def test_never_raises_and_is_idempotent(text):
     once = redact(text)
     assert redact(once.text).text == once.text
+
+
+def test_repeated_key_headers_are_masked_in_linear_time():
+    import time  # noqa: PLC0415
+
+    hostile = "-----BEGIN PRIVATE KEY-----" * 7000  # 190 KB; a lazy regex needs ~5 s for this
+    started = time.perf_counter()
+    result = redact(hostile)
+    assert time.perf_counter() - started < 1.0
+    assert "BEGIN" not in result.text and result.findings["private-key"] >= 1
+
+
+def test_keys_are_masked_whole_or_to_the_end_when_the_end_is_missing():
+    whole = "a -----BEGIN RSA PRIVATE KEY-----\nSECRETBODY\n-----END RSA PRIVATE KEY----- b"
+    assert redact(whole).text == "a [REDACTED:private-key] b"
+    two = f"{whole} {whole}"
+    assert redact(two).text.count("[REDACTED:private-key]") == 2 and redact(two).findings == {
+        "private-key": 2
+    }
+    truncated = "x -----BEGIN PRIVATE KEY-----\n" + "SECRETBODY" * 2000 + "\nTAIL " + "z" * 9000
+    out = redact(truncated).text
+    assert "SECRETBODY" not in out and out.startswith("x [REDACTED:private-key]")
+    assert (
+        out == "x [REDACTED:private-key]"
+    )  # nothing after a truncated key can be trusted not to be key
+    assert redact(redact(whole).text).text == redact(whole).text  # idempotent

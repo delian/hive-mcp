@@ -89,3 +89,30 @@ async def test_documents_with_too_many_parts_are_refused_before_storing(stack):
     with pytest.raises(ValidationError, match="too long"):
         await tiny.ingest(ALICE, "long.txt", text.encode())
     assert await stack.backend.items.list_ids_system("org1", None, 10) == []
+
+
+async def test_parsing_a_document_does_not_freeze_the_event_loop(stack, monkeypatch):
+    import asyncio  # noqa: PLC0415
+    import time  # noqa: PLC0415
+
+    from hive_mcp.ingest.extract import extract_text as real  # noqa: PLC0415
+
+    def slow(name, data):
+        time.sleep(0.4)  # a hostile PDF that takes a while to parse
+        return real(name, data)
+
+    monkeypatch.setattr("hive_mcp.services.ingest.extract_text", slow)
+    ticks = 0
+
+    async def heartbeat():
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.01)
+            ticks += 1
+
+    beat = asyncio.create_task(heartbeat())
+    try:
+        await stack.ingest.ingest(ALICE, "slow.txt", b"alpha beta gamma")
+    finally:
+        beat.cancel()
+    assert ticks >= 15  # the loop kept running while the parser worked in a thread

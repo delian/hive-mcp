@@ -18,8 +18,8 @@ from hive_mcp.domain.errors import ValidationError
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-MAX_MEMBER_BYTES = 40 * 1024 * 1024
-MAX_TOTAL_BYTES = 120 * 1024 * 1024
+MAX_MEMBER_BYTES = 16 * 1024 * 1024  # an XML tree takes ~10x its text in memory
+MAX_TOTAL_BYTES = 64 * 1024 * 1024
 MAX_MEMBERS = 5000
 MAX_ROWS = 20_000
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"

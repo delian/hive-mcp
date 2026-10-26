@@ -1,0 +1,219 @@
+"""Operator commands that work on the data itself (ingest, reindex, erase, evaluate)."""
+
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path  # noqa: TC003 - typer reads the annotation at runtime
+from typing import TYPE_CHECKING, Any
+
+import typer
+
+from hive_mcp.bootstrap import build_services
+from hive_mcp.config import Settings
+from hive_mcp.domain.errors import HiveError
+from hive_mcp.domain.principal import Principal, Role
+from hive_mcp.domain.scope import Scope, ScopeLevel
+from hive_mcp.ingest.files import files_under
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
+
+app = typer.Typer()
+
+
+@app.command()
+def reindex(org: str = typer.Option(..., help="Organisation id.")) -> None:
+    """Queue re-embedding of every item (run after changing HIVE_EMBEDDER). The server's job
+    runner does the work; a running server need not be restarted."""
+
+    async def run() -> int:
+        services = await build_services(Settings())
+        try:
+            return await services.indexing.reindex_org(org)
+        finally:
+            await services.close()
+
+    try:
+        count = asyncio.run(run())
+    except HiveError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"queued {count} items")
+
+
+@app.command()
+def ingest(  # noqa: PLR0913, PLR0917 - one option per identity claim
+    paths: list[Path] = typer.Argument(..., exists=True, help="Files or directories."),  # noqa: B008
+    org: str = typer.Option(..., help="Organisation id."),
+    user: str = typer.Option(..., help="User id that will own the knowledge."),
+    role: str = typer.Option("member", help="Role of that user."),
+    project: str | None = typer.Option(None, help="Share into this project (user must be in it)."),
+    tag: list[str] = typer.Option([], help="Tag for every file (repeatable)."),  # noqa: B008
+) -> None:
+    """Ingest files (recursively for directories) as the given user. Safe to re-run."""
+
+    async def run() -> int:
+        services = await build_services(Settings())
+        who = Principal(
+            user, org, Role[role.upper()], frozenset(), frozenset({project} if project else ())
+        )
+        scope = Scope(ScopeLevel.PROJECT, project) if project else None
+        failures = 0
+        try:
+            for path in files_under(paths):
+                try:
+                    done = await services.ingest.ingest(
+                        who, path.name, path.read_bytes(), tags=tuple(tag), scope=scope
+                    )
+                except (HiveError, OSError) as exc:
+                    failures += 1
+                    typer.echo(f"FAILED {path}: {exc}", err=True)
+                    continue
+                typer.echo(f"{path}: {len(done.items)} parts, {done.created} new")
+        finally:
+            await services.close()
+        return failures
+
+    try:
+        failed = asyncio.run(run())
+    except (KeyError, HiveError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    if failed:
+        raise typer.Exit(1)
+
+
+def _admin(org: str) -> Principal:
+    return Principal("cli-admin", org, Role.ADMIN)
+
+
+@app.command()
+def forget(
+    org: str = typer.Option(..., help="Organisation id."),
+    user: str = typer.Option(
+        ..., help="User id (the email for Google sign-in) whose knowledge to erase."
+    ),
+    include_shared: bool = typer.Option(
+        False, help="Also erase items they shared with projects/teams."
+    ),
+    yes: bool = typer.Option(
+        False, help="Actually delete (without it, only report what would go)."
+    ),
+) -> None:
+    """Erase a person's private knowledge (and with --include-shared, everything they wrote).
+
+    The audit log and promotion records keep their id; remove the user from the directory and
+    revoke their tokens separately (`hive user remove`, `hive token revoke`)."""
+
+    async def run() -> None:
+        services = await build_services(Settings())
+        try:
+            r = await services.purge.forget_user(
+                _admin(org), user, include_shared=include_shared, dry_run=not yes
+            )
+        finally:
+            await services.close()
+        verb = "erased" if yes else "would erase"
+        typer.echo(f"{verb} {len(r.purged)} items; {len(r.kept_shared)} shared items left in place")
+        if not yes:
+            typer.echo("re-run with --yes to delete")
+
+    _run_cli(run)
+
+
+@app.command()
+def purge(
+    item_id: str = typer.Argument(..., help="Item id."),
+    org: str = typer.Option(..., help="Organisation id."),
+) -> None:
+    """Permanently delete one item (operator override of the author/admin rule)."""
+
+    async def run() -> None:
+        services = await build_services(Settings())
+        try:
+            item = await services.purge.purge(_admin(org), item_id)
+        finally:
+            await services.close()
+        typer.echo(f"deleted {item.id}: {item.title}")
+
+    _run_cli(run)
+
+
+def _run_cli(coro_fn: Callable[[], Coroutine[Any, Any, None]]) -> None:
+    try:
+        asyncio.run(coro_fn())
+    except (KeyError, HiveError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@app.command("eval")
+def evaluate_command(
+    path: Path = typer.Argument(  # noqa: B008
+        ..., exists=True, help="Evaluation set (JSON), e.g. evals/core.json."
+    ),
+    sweep: bool = typer.Option(False, help="Also sweep the vector relevance floor."),
+    floor: float | None = typer.Option(None, help="Override the embedder's relevance floor."),
+) -> None:
+    """Score keyword, vector and hybrid retrieval with the configured embedder (HIVE_EMBEDDER)."""
+    from hive_mcp.embeddings.factory import make_embedder  # noqa: PLC0415
+    from hive_mcp.evaluation import dataset, runner  # noqa: PLC0415
+
+    async def run() -> None:
+        embedder = make_embedder(Settings())
+        data = dataset.load(path)
+        points = tuple(x / 100 for x in range(0, 100, 5)) if sweep else ()
+        report = await runner.evaluate(data, embedder, floor=floor, sweep=points)
+        typer.echo(runner.format_report(report))
+
+    _run_cli(run)
+
+
+vectors = typer.Typer(no_args_is_help=True, help="Inspect and clean up the vector indexes.")
+app.add_typer(vectors, name="vectors")
+
+
+async def _vector_admin(action: Callable[[Any], Coroutine[Any, Any, None]]) -> None:
+    services = await build_services(Settings())
+    try:
+        await action(services.vector_admin)
+    finally:
+        await services.close()
+
+
+@vectors.command("status")
+def vectors_status() -> None:
+    """Show which embedding models have vectors and how complete the current one is."""
+
+    async def show(admin: Any) -> None:  # noqa: ANN401 - VectorAdmin
+        s = await admin.status()
+        typer.echo(
+            f"current model {s.current_model}: {s.current_items}/{s.indexable_items} items "
+            f"({s.coverage:.0%})"
+        )
+        for model, count in sorted(s.other_models.items()):
+            typer.echo(
+                f"  old model {model}: {count} items (unused; `hive vectors prune` removes it)"
+            )
+
+    _run_cli(lambda: _vector_admin(show))
+
+
+@vectors.command("prune")
+def vectors_prune(
+    yes: bool = typer.Option(False, help="Actually delete (without it, only report)."),
+    force: bool = typer.Option(False, help="Delete even if the current model is incomplete."),
+) -> None:
+    """Delete vectors of embedding models other than the current one."""
+
+    async def prune(admin: Any) -> None:  # noqa: ANN401 - VectorAdmin
+        status = await admin.status()
+        if not yes:
+            for model, count in sorted(status.other_models.items()):
+                typer.echo(f"would delete {count} items' vectors of {model}")
+            typer.echo(f"current model covers {status.coverage:.0%}; re-run with --yes to delete")
+            return
+        for model, count in (await admin.prune(force=force)).items():
+            typer.echo(f"deleted vectors of {model} ({count} items)")
+
+    _run_cli(lambda: _vector_admin(prune))

@@ -2,7 +2,7 @@ from dataclasses import replace
 from datetime import timedelta
 
 from hive_mcp.domain.edge import Edge
-from hive_mcp.domain.item import Kind
+from hive_mcp.domain.item import ItemPatch, Kind, Status
 from hive_mcp.ports.maintenance import ItemFilter
 from tests.conformance.factory import ALICE, ALICE_PRIVATE, BOB, CAROL, P1, P2, make_item
 
@@ -88,3 +88,13 @@ async def test_edges_and_promotions_can_be_removed_per_item(backend):
     ]
     assert len(await backend.edges.incident("org2", ["b"])) == 1  # other tenants untouched
     assert await backend.edges.remove_item("org1", "b") == 0
+
+
+async def test_count_system_excludes_archived_and_filters_by_org(backend):
+    items = await seed(backend)
+    assert await backend.maintenance.count_system() == 4
+    assert await backend.maintenance.count_system("org1") == 4
+    assert await backend.maintenance.count_system("org2") == 0
+    await backend.items.update(ALICE, items["a_proj"].id, ItemPatch(status=Status.ARCHIVED), 1)
+    assert await backend.maintenance.count_system() == 3
+    assert await backend.maintenance.count_system(include_archived=True) == 4

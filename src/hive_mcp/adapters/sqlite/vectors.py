@@ -104,6 +104,30 @@ class SqliteVectors:
 
         await self._db.run(tx, write=True)
 
+    async def model_stats(self) -> dict[str, int]:
+        def tx(conn: sqlite3.Connection) -> dict[str, int]:
+            stats = dict.fromkeys(
+                (r[0] for r in conn.execute("SELECT model_id FROM vec_models")), 0
+            )
+            for r in conn.execute(
+                "SELECT model_id, COUNT(DISTINCT item_id) FROM vec_chunks GROUP BY model_id"
+            ):
+                stats[r[0]] = int(r[1])
+            return stats
+
+        return await self._db.run(tx)
+
+    async def drop_model(self, model_id: str) -> int:
+        def tx(conn: sqlite3.Connection) -> int:
+            row = conn.execute(
+                "SELECT COUNT(DISTINCT item_id) FROM vec_chunks WHERE model_id = ?", (model_id,)
+            ).fetchone()
+            conn.execute("DELETE FROM vec_chunks WHERE model_id = ?", (model_id,))
+            conn.execute("DELETE FROM vec_models WHERE model_id = ?", (model_id,))
+            return int(row[0])
+
+        return await self._db.run(tx, write=True)
+
     async def delete(self, item_id: str) -> None:
         await self._db.run(
             lambda c: c.execute("DELETE FROM vec_chunks WHERE item_id = ?", (item_id,)), write=True

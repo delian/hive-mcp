@@ -39,6 +39,16 @@ class MemoryMaintenance:
         ]
         return sorted(rows, key=lambda i: i.id)[:limit]
 
+    async def count_system(
+        self, org_id: str | None = None, *, include_archived: bool = False
+    ) -> int:
+        return sum(
+            1
+            for i in self._store._items.values()
+            if (org_id is None or i.org_id == org_id)
+            and (include_archived or i.status.value != "archived")
+        )
+
     async def count_by_source(self, org_id: str, source: str) -> int:
         return sum(
             1 for i in self._store._items.values() if i.org_id == org_id and i.source == source

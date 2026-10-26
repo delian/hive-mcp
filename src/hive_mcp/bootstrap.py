@@ -25,6 +25,7 @@ from hive_mcp.services.promotions import APPLY_JOB, PromotionService
 from hive_mcp.services.purge import PURGE_JOB, PurgeService
 from hive_mcp.services.runner import JobRunner
 from hive_mcp.services.sessions import SessionService
+from hive_mcp.services.vector_admin import VectorAdmin
 
 
 @dataclass
@@ -40,6 +41,7 @@ class Services:
     ingest: IngestService
     curation: CurationService
     purge: PurgeService
+    vector_admin: VectorAdmin
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -138,4 +140,5 @@ async def build_services(settings: Settings) -> Services:
         ingest,
         curation,
         purge,
+        VectorAdmin(backend.vectors, backend.maintenance, embedder),
     )

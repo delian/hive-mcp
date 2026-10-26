@@ -89,3 +89,19 @@ async def test_one_item_with_many_chunks_cannot_crowd_out_others(backend):
     await backend.vectors.replace("c", M, ACL1, [v(0.8, 0.5, 0)])
     hits = await search(backend, ALICE, v(1, 0, 0), limit=3)
     assert {h.item_id for h in hits} == {"big", "b", "c"}  # deeper chunks must still be reached
+
+
+async def test_model_stats_and_drop_model(backend):
+    await backend.vectors.replace("a", "old", ACL1, [v(1, 0, 0), v(0, 1, 0)])
+    await backend.vectors.replace("b", "old", ACL1, [v(1, 0, 0)])
+    await backend.vectors.replace("a", "new", ACL1, [v(1, 0, 0)])
+    assert await backend.vectors.model_stats() == {"old": 2, "new": 1}
+    assert await backend.vectors.drop_model("old") == 2
+    assert await backend.vectors.model_stats() == {"new": 1}
+    assert await backend.vectors.drop_model("old") == 0  # already gone
+    assert await search(backend, ALICE, v(1, 0, 0), model="old") == []
+    assert [h.item_id for h in await search(backend, ALICE, v(1, 0, 0), model="new")] == ["a"]
+    await backend.vectors.replace(
+        "c", "old", ACL1, [v(1, 0)]
+    )  # a dropped model may come back with another size
+    assert await backend.vectors.model_stats() == {"new": 1, "old": 1}

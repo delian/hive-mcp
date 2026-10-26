@@ -52,3 +52,9 @@ class VectorIndex(Protocol):
 
     async def delete(self, item_id: str) -> None:
         """Remove the item's chunks for every model."""
+
+    async def model_stats(self) -> dict[str, int]:
+        """Every model that has a vector table, with the number of items that have vectors in it."""
+
+    async def drop_model(self, model_id: str) -> int:
+        """Delete all vectors of one model (and its index); returns how many items had any."""

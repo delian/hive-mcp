@@ -3,7 +3,10 @@
 `HIVE_EMBEDDER` selects the embedder. Vectors are stored per `model_id` and never compared across
 models, so switching is safe; run `hive reindex --org <id>` afterwards: it queues one job per item and the server's job runner
 re-embeds them (no restart; repeating is safe). Until done, consult falls back to keyword hits for
-unindexed items. Vectors of the old model stay stored and unused.
+unindexed items. Vectors of the old model stay stored (and unused) until you remove them:
+`hive vectors status` shows each model's item count and how much of the data the current model covers;
+`hive vectors prune --yes` deletes the other models' vectors, and refuses while the current model covers under
+95% of items (`--force` overrides). Items without any text have no vectors, so coverage can stay below 100%.
 
 | Value     | What                                   | Needs                                              |
 |-----------|----------------------------------------|----------------------------------------------------|

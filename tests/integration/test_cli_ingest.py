@@ -38,3 +38,29 @@ def test_bad_role_is_a_clean_error(tmp_path, monkeypatch):
     f.write_text("x y")
     out = runner.invoke(cli, ["ingest", str(f), "--org", "o", "--user", "u", "--role", "god"])
     assert out.exit_code == 1 and "error" in out.output
+
+
+def test_vectors_status_and_prune_commands(tmp_path, monkeypatch):
+    monkeypatch.setenv("HIVE_DATA_DIR", str(tmp_path / "data"))
+    f = tmp_path / "n.txt"
+    f.write_text("pelican facts here")
+    runner.invoke(cli, ["ingest", str(f), "--org", "o1", "--user", "u1"])
+    out = runner.invoke(cli, ["vectors", "status"]).output
+    assert "current model hashing-256: 1/1 items (100%)" in out and "old model" not in out
+    assert runner.invoke(cli, ["vectors", "prune"]).exit_code == 0
+    monkeypatch.setenv(
+        "HIVE_EMBEDDER", "onnx"
+    )  # pretend the embedder changed (no model files needed to inspect)
+    from hive_mcp.embeddings import factory  # noqa: PLC0415
+
+    monkeypatch.setattr(factory, "make_embedder", lambda s: factory.HashingEmbedder(64))
+    monkeypatch.setattr("hive_mcp.bootstrap.make_embedder", lambda s: factory.HashingEmbedder(64))
+    status = runner.invoke(cli, ["vectors", "status"]).output
+    assert (
+        "current model hashing-64: 0/1 items (0%)" in status
+        and "old model hashing-256: 1 items" in status
+    )
+    refused = runner.invoke(cli, ["vectors", "prune", "--yes"])
+    assert refused.exit_code == 1 and "reindex" in refused.output
+    ok = runner.invoke(cli, ["vectors", "prune", "--yes", "--force"])
+    assert ok.exit_code == 0 and "deleted vectors of hashing-256 (1 items)" in ok.output

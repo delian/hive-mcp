@@ -186,3 +186,33 @@ class PgVectors:
                     sql.SQL("DELETE FROM {t} WHERE item_id = %s").format(t=sql.Identifier(name)),
                     (item_id,),
                 )
+
+    async def model_stats(self) -> dict[str, int]:
+        async with self._db.tx() as conn:
+            cur = await conn.execute("SELECT model_id, table_name FROM vec_models")
+            stats = {}
+            for row in await cur.fetchall():
+                counted = await conn.execute(
+                    sql.SQL("SELECT count(DISTINCT item_id) AS n FROM {t}").format(
+                        t=sql.Identifier(row["table_name"])
+                    )
+                )
+                stats[str(row["model_id"])] = int((await counted.fetchone() or {"n": 0})["n"])
+            return stats
+
+    async def drop_model(self, model_id: str) -> int:
+        async with self._db.tx() as conn:
+            await conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (f"vecmodel:{model_id}",)
+            )
+            known = await _registry(conn, model_id)
+            if known is None:
+                return 0
+            ident = sql.Identifier(known[1])
+            counted = await conn.execute(
+                sql.SQL("SELECT count(DISTINCT item_id) AS n FROM {t}").format(t=ident)
+            )
+            n = int((await counted.fetchone() or {"n": 0})["n"])
+            await conn.execute(sql.SQL("DROP TABLE {t}").format(t=ident))
+            await conn.execute("DELETE FROM vec_models WHERE model_id = %s", (model_id,))
+            return n

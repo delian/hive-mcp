@@ -64,6 +64,19 @@ class SqliteMaintenance:
 
         return await self._db.run(tx)
 
+    async def count_system(
+        self, org_id: str | None = None, *, include_archived: bool = False
+    ) -> int:
+        def tx(conn: sqlite3.Connection) -> int:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM items WHERE (? IS NULL OR org_id = ?) "
+                "AND (? OR status != 'archived')",
+                (org_id, org_id, include_archived),
+            ).fetchone()
+            return int(row[0])
+
+        return await self._db.run(tx)
+
     async def count_by_source(self, org_id: str, source: str) -> int:
         def tx(conn: sqlite3.Connection) -> int:
             row = conn.execute(

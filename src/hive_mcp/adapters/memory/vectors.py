@@ -62,6 +62,13 @@ class MemoryVectors:
             if item_id in rows:
                 rows[item_id] = (acl, rows[item_id][1])
 
+    async def model_stats(self) -> dict[str, int]:
+        return {model: len(rows) for model, rows in self._rows.items()}
+
+    async def drop_model(self, model_id: str) -> int:
+        self._dims.pop(model_id, None)
+        return len(self._rows.pop(model_id, {}))
+
     async def delete(self, item_id: str) -> None:
         for rows in self._rows.values():
             rows.pop(item_id, None)

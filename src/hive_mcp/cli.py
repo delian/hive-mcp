@@ -2,32 +2,24 @@
 
 from __future__ import annotations
 
-import asyncio
 import time
-from pathlib import Path  # noqa: TC003 - typer reads the annotation at runtime
-from typing import TYPE_CHECKING
 
 import typer
 import uvicorn
 
 from hive_mcp import __version__
 from hive_mcp.app import create_app
-from hive_mcp.bootstrap import build_services
+from hive_mcp.cli_ops import app as ops_app
 from hive_mcp.config import Settings
 from hive_mcp.domain.errors import HiveError
 from hive_mcp.domain.principal import Principal, Role
-from hive_mcp.domain.scope import Scope, ScopeLevel, parse_scope, scope_key
+from hive_mcp.domain.scope import parse_scope, scope_key
 from hive_mcp.embeddings.models import fetch_model, get_spec
-from hive_mcp.ingest.files import files_under
 from hive_mcp.ops.drain import DrainingServer
 from hive_mcp.ops.state import Lifecycle
 from hive_mcp.security.directory import DirectoryUser, UserDirectory, normalize_email
 from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.security.tokens import TokenStore
-
-if TYPE_CHECKING:
-    from collections.abc import Callable, Coroutine
-    from typing import Any
 
 cli = typer.Typer(no_args_is_help=True, add_completion=False)
 tokens = typer.Typer(
@@ -40,6 +32,7 @@ users = typer.Typer(
 cli.add_typer(users, name="user")
 models = typer.Typer(no_args_is_help=True, help="Manage local embedding models.")
 cli.add_typer(models, name="models")
+cli.add_typer(ops_app)  # data commands (ingest, reindex, forget, purge, eval, ...)
 
 
 @cli.command()
@@ -178,26 +171,6 @@ def main() -> None:
     cli()
 
 
-@cli.command()
-def reindex(org: str = typer.Option(..., help="Organisation id.")) -> None:
-    """Queue re-embedding of every item (run after changing HIVE_EMBEDDER). The server's job
-    runner does the work; a running server need not be restarted."""
-
-    async def run() -> int:
-        services = await build_services(Settings())
-        try:
-            return await services.indexing.reindex_org(org)
-        finally:
-            await services.close()
-
-    try:
-        count = asyncio.run(run())
-    except HiveError as exc:
-        typer.echo(f"error: {exc}", err=True)
-        raise typer.Exit(1) from exc
-    typer.echo(f"queued {count} items")
-
-
 @models.command("fetch")
 def models_fetch(
     name: str = typer.Argument("bge-small-en-v1.5-int8", help="Pinned model name."),
@@ -210,131 +183,3 @@ def models_fetch(
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(1) from exc
     typer.echo(f"ready: {model.parent}")
-
-
-@cli.command()
-def ingest(  # noqa: PLR0913, PLR0917 - one option per identity claim
-    paths: list[Path] = typer.Argument(..., exists=True, help="Files or directories."),  # noqa: B008
-    org: str = typer.Option(..., help="Organisation id."),
-    user: str = typer.Option(..., help="User id that will own the knowledge."),
-    role: str = typer.Option("member", help="Role of that user."),
-    project: str | None = typer.Option(None, help="Share into this project (user must be in it)."),
-    tag: list[str] = typer.Option([], help="Tag for every file (repeatable)."),  # noqa: B008
-) -> None:
-    """Ingest files (recursively for directories) as the given user. Safe to re-run."""
-
-    async def run() -> int:
-        services = await build_services(Settings())
-        who = Principal(
-            user, org, Role[role.upper()], frozenset(), frozenset({project} if project else ())
-        )
-        scope = Scope(ScopeLevel.PROJECT, project) if project else None
-        failures = 0
-        try:
-            for path in files_under(paths):
-                try:
-                    done = await services.ingest.ingest(
-                        who, path.name, path.read_bytes(), tags=tuple(tag), scope=scope
-                    )
-                except (HiveError, OSError) as exc:
-                    failures += 1
-                    typer.echo(f"FAILED {path}: {exc}", err=True)
-                    continue
-                typer.echo(f"{path}: {len(done.items)} parts, {done.created} new")
-        finally:
-            await services.close()
-        return failures
-
-    try:
-        failed = asyncio.run(run())
-    except (KeyError, HiveError) as exc:
-        typer.echo(f"error: {exc}", err=True)
-        raise typer.Exit(1) from exc
-    if failed:
-        raise typer.Exit(1)
-
-
-def _admin(org: str) -> Principal:
-    return Principal("cli-admin", org, Role.ADMIN)
-
-
-@cli.command()
-def forget(
-    org: str = typer.Option(..., help="Organisation id."),
-    user: str = typer.Option(
-        ..., help="User id (the email for Google sign-in) whose knowledge to erase."
-    ),
-    include_shared: bool = typer.Option(
-        False, help="Also erase items they shared with projects/teams."
-    ),
-    yes: bool = typer.Option(
-        False, help="Actually delete (without it, only report what would go)."
-    ),
-) -> None:
-    """Erase a person's private knowledge (and with --include-shared, everything they wrote).
-
-    The audit log and promotion records keep their id; remove the user from the directory and
-    revoke their tokens separately (`hive user remove`, `hive token revoke`)."""
-
-    async def run() -> None:
-        services = await build_services(Settings())
-        try:
-            r = await services.purge.forget_user(
-                _admin(org), user, include_shared=include_shared, dry_run=not yes
-            )
-        finally:
-            await services.close()
-        verb = "erased" if yes else "would erase"
-        typer.echo(f"{verb} {len(r.purged)} items; {len(r.kept_shared)} shared items left in place")
-        if not yes:
-            typer.echo("re-run with --yes to delete")
-
-    _run_cli(run)
-
-
-@cli.command()
-def purge(
-    item_id: str = typer.Argument(..., help="Item id."),
-    org: str = typer.Option(..., help="Organisation id."),
-) -> None:
-    """Permanently delete one item (operator override of the author/admin rule)."""
-
-    async def run() -> None:
-        services = await build_services(Settings())
-        try:
-            item = await services.purge.purge(_admin(org), item_id)
-        finally:
-            await services.close()
-        typer.echo(f"deleted {item.id}: {item.title}")
-
-    _run_cli(run)
-
-
-def _run_cli(coro_fn: Callable[[], Coroutine[Any, Any, None]]) -> None:
-    try:
-        asyncio.run(coro_fn())
-    except (KeyError, HiveError) as exc:
-        typer.echo(f"error: {exc}", err=True)
-        raise typer.Exit(1) from exc
-
-
-@cli.command("eval")
-def evaluate_command(
-    path: Path = typer.Argument(  # noqa: B008
-        ..., exists=True, help="Evaluation set (JSON), e.g. evals/core.json."
-    ),
-    sweep: bool = typer.Option(False, help="Also sweep the vector relevance floor."),
-    floor: float | None = typer.Option(None, help="Override the embedder's relevance floor."),
-) -> None:
-    """Score keyword, vector and hybrid retrieval with the configured embedder (HIVE_EMBEDDER)."""
-    from hive_mcp.embeddings.factory import make_embedder  # noqa: PLC0415
-    from hive_mcp.evaluation import dataset, runner  # noqa: PLC0415
-
-    async def run() -> None:
-        embedder = make_embedder(Settings())
-        data = dataset.load(path)
-        points = tuple(x / 100 for x in range(0, 100, 5)) if sweep else ()
-        report = await runner.evaluate(data, embedder, floor=floor, sweep=points)
-        typer.echo(runner.format_report(report))
-
-    _run_cli(run)

@@ -54,6 +54,18 @@ class PgMaintenance:
             )  # fmt: skip
             return [row_to_item(r) for r in await cur.fetchall()]
 
+    async def count_system(
+        self, org_id: str | None = None, *, include_archived: bool = False
+    ) -> int:
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                "SELECT count(*) AS n FROM items WHERE (%s::text IS NULL OR org_id = %s) "
+                "AND (%s OR status != 'archived')",
+                (org_id, org_id, include_archived),
+            )
+            row = await cur.fetchone()
+            return int(row["n"]) if row else 0
+
     async def count_by_source(self, org_id: str, source: str) -> int:
         async with self._db.tx() as conn:
             cur = await conn.execute(

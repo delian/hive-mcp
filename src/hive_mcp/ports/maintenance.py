@@ -32,5 +32,10 @@ class ItemMaintenance(Protocol):
     ) -> list[Item]:
         """Items matching the filter (any status), ascending by id, strictly after `after_id`."""
 
+    async def count_system(
+        self, org_id: str | None = None, *, include_archived: bool = False
+    ) -> int:
+        """Number of items (all orgs when `org_id` is None), by default without archived ones."""
+
     async def count_by_source(self, org_id: str, source: str) -> int:
         """How many items in the org reference this `source` string (blob reference counting)."""

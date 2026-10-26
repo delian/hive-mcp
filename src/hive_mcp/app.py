@@ -18,6 +18,8 @@ from hive_mcp.domain.clock import SystemClock
 from hive_mcp.domain.errors import HiveError, StorageBusy
 from hive_mcp.mcp_api.server import build_mcp
 from hive_mcp.ops.health import health_routes
+from hive_mcp.ops.metrics import METRICS, metrics_routes
+from hive_mcp.ops.observe import ObserveMiddleware
 from hive_mcp.ops.ratelimit import Limiter, RateLimiter, RateLimitMiddleware, Rule
 from hive_mcp.ops.state import Lifecycle
 from hive_mcp.security.directory import UserDirectory
@@ -258,10 +260,13 @@ def create_app(
         transport_security=transport_security(settings),
     )
     app.router.routes.extend(health_routes(lifecycle))
+    scrape_token = settings.metrics_token.get_secret_value() if settings.metrics_token else None
+    app.router.routes.extend(metrics_routes(scrape_token, METRICS, get_services))
     app.router.routes[0:0] = extra_routes  # ours first: /revoke must shadow the SDK's version
     app.add_middleware(
         RateLimitMiddleware,
         rules=rate_limit_rules(settings, shared_limiter(settings, get_services)),
     )
+    app.add_middleware(ObserveMiddleware, metrics=METRICS, mcp_path=settings.mcp_path)  # outermost
     app.state.lifecycle = lifecycle
     return app

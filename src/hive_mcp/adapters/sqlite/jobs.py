@@ -8,7 +8,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from hive_mcp.adapters.sqlite.codec import parse_ts, ts
-from hive_mcp.ports.jobs import Job, JobState
+from hive_mcp.ports.jobs import Job, JobStat, JobState
 
 if TYPE_CHECKING:
     import sqlite3
@@ -167,5 +167,27 @@ class SqliteJobs:
         def tx(conn: sqlite3.Connection) -> Job | None:
             row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
             return _job(row) if row else None
+
+        return await self._db.run(tx)
+
+    async def stats(self) -> list[JobStat]:
+        now = self._clock.now()
+
+        def tx(conn: sqlite3.Connection) -> list[JobStat]:
+            rows = conn.execute(
+                "SELECT kind, state, COUNT(*) AS n, "
+                "MIN(CASE WHEN state='queued' AND run_after <= ? THEN run_after END) AS due "
+                "FROM jobs WHERE state != 'done' GROUP BY kind, state ORDER BY kind, state",
+                (ts(now),),
+            ).fetchall()
+            return [
+                JobStat(
+                    r["kind"],
+                    JobState(r["state"]),
+                    r["n"],
+                    (now - parse_ts(r["due"])).total_seconds() if r["due"] else 0.0,
+                )
+                for r in rows
+            ]
 
         return await self._db.run(tx)

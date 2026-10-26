@@ -7,7 +7,7 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from hive_mcp.ports.jobs import Job, JobState
+from hive_mcp.ports.jobs import Job, JobStat, JobState
 
 if TYPE_CHECKING:
     from hive_mcp.domain.clock import Clock
@@ -114,3 +114,16 @@ class MemoryJobs:
 
     async def get(self, job_id: str) -> Job | None:
         return self._jobs.get(job_id)
+
+    async def stats(self) -> list[JobStat]:
+        now = self._clock.now()
+        groups: dict[tuple[str, JobState], list[Job]] = {}
+        for job in self._jobs.values():
+            if job.state is not JobState.DONE:
+                groups.setdefault((job.kind, job.state), []).append(job)
+        out = []
+        for (kind, state), jobs in sorted(groups.items()):
+            due = [j.run_after for j in jobs if state is JobState.QUEUED and j.run_after <= now]
+            age = (now - min(due)).total_seconds() if due else 0.0
+            out.append(JobStat(kind, state, len(jobs), age))
+        return out

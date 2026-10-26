@@ -1,0 +1,35 @@
+# Example Prometheus alert rules for hive-mcp. Scrape /metrics with the bearer token (HIVE_METRICS_TOKEN).
+groups:
+  - name: hive
+    rules:
+      - alert: HiveDeadJobs
+        expr: sum(hive_jobs{state="dead"}) > 0
+        for: 5m
+        annotations: {summary: "Background jobs exhausted their retries (indexing, notifications, apply)"}
+      - alert: HiveJobBacklog
+        expr: max(hive_job_oldest_due_seconds) > 600
+        for: 10m
+        annotations: {summary: "A runnable job has waited over 10 minutes: is the job runner (HIVE_RUN_JOBS) alive?"}
+      - alert: HiveSearchIndexBehind
+        expr: hive_vector_coverage_ratio < 0.95
+        for: 30m
+        annotations: {summary: "Fewer than 95% of items have a vector from the current model (run `hive reindex`?)"}
+      - alert: HiveServerErrors
+        expr: sum(rate(hive_http_requests_total{status=~"5.."}[5m])) / sum(rate(hive_http_requests_total[5m])) > 0.02
+        for: 10m
+        annotations: {summary: "More than 2% of requests fail with 5xx"}
+      - alert: HiveToolInternalErrors
+        expr: sum(increase(hive_tool_calls_total{outcome="internal_error"}[15m])) > 0
+        annotations: {summary: "A tool hit an unexpected error (see the logs, search for the request id)"}
+      - alert: HiveRateLimiting
+        expr: sum(rate(hive_http_requests_total{status="429"}[5m])) > 1
+        for: 10m
+        annotations: {summary: "Clients are being rate limited steadily: abuse, or limits too low"}
+      - alert: HiveLoginFailures
+        expr: sum(rate(hive_http_requests_total{group=~"oauth|admin",status=~"401|403"}[10m])) > 0.5
+        for: 10m
+        annotations: {summary: "Many failed sign-ins or token requests"}
+      - alert: HiveSlowSearch
+        expr: histogram_quantile(0.95, sum by (le) (rate(hive_tool_seconds_bucket{tool="kb_consult"}[10m]))) > 2
+        for: 15m
+        annotations: {summary: "p95 of kb_consult is over 2 seconds"}

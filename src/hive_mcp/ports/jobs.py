@@ -35,6 +35,16 @@ class Job:
     last_error: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class JobStat:
+    """Backlog of one kind in one state; `oldest_due_age` (seconds) is for QUEUED jobs only."""
+
+    kind: str
+    state: JobState
+    count: int
+    oldest_due_age: float = 0.0
+
+
 class JobQueue(Protocol):
     async def enqueue(  # noqa: PLR0913 - keyword-only options
         self,
@@ -61,3 +71,6 @@ class JobQueue(Protocol):
         """Requeues after the delay, or marks DEAD once attempts reach max_attempts."""
 
     async def get(self, job_id: str) -> Job | None: ...
+
+    async def stats(self) -> list[JobStat]:
+        """Counts of QUEUED, RUNNING and DEAD jobs per kind, for monitoring (DONE is omitted)."""

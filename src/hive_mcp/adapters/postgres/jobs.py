@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from psycopg.types.json import Jsonb
 
 from hive_mcp.adapters.postgres.db import lock
-from hive_mcp.ports.jobs import Job, JobState
+from hive_mcp.ports.jobs import Job, JobStat, JobState
 
 if TYPE_CHECKING:
     from hive_mcp.adapters.postgres.db import PgDatabase
@@ -143,3 +143,23 @@ class PgJobs:
             cur = await conn.execute("SELECT * FROM jobs WHERE id = %s", (job_id,))
             row = await cur.fetchone()
             return _job(row) if row else None
+
+    async def stats(self) -> list[JobStat]:
+        now = self._clock.now()
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                "SELECT kind, state, count(*) AS n, "
+                "min(run_after) FILTER (WHERE state = 'queued' AND run_after <= %s) AS due "
+                "FROM jobs WHERE state != 'done' GROUP BY kind, state ORDER BY kind, state",
+                (now,),
+            )
+            rows = await cur.fetchall()
+        return [
+            JobStat(
+                r["kind"],
+                JobState(r["state"]),
+                r["n"],
+                (now - r["due"]).total_seconds() if r["due"] else 0.0,
+            )
+            for r in rows
+        ]

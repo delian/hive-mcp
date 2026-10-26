@@ -19,6 +19,7 @@ from hive_mcp.domain.principal import Principal, Role
 from hive_mcp.domain.scope import parse_scope, scope_key
 from hive_mcp.embeddings.models import fetch_model, find_files
 from hive_mcp.ops.drain import DrainingServer
+from hive_mcp.ops.logs import configure_logging
 from hive_mcp.ops.state import Lifecycle
 from hive_mcp.security.directory import DirectoryUser, UserDirectory, normalize_email
 from hive_mcp.security.jsonfile import AtomicJsonFile
@@ -45,6 +46,7 @@ cli.add_typer(groups_app)  # sync-groups
 def serve() -> None:
     """Run the MCP server (settings from HIVE_* env vars)."""
     settings = Settings()
+    configure_logging(settings.log_format, settings.log_level)
     lifecycle = Lifecycle()
     config = uvicorn.Config(
         create_app(settings, lifecycle),
@@ -53,6 +55,7 @@ def serve() -> None:
         timeout_graceful_shutdown=int(settings.shutdown_timeout),
         proxy_headers=True,
         forwarded_allow_ips=settings.forwarded_allow_ips,
+        log_config=None,  # our handler formats every line, uvicorn's included
     )
     DrainingServer(config, lifecycle, settings.drain_seconds).run()
 

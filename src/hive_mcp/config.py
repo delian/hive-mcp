@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -71,6 +72,11 @@ class Settings(BaseSettings):
     group_sync_key_file: Path | None = None  # service account key (domain-wide delegation)
     group_sync_admin: str | None = None  # Workspace admin the service account acts as
     group_sync_minutes: int = Field(default=0, ge=0)  # 0 = only when `hive sync-groups` is run
+    metrics_token: SecretStr | None = (
+        None  # /metrics (Prometheus) is served only with a scrape token
+    )
+    log_format: Literal["text", "json"] = "text"
+    log_level: str = "INFO"
     admin_ui: bool = False  # serve the small web admin pages under /admin (opt-in)
     # Number of server processes sharing one database (external profile). Above 1: rate limits are
     # shared through Postgres, quota reads are fresh, and a fixed HIVE_SECRET_KEY is required.

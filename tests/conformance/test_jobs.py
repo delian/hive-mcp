@@ -98,3 +98,27 @@ async def test_concurrent_dedupe_enqueue_creates_one_job(backend):
             *(backend.jobs.enqueue("org1", "ingest", {}, dedupe_key=key) for _ in range(8))
         )
         assert len({j.id for j in jobs}) == 1, f"duplicate jobs for {key}"
+
+
+async def test_stats_report_the_backlog_per_kind_and_state(backend):
+    from hive_mcp.ports.jobs import JobStat  # noqa: PLC0415
+
+    assert await backend.jobs.stats() == []
+    done = await backend.jobs.enqueue("org1", "ingest", {})
+    await backend.jobs.claim("w", KINDS, 30)
+    await backend.jobs.complete(done.id, "w")  # finished work is not reported
+    backend.clock.advance(seconds=5)
+    await backend.jobs.enqueue("org1", "embed", {})
+    await backend.jobs.enqueue("org2", "embed", {})
+    await backend.jobs.enqueue("org1", "embed", {}, delay_seconds=3600)  # queued but not yet due
+    backend.clock.advance(seconds=10)
+    running = await backend.jobs.enqueue("org1", "ingest", {})
+    await backend.jobs.claim("w", frozenset({"ingest"}), 30)
+    stats = {(s.kind, s.state): s for s in await backend.jobs.stats()}
+    assert stats[("embed", JobState.QUEUED)] == JobStat("embed", JobState.QUEUED, 3, 10.0)
+    assert stats[("ingest", JobState.RUNNING)].count == 1 and running
+    assert ("ingest", JobState.DONE) not in stats
+    dead = await backend.jobs.enqueue("org1", "dead", {}, max_attempts=1)
+    await backend.jobs.claim("w", frozenset({"dead"}), 30)
+    await backend.jobs.fail(dead.id, "w", "boom", 0)
+    assert any(s.kind == "dead" and s.state is JobState.DEAD for s in await backend.jobs.stats())

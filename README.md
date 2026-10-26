@@ -19,7 +19,7 @@ against real Google, real assistants or a real Azure deployment** - see the open
 | Search quality, embedders, reranker | [EVALUATION](docs/EVALUATION.md), [EMBEDDINGS](docs/EMBEDDINGS.md) |
 | Sharing and approvals | [PROMOTION](docs/PROMOTION.md) |
 | Knowledge work | [CURATION](docs/CURATION.md), [GRAPH](docs/GRAPH.md), [ENTITIES](docs/ENTITIES.md), [HISTORY](docs/HISTORY.md), [INGEST](docs/INGEST.md) |
-| Operating | [ADMIN](docs/ADMIN.md) (audit, usage, quotas, web page), [GROUPS](docs/GROUPS.md) (Workspace group sync), [RETENTION](docs/RETENTION.md) |
+| Operating | [ADMIN](docs/ADMIN.md) (audit, usage, quotas, web page), [GROUPS](docs/GROUPS.md) (Workspace group sync), [RETENTION](docs/RETENTION.md), [OBSERVABILITY](docs/OBSERVABILITY.md) (logs, metrics, alerts) |
 | Design | [PLAN](docs/PLAN.md), [STORAGE](docs/STORAGE.md), [SERVICES](docs/SERVICES.md), [BENCHMARK](docs/BENCHMARK.md) |
 
 ## Quick start

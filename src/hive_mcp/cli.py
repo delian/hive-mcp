@@ -316,3 +316,25 @@ def _run_cli(coro_fn: Callable[[], Coroutine[Any, Any, None]]) -> None:
     except (KeyError, HiveError) as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(1) from exc
+
+
+@cli.command("eval")
+def evaluate_command(
+    path: Path = typer.Argument(  # noqa: B008
+        ..., exists=True, help="Evaluation set (JSON), e.g. evals/core.json."
+    ),
+    sweep: bool = typer.Option(False, help="Also sweep the vector relevance floor."),
+    floor: float | None = typer.Option(None, help="Override the embedder's relevance floor."),
+) -> None:
+    """Score keyword, vector and hybrid retrieval with the configured embedder (HIVE_EMBEDDER)."""
+    from hive_mcp.embeddings.factory import make_embedder  # noqa: PLC0415
+    from hive_mcp.evaluation import dataset, runner  # noqa: PLC0415
+
+    async def run() -> None:
+        embedder = make_embedder(Settings())
+        data = dataset.load(path)
+        points = tuple(x / 100 for x in range(0, 100, 5)) if sweep else ()
+        report = await runner.evaluate(data, embedder, floor=floor, sweep=points)
+        typer.echo(runner.format_report(report))
+
+    _run_cli(run)

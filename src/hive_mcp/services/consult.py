@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from hive_mcp.domain.access import Tier, read_filter
 from hive_mcp.domain.errors import EmbeddingUnavailable
-from hive_mcp.search.ranking import RankingConfig, rrf, weight
+from hive_mcp.search.ranking import RankingConfig, fuse, weight
 from hive_mcp.search.snippets import snippet_for
 from hive_mcp.search.tokenize import tokenize
 from hive_mcp.services.models import ConsultResult, ForeignPolicy, Match, provenance
@@ -49,7 +49,9 @@ class ConsultService:
                 vector_hits = [h for h in found if h.score >= self._embedder.min_similarity]
             except EmbeddingUnavailable:
                 notes.append("semantic search unavailable; showing keyword matches only")
-        fused = rrf([[h.item_id for h in text_hits], [h.item_id for h in vector_hits]])
+        fused = fuse(
+            [h.item_id for h in text_hits], [h.item_id for h in vector_hits], self._ranking
+        )
         chunk_of = {h.item_id: h.chunk_ord for h in vector_hits}
         views = await self._items.get_many(principal, list(fused))  # authoritative access re-check
         now, scored = self._clock.now(), []

@@ -41,7 +41,7 @@ BGE_SMALL = ModelSpec(
     tokenizer_url="https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/main/tokenizer.json",
     tokenizer_sha256="d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66",
     query_prefix="Represent this sentence for searching relevant passages: ",
-    min_similarity=0.55,  # positives >= 0.57, unrelated <= 0.53 on a small hand-made set
+    min_similarity=0.58,  # evals/core.json: no unrelated query passes, R@3 0.97 (0.98 at 0.55)
 )
 
 SPECS = {BGE_SMALL.name: BGE_SMALL}

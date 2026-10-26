@@ -64,3 +64,12 @@ async def test_upsert_replaces_and_edge_inputs(backend):
     assert await ids(backend, ALICE, "") == []
     assert await ids(backend, ALICE, "!!! ???") == []
     assert await ids(backend, ALICE, "beta", limit=0) == []
+
+
+async def test_common_words_in_the_query_do_not_match_everything(backend):
+    await add(backend, "d0", "the quick fox jumps over the lazy dog")
+    await add(backend, "d1", "pulse timing for radar")
+    assert await ids(backend, ALICE, "what is the radar for") == [
+        "d1"
+    ]  # "the"/"for" alone match d0
+    assert await ids(backend, ALICE, "the")  # a query of only common words still searches

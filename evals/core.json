@@ -1,0 +1,980 @@
+{
+ "name": "core",
+ "description": "Hand-written: 46 short documents, paraphrase and keyword queries, and unrelated negatives.",
+ "docs": [
+  {
+   "id": "rf1",
+   "title": "Radar range equation",
+   "body": "The maximum detection range of a radar grows with the fourth root of transmit power and antenna gain. Doubling the power therefore increases range by only about nineteen percent."
+  },
+  {
+   "id": "rf2",
+   "title": "Pulse repetition frequency and ambiguity",
+   "body": "A high pulse repetition frequency avoids Doppler ambiguity but causes range folding, because echoes from earlier pulses arrive after the next pulse is sent."
+  },
+  {
+   "id": "rf3",
+   "title": "Matched filter",
+   "body": "The matched filter maximises signal to noise ratio by correlating the received waveform with a time reversed copy of the transmitted waveform."
+  },
+  {
+   "id": "rf4",
+   "title": "Linear frequency modulated chirp",
+   "body": "A linear chirp sweeps frequency across the pulse, giving a large time bandwidth product. After pulse compression the range resolution depends on bandwidth, not pulse length."
+  },
+  {
+   "id": "rf5",
+   "title": "Antenna sidelobe levels",
+   "body": "Low sidelobes reduce clutter returns and jamming susceptibility. Amplitude tapering such as Taylor weighting trades main beam width for lower sidelobes."
+  },
+  {
+   "id": "rf6",
+   "title": "Noise figure of a receiver chain",
+   "body": "The Friis formula shows the first low noise amplifier dominates the cascaded noise figure, so its gain and noise figure matter most."
+  },
+  {
+   "id": "db1",
+   "title": "Postgres composite index",
+   "body": "A composite index on user_id and created_at turns a slow sort and filter into an index range scan. Column order matters: equality columns first, range columns last."
+  },
+  {
+   "id": "db2",
+   "title": "Database connection pooling",
+   "body": "Opening a connection per request exhausts the server. A pool reuses a bounded number of connections and queues the rest, keeping latency predictable."
+  },
+  {
+   "id": "db3",
+   "title": "Optimistic concurrency with revisions",
+   "body": "Each row carries a revision number. An update succeeds only if the revision still matches what the client read, otherwise the client must re-read and retry."
+  },
+  {
+   "id": "db4",
+   "title": "Write ahead logging in SQLite",
+   "body": "WAL mode lets readers proceed while a writer appends to the log file, which improves concurrency compared with the rollback journal."
+  },
+  {
+   "id": "db5",
+   "title": "pgvector HNSW index",
+   "body": "An HNSW index gives approximate nearest neighbour search with high recall. Larger m and ef construction values improve recall at the cost of build time and memory."
+  },
+  {
+   "id": "db6",
+   "title": "Database backup strategy",
+   "body": "Take a base backup plus continuous archiving of write ahead logs so the database can be restored to any point in time. Test restores regularly."
+  },
+  {
+   "id": "ops1",
+   "title": "Zero downtime deployment",
+   "body": "Roll out a new revision while the old one drains: readiness fails first, in-flight requests finish, and the load balancer stops sending new traffic."
+  },
+  {
+   "id": "ops2",
+   "title": "Docker image size",
+   "body": "Multi stage builds keep compilers out of the final image. Install only runtime dependencies and run as a non root user to shrink size and attack surface."
+  },
+  {
+   "id": "ops3",
+   "title": "Secrets management",
+   "body": "Never bake credentials into images or source control. Inject them at runtime from a vault or the platform's secret store and rotate them regularly."
+  },
+  {
+   "id": "ops4",
+   "title": "Health checks",
+   "body": "Liveness tells the orchestrator when to restart a process; readiness tells the load balancer when to send traffic. Keep them separate and cheap."
+  },
+  {
+   "id": "ops5",
+   "title": "Infrastructure as code",
+   "body": "Describe cloud resources in declarative templates kept in version control, so environments are reproducible and changes are reviewed."
+  },
+  {
+   "id": "ops6",
+   "title": "Log aggregation",
+   "body": "Ship structured json logs from every instance into one searchable store with retention limits, and include a request id for tracing."
+  },
+  {
+   "id": "sec1",
+   "title": "OAuth with PKCE",
+   "body": "Public clients must use the authorization code flow with PKCE so an intercepted code is useless without the verifier that only the client holds."
+  },
+  {
+   "id": "sec2",
+   "title": "Refresh token rotation",
+   "body": "Issue a new refresh token on every use and invalidate the old one. If an old token appears again, revoke the whole family because it was likely stolen."
+  },
+  {
+   "id": "sec3",
+   "title": "SQL injection prevention",
+   "body": "Always bind values as parameters instead of concatenating them into SQL text. Validate identifiers against an allow list."
+  },
+  {
+   "id": "sec4",
+   "title": "Content security policy",
+   "body": "A strict policy forbids inline scripts and framing, limiting the damage of cross site scripting and clickjacking."
+  },
+  {
+   "id": "sec5",
+   "title": "Rate limiting",
+   "body": "Token buckets allow short bursts but cap sustained request rates per client, protecting anonymous endpoints from floods."
+  },
+  {
+   "id": "sec6",
+   "title": "Least privilege access",
+   "body": "Grant each service account only the permissions it needs, scoped to the narrowest resource, and review grants periodically."
+  },
+  {
+   "id": "py1",
+   "title": "Asyncio task cancellation",
+   "body": "Cancelling a task raises CancelledError at its next await. Clean up in finally blocks and never swallow the exception unless you re-raise it."
+  },
+  {
+   "id": "py2",
+   "title": "Python type checking with mypy",
+   "body": "Strict mode flags untyped definitions and implicit Any. Protocols describe structural interfaces without inheritance."
+  },
+  {
+   "id": "py3",
+   "title": "Dataclasses with slots",
+   "body": "Frozen dataclasses with slots are immutable and use less memory than ordinary classes, which suits value objects created in large numbers."
+  },
+  {
+   "id": "py4",
+   "title": "Packaging with uv",
+   "body": "uv resolves and installs dependencies quickly and writes a lock file so every machine gets identical versions."
+  },
+  {
+   "id": "py5",
+   "title": "Property based testing",
+   "body": "Hypothesis generates many inputs and shrinks failures to a minimal example, finding edge cases humans do not think of."
+  },
+  {
+   "id": "py6",
+   "title": "Python profiling",
+   "body": "Use cProfile to find hot functions and py-spy to sample a running process without restarting it."
+  },
+  {
+   "id": "ml1",
+   "title": "Embedding similarity search",
+   "body": "Texts are mapped to vectors and compared by cosine similarity, so passages with similar meaning are close even when they share no words."
+  },
+  {
+   "id": "ml2",
+   "title": "Overfitting and regularisation",
+   "body": "A model that memorises training data performs poorly on new data. Weight decay, dropout and early stopping reduce overfitting."
+  },
+  {
+   "id": "ml3",
+   "title": "Retrieval augmented generation",
+   "body": "Retrieve relevant documents first and place them in the prompt so the language model answers from supplied evidence instead of memory."
+  },
+  {
+   "id": "ml4",
+   "title": "Quantisation of models",
+   "body": "Converting weights from sixteen bit floats to eight bit integers shrinks the model and speeds up inference on CPUs with small accuracy loss."
+  },
+  {
+   "id": "ml5",
+   "title": "Evaluation metrics for retrieval",
+   "body": "Recall at k measures whether a relevant item appears in the top results. Mean reciprocal rank rewards placing it near the top."
+  },
+  {
+   "id": "ml6",
+   "title": "Chunking documents",
+   "body": "Split long documents into passages of a few hundred words with some overlap so each embedding captures one idea."
+  },
+  {
+   "id": "ck1",
+   "title": "Sourdough starter care",
+   "body": "Feed the starter equal weights of flour and water daily at room temperature. It is ready when it doubles within six hours of feeding."
+  },
+  {
+   "id": "ck2",
+   "title": "Searing steak",
+   "body": "Pat the meat dry, heat the pan until smoking and avoid moving the steak so a brown crust forms through the Maillard reaction."
+  },
+  {
+   "id": "ck3",
+   "title": "Cooking pasta al dente",
+   "body": "Salt the boiling water generously and taste a minute before the packet time. Reserve a cup of starchy water to loosen the sauce."
+  },
+  {
+   "id": "ck4",
+   "title": "Knife sharpening",
+   "body": "A whetstone at roughly fifteen degrees restores the edge. Finish with a honing rod and test by slicing paper cleanly."
+  },
+  {
+   "id": "tr1",
+   "title": "Packing light for travel",
+   "body": "Choose a single colour palette, roll clothes and carry only a cabin bag. Laundry on the road beats carrying extra outfits."
+  },
+  {
+   "id": "tr2",
+   "title": "Time zone jet lag",
+   "body": "Shift sleep a few hours per day before departure and get morning daylight at the destination to reset the body clock faster."
+  },
+  {
+   "id": "tr3",
+   "title": "Train tickets booking",
+   "body": "Regional train tickets are cheapest booked weeks ahead, while flexible fares allow changes. Compare with coach prices for long routes."
+  },
+  {
+   "id": "tr4",
+   "title": "Hiking safety",
+   "body": "Check the forecast, tell someone your route, carry water and a map, and turn back before dark if the trail takes longer than planned."
+  },
+  {
+   "id": "mx1",
+   "title": "Meeting notes template",
+   "body": "Record decisions, owners and deadlines first and discussion second, so people who skim still find what they must do."
+  },
+  {
+   "id": "mx2",
+   "title": "Code review etiquette",
+   "body": "Review the change not the person, explain why, offer alternatives and approve quickly once the main concerns are resolved."
+  },
+  {
+   "id": "mx3",
+   "title": "Estimating work",
+   "body": "Break tasks into pieces under a day, include testing and review time, and add a buffer proportional to uncertainty rather than padding everything."
+  },
+  {
+   "id": "mx4",
+   "title": "On-call handover",
+   "body": "End each shift with a written summary of open incidents, mitigations in place and next steps so the next engineer starts informed."
+  }
+ ],
+ "queries": [
+  {
+   "q": "how far away can a pulse system see a target if we double the transmitter output",
+   "relevant": [
+    "rf1"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "radar range equation transmit power",
+   "relevant": [
+    "rf1"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "why do distant echoes show up at the wrong distance when pulses are sent very frequently",
+   "relevant": [
+    "rf2"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "pulse repetition frequency range ambiguity",
+   "relevant": [
+    "rf2"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "best way to pick a known waveform out of noise by correlating with a mirrored copy",
+   "relevant": [
+    "rf3"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "matched filter signal to noise",
+   "relevant": [
+    "rf3"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "spreading the pulse across a band of frequencies lets us see two close objects separately",
+   "relevant": [
+    "rf4"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "chirp bandwidth pulse compression resolution",
+   "relevant": [
+    "rf4"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "shaping the amplitude across an array to cut unwanted off-axis radiation",
+   "relevant": [
+    "rf5"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "antenna sidelobes taper Taylor",
+   "relevant": [
+    "rf5"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "which stage in the receiving electronics decides how noisy the whole path is",
+   "relevant": [
+    "rf6"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "Friis cascaded noise figure amplifier",
+   "relevant": [
+    "rf6"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "speeding up a query that filters by owner and orders by date using a multi column btree",
+   "relevant": [
+    "db1"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "composite index user_id created_at",
+   "relevant": [
+    "db1"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "why not open a fresh link to the database for every web request",
+   "relevant": [
+    "db2"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "connection pool bounded reuse",
+   "relevant": [
+    "db2"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "preventing two people from silently overwriting each other's edits",
+   "relevant": [
+    "db3"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "optimistic locking revision conflict",
+   "relevant": [
+    "db3"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "letting many readers work while a single writer is active in the embedded database",
+   "relevant": [
+    "db4"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "SQLite WAL mode readers writer",
+   "relevant": [
+    "db4"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "fast similarity lookups over embeddings in postgres with tunable accuracy",
+   "relevant": [
+    "db5"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "pgvector HNSW recall ef_construction",
+   "relevant": [
+    "db5"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "how to be able to roll the database back to exactly ten minutes ago",
+   "relevant": [
+    "db6"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "point in time recovery base backup WAL",
+   "relevant": [
+    "db6"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "upgrading a service without dropping the requests currently being handled",
+   "relevant": [
+    "ops1"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "graceful shutdown readiness drain",
+   "relevant": [
+    "ops1"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "making container images smaller and safer by separating the build step",
+   "relevant": [
+    "ops2"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "multi stage build non root image",
+   "relevant": [
+    "ops2"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "where should passwords and api keys live instead of in the repository",
+   "relevant": [
+    "ops3"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "secrets vault rotate credentials",
+   "relevant": [
+    "ops3"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "how the platform decides whether to restart a container or just stop routing to it",
+   "relevant": [
+    "ops4"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "liveness readiness probe",
+   "relevant": [
+    "ops4"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "keeping the definition of servers and networks in files that can be reviewed like software",
+   "relevant": [
+    "ops5"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "Bicep Terraform declarative template",
+   "relevant": [
+    "ops5"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "collecting application output from many machines into a single place you can search",
+   "relevant": [
+    "ops6"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "structured logs request id retention",
+   "relevant": [
+    "ops6"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "stopping a stolen redirect code from being exchanged by an attacker",
+   "relevant": [
+    "sec1"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "PKCE authorization code verifier",
+   "relevant": [
+    "sec1"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "detecting that a long lived login credential has leaked by watching for reuse",
+   "relevant": [
+    "sec2"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "refresh token rotation reuse detection",
+   "relevant": [
+    "sec2"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "stop user input from changing the meaning of a database statement",
+   "relevant": [
+    "sec3"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "parameterized queries SQL injection",
+   "relevant": [
+    "sec3"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "browser header that blocks injected scripts and invisible overlay framing",
+   "relevant": [
+    "sec4"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "Content-Security-Policy XSS clickjacking",
+   "relevant": [
+    "sec4"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "protecting a public sign up endpoint from being hammered by a script",
+   "relevant": [
+    "sec5"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "token bucket rate limit abuse",
+   "relevant": [
+    "sec5"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "giving programs the minimum rights necessary and nothing more",
+   "relevant": [
+    "sec6"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "least privilege service account permissions",
+   "relevant": [
+    "sec6"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "what happens inside a coroutine when someone stops it midway",
+   "relevant": [
+    "py1"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "asyncio cancel CancelledError finally",
+   "relevant": [
+    "py1"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "making the static analyser complain about missing annotations",
+   "relevant": [
+    "py2"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "mypy strict Protocol annotations",
+   "relevant": [
+    "py2"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "lightweight immutable record types that save memory",
+   "relevant": [
+    "py3"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "frozen dataclass slots immutable",
+   "relevant": [
+    "py3"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "fast tool that pins exact package versions for reproducible environments",
+   "relevant": [
+    "py4"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "uv lock file dependencies",
+   "relevant": [
+    "py4"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "tests that invent their own awkward inputs and reduce failing ones to the smallest case",
+   "relevant": [
+    "py5"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "Hypothesis property based shrink",
+   "relevant": [
+    "py5"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "finding which function is eating the time in a slow script",
+   "relevant": [
+    "py6"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "cProfile py-spy hot functions",
+   "relevant": [
+    "py6"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "finding passages that mean the same thing despite using different vocabulary",
+   "relevant": [
+    "ml1"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "embedding cosine similarity semantic search",
+   "relevant": [
+    "ml1"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "why a network does great on training examples but fails on unseen ones",
+   "relevant": [
+    "ml2"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "overfitting regularisation dropout early stopping",
+   "relevant": [
+    "ml2"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "giving a chatbot the right reference text before it answers",
+   "relevant": [
+    "ml3"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "RAG retrieval augmented generation prompt",
+   "relevant": [
+    "ml3"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "making a neural network smaller and quicker by using fewer bits per number",
+   "relevant": [
+    "ml4"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "int8 quantisation inference CPU",
+   "relevant": [
+    "ml4"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "scoring how well a search system puts the right answer near the front",
+   "relevant": [
+    "ml5"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "recall at k mean reciprocal rank",
+   "relevant": [
+    "ml5"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "cutting big files into smaller pieces before turning them into vectors",
+   "relevant": [
+    "ml6"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "chunking overlap passages embedding",
+   "relevant": [
+    "ml6"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "keeping the wild yeast culture for bread alive and active",
+   "relevant": [
+    "ck1"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "sourdough starter feeding flour water",
+   "relevant": [
+    "ck1"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "getting a deeply browned surface on a piece of beef",
+   "relevant": [
+    "ck2"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "sear steak Maillard crust hot pan",
+   "relevant": [
+    "ck2"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "boiling noodles so they stay slightly firm in the middle",
+   "relevant": [
+    "ck3"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "pasta al dente salted water",
+   "relevant": [
+    "ck3"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "restoring a dull blade with a stone at a shallow angle",
+   "relevant": [
+    "ck4"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "whetstone knife sharpening angle",
+   "relevant": [
+    "ck4"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "taking just carry-on luggage for a two week trip",
+   "relevant": [
+    "tr1"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "packing carry-on cabin bag light",
+   "relevant": [
+    "tr1"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "adjusting your sleep rhythm after flying across many hours of difference",
+   "relevant": [
+    "tr2"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "jet lag time zone daylight sleep",
+   "relevant": [
+    "tr2"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "buying rail fares early to pay less but with fewer changes allowed",
+   "relevant": [
+    "tr3"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "train tickets booking cheapest advance",
+   "relevant": [
+    "tr3"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "precautions before a long walk in the mountains",
+   "relevant": [
+    "tr4"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "hiking safety route forecast map water",
+   "relevant": [
+    "tr4"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "how to write minutes that make clear who does what by when",
+   "relevant": [
+    "mx1"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "meeting notes decisions owners deadlines",
+   "relevant": [
+    "mx1"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "how to give feedback on a colleague's pull request kindly",
+   "relevant": [
+    "mx2"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "code review feedback pull request",
+   "relevant": [
+    "mx2"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "predicting how long a project will take without wishful thinking",
+   "relevant": [
+    "mx3"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "estimating tasks buffer uncertainty",
+   "relevant": [
+    "mx3"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "passing responsibility for production alerts to the next person",
+   "relevant": [
+    "mx4"
+   ],
+   "type": "paraphrase"
+  },
+  {
+   "q": "on-call handover incidents summary",
+   "relevant": [
+    "mx4"
+   ],
+   "type": "keyword"
+  },
+  {
+   "q": "quarterly marketing budget for the sales department",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "football league standings this weekend",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "best smartphone camera under three hundred dollars",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "history of the Roman empire emperors",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "how to knit a wool sweater",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "stock market closing prices today",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "symptoms of seasonal allergies",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "wedding venue ideas in the countryside",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "guitar chord progressions for beginners",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "gardening tomatoes in raised beds",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "movie recommendations science fiction",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "learn to play chess openings",
+   "relevant": [],
+   "type": "negative"
+  }
+ ]
+}

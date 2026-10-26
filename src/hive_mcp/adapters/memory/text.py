@@ -7,7 +7,7 @@ from collections import Counter
 from typing import TYPE_CHECKING
 
 from hive_mcp.domain.item import Hit
-from hive_mcp.search.tokenize import tokenize
+from hive_mcp.search.tokenize import query_terms, tokenize
 
 if TYPE_CHECKING:
     from hive_mcp.domain.access import Acl, ScopeFilter
@@ -25,7 +25,7 @@ class MemoryText:
         self._docs[doc.item_id] = (doc.acl, Counter(tokens), len(tokens))
 
     async def search(self, flt: ScopeFilter, query: str, limit: int) -> list[Hit]:
-        terms = set(tokenize(query))
+        terms = set(query_terms(query))
         if not terms or limit < 1:
             return []
         total = len(self._docs)

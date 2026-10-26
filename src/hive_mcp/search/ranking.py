@@ -12,16 +12,18 @@ from hive_mcp.domain.scope import ScopeLevel
 RRF_K = 60
 
 
-def rrf(rankings: list[list[str]], k: int = RRF_K) -> dict[str, float]:
-    """Reciprocal rank fusion: each list adds 1/(k + rank); duplicates inside a list count once."""
+def rrf(
+    rankings: list[list[str]], k: int = RRF_K, weights: list[float] | None = None
+) -> dict[str, float]:
+    """Reciprocal rank fusion: a list adds weight/(k + rank) per item (repeats count once)."""
     scores: dict[str, float] = {}
-    for ranking in rankings:
+    for ranking, weight in zip(rankings, weights or [1.0] * len(rankings), strict=True):
         seen: set[str] = set()
         for rank, item_id in enumerate(ranking, start=1):
             if item_id in seen:
                 continue
             seen.add(item_id)
-            scores[item_id] = scores.get(item_id, 0.0) + 1.0 / (k + rank)
+            scores[item_id] = scores.get(item_id, 0.0) + weight / (k + rank)
     return scores
 
 
@@ -36,6 +38,10 @@ class RankingConfig:
             ScopeLevel.ORG: 0.7,
         }
     )
+    # Hybrid fusion, tuned on evals/core.json (see docs/EVALUATION.md): a real embedding model is
+    # the stronger signal, and keyword hits beyond the first few are mostly noise.
+    vector_weight: float = 2.0
+    keyword_depth: int = 5
     referenced_weight: float = 0.6  # knowledge from groups the caller does not belong to
     status_weight: dict[Status, float] = field(
         default_factory=lambda: {
@@ -83,3 +89,8 @@ def weight(  # noqa: PLR0913 - one weight per ranking signal
     scope = cfg.scope_weight[level] * (cfg.referenced_weight if tier is Tier.REFERENCED else 1.0)
     fresh = freshness(kind, updated_at, now, cfg)
     return float(scope * cfg.status_weight[status] * (0.5 + 0.5 * fresh))
+
+
+def fuse(text_ids: list[str], vector_ids: list[str], config: RankingConfig) -> dict[str, float]:
+    """The hybrid ranking: weighted reciprocal rank fusion of keyword and vector results."""
+    return rrf([text_ids[: config.keyword_depth], vector_ids], weights=[1.0, config.vector_weight])

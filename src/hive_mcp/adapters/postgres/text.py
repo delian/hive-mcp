@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from hive_mcp.adapters.postgres.acl import acl_where
 from hive_mcp.adapters.postgres.codec import acl_params
 from hive_mcp.domain.item import Hit
-from hive_mcp.search.tokenize import tokenize
+from hive_mcp.search.tokenize import query_terms, tokenize
 
 if TYPE_CHECKING:
     from hive_mcp.adapters.postgres.db import PgDatabase
@@ -37,7 +37,7 @@ class PgText:
             )
 
     async def search(self, flt: ScopeFilter, query: str, limit: int) -> list[Hit]:
-        terms = sorted(set(tokenize(query)))
+        terms = sorted(set(query_terms(query)))
         if not terms or limit < 1:
             return []
         where, params = acl_where(flt)

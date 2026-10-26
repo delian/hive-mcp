@@ -157,7 +157,7 @@ async def test_a_big_enough_table_gets_an_index_in_the_background_and_still_answ
     store = LanceVectors(tmp_path / "lance", index_min_rows=200)
     vecs = await fill(store, 300)
     table = store._open("m")
-    assert wait_for(lambda: store._has_index(table)), "the index was never built"
+    assert wait_for(lambda: store._ann.has_index(table)), "the index was never built"
     flt = ScopeFilter("org1", frozenset({Scope(ScopeLevel.PROJECT, f"g{g}") for g in (0, 1, 2)}))
     allowed = np.array([i for i in range(300) if i % 6 in (0, 1, 2)])
     rng = np.random.default_rng(5)
@@ -182,31 +182,33 @@ async def test_small_tables_stay_exact_and_get_no_index(tmp_path, monkeypatch):
     monkeypatch.setattr(module, "OPTIMIZE_EVERY", 20)
     store = LanceVectors(tmp_path / "lance", index_min_rows=10_000)
     await fill(store, 60)
-    assert not store._has_index(store._open("m")) and store._probes(store._open("m")) is None
+    assert (
+        not store._ann.has_index(store._open("m")) and store._ann.probes(store._open("m")) is None
+    )
 
 
 async def test_probes_cover_most_partitions_and_can_be_overridden(tmp_path, monkeypatch):
     store = LanceVectors(tmp_path / "lance")
     await fill(store, 5)
     table = store._open("m")
-    monkeypatch.setattr(store, "_has_index", lambda t: True)
+    monkeypatch.setattr(store._ann, "has_index", lambda t: True)
     for built, probes in (
         (220_000, 399),
         (100, 9),
         (36, 7),
     ):  # ceil(0.85 * sqrt(n)), never below 8 partitions' worth
-        store._remember_build(table.name, built)
-        store._index_info.clear()
-        assert store._probes(table) == probes, built
-    store.nprobes = 3
-    assert store._probes(table) == 3
+        store._ann._remember_build(table.name, built)
+        store._ann._info.clear()
+        assert store._ann.probes(table) == probes, built
+    store._ann.nprobes = 3
+    assert store._ann.probes(table) == 3
 
 
 async def test_the_build_size_survives_a_restart(tmp_path):
     first = LanceVectors(tmp_path / "lance")
-    first._remember_build("vec_x", 123_456)
-    assert LanceVectors(tmp_path / "lance")._built_rows("vec_x") == 123_456
-    assert LanceVectors(tmp_path / "lance")._built_rows("vec_other") == 0
+    first._ann._remember_build("vec_x", 123_456)
+    assert LanceVectors(tmp_path / "lance")._ann._built_rows("vec_x") == 123_456
+    assert LanceVectors(tmp_path / "lance")._ann._built_rows("vec_other") == 0
 
 
 async def test_the_index_is_rebuilt_only_after_the_table_doubles(tmp_path, monkeypatch):
@@ -215,20 +217,20 @@ async def test_the_index_is_rebuilt_only_after_the_table_doubles(tmp_path, monke
     monkeypatch.setattr(module, "OPTIMIZE_EVERY", 50)
     store = LanceVectors(tmp_path / "lance", index_min_rows=100)
     builds = []
-    real = store._build_index
+    real = store._ann._build_index
 
     def counting(name, rows):
         builds.append(rows)
         real(name, rows)
 
-    monkeypatch.setattr(store, "_build_index", counting)
+    monkeypatch.setattr(store._ann, "_build_index", counting)
     await fill(store, 150)  # the compaction at the 100th write finds 100 rows: first build
-    assert wait_for(lambda: builds == [100] and not store._building)
+    assert wait_for(lambda: builds == [100] and not store._ann.building)
     await fill(store, 49, start=150)  # 199 rows: the compaction at write 150 saw 150, below double
     await asyncio.sleep(0.5)
     assert builds == [100]
     await fill(store, 1, start=199)  # the 200th write: double the size at the last build
-    assert wait_for(lambda: builds == [100, 200] and not store._building)
+    assert wait_for(lambda: builds == [100, 200] and not store._ann.building)
 
 
 async def test_a_failing_index_build_leaves_searches_working_and_is_retried(tmp_path, monkeypatch):
@@ -240,9 +242,9 @@ async def test_a_failing_index_build_leaves_searches_working_and_is_retried(tmp_
 
     def broken(name, rows):
         calls.append(name)
-        store._building.discard(name)
+        store._ann.building.discard(name)
 
-    monkeypatch.setattr(store, "_build_index", broken)
+    monkeypatch.setattr(store._ann, "_build_index", broken)
     vecs = await fill(store, 160)
     assert wait_for(lambda: len(calls) >= 1)
     q = vecs[7]

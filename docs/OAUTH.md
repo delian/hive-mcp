@@ -49,11 +49,22 @@ Static bearer tokens (`hive token create`) keep working next to OAuth, for pipel
   form has its own CSRF token; pages cannot be framed and send no scripts.
 - Clients can revoke only their own tokens (`/revoke`, RFC 7009, works for secret-less public clients).
 
+## Consent phishing and look-alike apps
+Anyone can register a client (that is how claude.ai/ChatGPT/Gemini connect) and send a user a sign-in link; the consent page
+then shows an app name the app chose itself. The page also shows the host the user will be sent to, but a careless "Allow"
+would hand that app a 30-day refresh token. Close this by setting `HIVE_OAUTH_REDIRECT_HOSTS` to the hosts of the assistants
+you use (for example `["claude.ai","chatgpt.com"]`): registration of any other redirect host is then refused.
+
+## Who a sign-in belongs to
+The first successful Google sign-in of a directory user pins their Google account id; a later sign-in with the same email
+but another Google account (an address deleted and reassigned) is refused. Editing the user with `hive user add` clears the pin.
+
 ## Limits and decisions to know about
-- Consent is asked **every time** (nothing is remembered), the safe default.
+- Consent is remembered per user + client + redirect URI + scopes for `HIVE_CONSENT_REMEMBER_DAYS` (default 30; 0 = ask every
+  time). The Google sign-in and the directory check still happen on every login.
 - Open client registration can be spammed. Registrations that never complete a sign-in expire after 30 days; put a rate limit
   in front (Azure Front Door / WAF) for production.
 - Confidential-client secrets (clients that register with a secret) are stored as the SDK requires, in the database.
-- Teams and projects come from the directory file, not from Google groups (Workspace group sync is not built).
+- Teams and projects come from the directory file, or from Workspace groups with [group sync](GROUPS.md).
 - Google is only contacted at sign-in; later Google-side suspension is not noticed until the directory entry is changed.
 - The SDK's `/revoke` is replaced by ours because its request model rejects secret-less public clients.

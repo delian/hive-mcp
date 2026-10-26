@@ -57,7 +57,7 @@ LOOPBACK = ("localhost", "127.0.0.1", "[::1]", "::1")
 DANGEROUS_SCHEMES = frozenset({"javascript", "data", "file", "vbscript", "blob", "about", "ftp"})
 
 
-def check_redirect_uris(uris: list[Any]) -> None:
+def check_redirect_uris(uris: list[Any], allowed_hosts: frozenset[str] = frozenset()) -> None:
     """https, loopback http (native apps) and app-specific schemes are fine; script-like schemes are not."""
     if not uris:
         raise RegistrationError("invalid_redirect_uri", "at least one redirect URI is required")
@@ -74,6 +74,10 @@ def check_redirect_uris(uris: list[Any]) -> None:
             )
         if scheme in ("http", "https") and not uri.hostname:
             raise RegistrationError("invalid_redirect_uri", "redirect URI needs a host")
+        if allowed_hosts and (uri.hostname or "").lower() not in allowed_hosts:
+            raise RegistrationError(
+                "invalid_redirect_uri", "this server accepts only known applications"
+            )
 
 
 class HiveOAuthProvider:
@@ -103,7 +107,7 @@ class HiveOAuthProvider:
         return OAuthClientInformationFull.model_validate(record) if record else None
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
-        check_redirect_uris(list(client_info.redirect_uris or []))
+        check_redirect_uris(list(client_info.redirect_uris or []), self.config.redirect_hosts)
         stored = await self.kv.put_if_absent(
             NS_CLIENT,
             str(client_info.client_id),

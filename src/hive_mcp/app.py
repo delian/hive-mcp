@@ -132,6 +132,7 @@ def build_oauth(
         settings.access_token_ttl,
         settings.refresh_token_ttl,
         settings.consent_remember_days * 86400,
+        frozenset(h.lower() for h in settings.oauth_redirect_hosts),
     )
     provider = HiveOAuthProvider(
         get_kv=get_kv,
@@ -226,7 +227,8 @@ def create_app(
             await services.close()
 
     tokens = TokenStore(settings.tokens_path)
-    static = StaticTokenVerifier(tokens, resource=settings.resource_url)
+    directory = UserDirectory(AtomicJsonFile(settings.users_path, default=[]))
+    static = StaticTokenVerifier(tokens, resource=settings.resource_url, directory=directory)
     extra_routes: list[Route] = []
     provider: HiveOAuthProvider | None = None
     if settings.oauth_enabled and verifier is None:

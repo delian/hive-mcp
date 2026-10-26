@@ -89,11 +89,13 @@ async def test_idle_buckets_are_cleaned_up(two_replicas):
 
 def test_several_replicas_need_the_external_profile_and_a_fixed_key():
     with pytest.raises(ValueError, match="external profile"):
-        Settings(replicas=2, secret_key="k")
+        Settings(replicas=2, secret_key="k" * 32)
     with pytest.raises(ValueError, match="HIVE_SECRET_KEY"):
         Settings(replicas=2, profile=Profile.EXTERNAL, database_url="x")
     assert (
-        Settings(replicas=2, profile=Profile.EXTERNAL, database_url="x", secret_key="k").replicas
+        Settings(
+            replicas=2, profile=Profile.EXTERNAL, database_url="x", secret_key="k" * 32
+        ).replicas
         == 2
     )
     assert Settings().replicas == 1

@@ -21,6 +21,10 @@ uv run hive serve                          # http://localhost:8080/mcp
 claude mcp add --transport http hive http://localhost:8080/mcp --header "Authorization: Bearer <token>"
 ```
 
+Tokens whose subject is an email address belong to a person in the user directory: they stop working the moment that person is
+removed or disabled (`hive user remove` / `hive user add --disabled`). Other subjects (service accounts, pipelines) are not people and
+are only ended by `hive token revoke` or expiry.
+
 Identity comes only from the token (`sub` plus the claims `hive_org`, `hive_role`, `hive_teams`, `hive_projects`). **No tool takes a
 user or organisation argument**; extra arguments are ignored. A missing role means read-only; an unknown role also means read-only.
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import os
 import secrets
 from typing import TYPE_CHECKING
 
@@ -21,8 +22,11 @@ def load_secret_key(configured: str | None, path: Path) -> bytes:
         return bytes.fromhex(path.read_text().strip())
     path.parent.mkdir(parents=True, exist_ok=True)
     key = secrets.token_bytes(32)
-    path.write_text(key.hex())
-    path.chmod(0o600)
+    fd = os.open(
+        path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+    )  # never readable by others, even briefly
+    with os.fdopen(fd, "w") as handle:
+        handle.write(key.hex())
     return key
 
 
@@ -40,4 +44,6 @@ class CookieSigner:
         """True only if the cookie was issued by this server *for this exact transaction*."""
         if not cookie or not txn_id:
             return False
-        return hmac.compare_digest(cookie, self.sign(txn_id))
+        return hmac.compare_digest(
+            cookie.encode(), self.sign(txn_id).encode()
+        )  # bytes: str with non-ASCII raises

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from hive_mcp.domain.errors import ValidationError
 from hive_mcp.domain.principal import Principal, Role
 from hive_mcp.domain.scope import parse_scope, scope_key
+
+log = logging.getLogger("hive.security")
 
 if TYPE_CHECKING:
     from hive_mcp.security.jsonfile import AtomicJsonFile
@@ -41,6 +44,9 @@ class DirectoryUser:
     projects: frozenset[str] = field(default_factory=frozenset)
     disabled: bool = False
     approves: frozenset[str] = field(default_factory=frozenset)  # scope keys, e.g. "team:t1"
+    google_sub: str | None = (
+        None  # Google account id, pinned at first sign-in (address reuse is refused)
+    )
 
     def principal(self) -> Principal:
         approves = frozenset(parse_scope(k) for k in self.approves)
@@ -55,6 +61,7 @@ class DirectoryUser:
             "projects": sorted(self.projects),
             "disabled": self.disabled,
             "approves": sorted(self.approves),
+            **({"google_sub": self.google_sub} if self.google_sub else {}),
         }
 
     @staticmethod
@@ -67,6 +74,7 @@ class DirectoryUser:
             projects=_strings(raw.get("projects")),
             disabled=bool(raw.get("disabled", False)),
             approves=frozenset(scope_key(parse_scope(k)) for k in _strings(raw.get("approves"))),
+            google_sub=str(raw["google_sub"]) if raw.get("google_sub") else None,
         )
 
 
@@ -76,9 +84,26 @@ class UserDirectory:
     def __init__(self, store: AtomicJsonFile) -> None:
         self._store = store
 
+    def _split(self) -> tuple[dict[str, DirectoryUser], list[Any]]:
+        """Valid users, and the unreadable rows (kept as they are when the file is rewritten)."""
+        users: dict[str, DirectoryUser] = {}
+        bad: list[Any] = []
+        for raw in self._store.read():
+            try:
+                user = DirectoryUser.from_json(raw)
+            except (KeyError, ValueError, TypeError, AttributeError, ValidationError):
+                log.error("directory.bad_row (skipped; that user cannot sign in): %r", raw)
+                bad.append(raw)  # one typo in users.json must not lock out everybody else
+                continue
+            users[user.email] = user
+        return users, bad
+
     def _all(self) -> dict[str, DirectoryUser]:
-        users = (DirectoryUser.from_json(r) for r in self._store.read())
-        return {u.email: u for u in users}
+        return self._split()[0]
+
+    def _save(self, users: dict[str, DirectoryUser], bad: list[Any]) -> None:
+        rows = [u.to_json() for u in sorted(users.values(), key=lambda u: u.email)]
+        self._store.write([*rows, *bad])
 
     def lookup(self, email: str) -> DirectoryUser | None:
         """None for unknown *and* disabled users (a disabled user's tokens stop working at once)."""
@@ -89,16 +114,22 @@ class UserDirectory:
         return None if user is None or user.disabled else user
 
     def upsert(self, user: DirectoryUser) -> None:
-        users = self._all()
+        users, bad = self._split()
         users[user.email] = user
-        self._store.write([u.to_json() for u in sorted(users.values(), key=lambda u: u.email)])
+        self._save(users, bad)
 
     def remove(self, email: str) -> bool:
-        users = self._all()
+        users, bad = self._split()
         if users.pop(normalize_email(email), None) is None:
             return False
-        self._store.write([u.to_json() for u in users.values()])
+        self._save(users, bad)
         return True
+
+    def permits(self, subject: str) -> bool:
+        """Static tokens and admin sessions whose subject is an email belong to a person in this
+        directory and work only while that person is present and not disabled. Other subjects
+        (service accounts, pipelines) are not people and are not checked here."""
+        return "@" not in subject or self.lookup(subject) is not None
 
     def list(self) -> list[DirectoryUser]:
         return sorted(self._all().values(), key=lambda u: u.email)

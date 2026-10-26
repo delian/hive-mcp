@@ -17,6 +17,9 @@ class Profile(StrEnum):
     EXTERNAL = "external"
 
 
+MIN_SECRET_KEY = 32  # signs login and admin cookies: short keys can be brute-forced offline
+
+
 class Settings(BaseSettings):
     """Process settings. Secrets come from env vars, never from the image."""
 
@@ -89,6 +92,9 @@ class Settings(BaseSettings):
     google_allowed_domains: list[str] = Field(
         default_factory=list
     )  # e.g. ["acme.com"]; empty = refuse all
+    # Hosts that may be OAuth redirect targets (claude.ai, chatgpt.com...); empty = any, which
+    # leaves the consent page as the only defence against a look-alike app.
+    oauth_redirect_hosts: list[str] = Field(default_factory=list)
     users_file: Path | None = None  # default: <data_dir>/users.json (see `hive user`)
     secret_key: SecretStr | None = (
         None  # signs login cookies; default: generated into <data_dir>/secret.key
@@ -108,6 +114,14 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = Field(default_factory=list)
     drain_seconds: float = Field(default=5.0, ge=0)  # readiness-fail window before shutdown
     shutdown_timeout: float = Field(default=30.0, ge=1)  # max wait for in-flight requests
+
+    @model_validator(mode="after")
+    def _check_secret_key(self) -> Settings:
+        if self.secret_key is not None and len(self.secret_key.get_secret_value()) < MIN_SECRET_KEY:
+            raise ValueError(
+                f"HIVE_SECRET_KEY needs {MIN_SECRET_KEY}+ characters (openssl rand -hex 32)"
+            )
+        return self
 
     @model_validator(mode="after")
     def _check_replicas(self) -> Settings:

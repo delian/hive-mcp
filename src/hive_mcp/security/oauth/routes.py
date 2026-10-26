@@ -11,7 +11,7 @@ from starlette.responses import RedirectResponse, Response
 from starlette.routing import Route
 
 from hive_mcp.security.oauth.cookies import COOKIE_NAME
-from hive_mcp.security.oauth.login import Denied, check_identity
+from hive_mcp.security.oauth.login import Denied, check_identity, pin_identity
 from hive_mcp.security.oauth.models import TXN_TTL_SECONDS
 from hive_mcp.security.oauth.pages import SECURITY_HEADERS, consent_page, error_page
 from hive_mcp.security.oauth.revoke import revoke_route
@@ -114,6 +114,7 @@ class LoginRoutes:
             return redirect(
                 await self.provider.finish(state, approve=False) or "/"
             )  # client sees only access_denied
+        pin_identity(self.provider.directory, outcome, identity)
         return outcome.email
 
     async def complete(self, txn_id: str, *, approve: bool) -> Response:
@@ -134,7 +135,7 @@ class LoginRoutes:
             return error_page("This sign-in has expired.")
         if form is None:
             return await self.consent_form(txn_id, txn)
-        if not hmac.compare_digest(str(form.get("csrf", "")), txn["csrf"]):
+        if not hmac.compare_digest(str(form.get("csrf", "")).encode(), str(txn["csrf"]).encode()):
             return error_page("The approval form was not valid.", 403)
         approve = form.get("decision") == "approve"
         if approve:

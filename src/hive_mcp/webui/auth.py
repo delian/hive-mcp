@@ -12,8 +12,12 @@ from hive_mcp.security.tokens import TOKEN_PREFIX
 if TYPE_CHECKING:
     from hive_mcp.domain.principal import Principal
     from hive_mcp.security.directory import UserDirectory
-    from hive_mcp.security.tokens import TokenStore
+    from hive_mcp.security.tokens import TokenRecord, TokenStore
     from hive_mcp.webui.session import AdminSession
+
+
+def session_subject(record: TokenRecord) -> str:
+    return f"{record.label}#{record.token_hash[:16]}"
 
 
 class AdminAuth:
@@ -25,7 +29,7 @@ class AdminAuth:
         record = self._tokens.find(token) if token.startswith(TOKEN_PREFIX) else None
         if record is None or not record.label or self._expired(record.expires_at):
             return None
-        return record.label
+        return session_subject(record)
 
     @staticmethod
     def _expired(expires_at: int | None) -> bool:
@@ -37,9 +41,13 @@ class AdminAuth:
             return user.principal() if user else None
         return self.principal_for_label(session.subject)
 
-    def principal_for_label(self, label: str) -> Principal | None:
+    def principal_for_label(self, subject: str) -> Principal | None:
+        """`subject` names the token by label *and* hash: a revoked token whose label is reused
+        for a new token does not revive the old session."""
         for record in self._tokens.list():
-            if record.label == label and not self._expired(record.expires_at):
+            if session_subject(record) == subject and not self._expired(record.expires_at):
+                if not self._directory.permits(record.subject):
+                    return None
                 try:
                     return principal_from_claims(record.subject, record.claims)
                 except HiveError:

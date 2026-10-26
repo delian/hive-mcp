@@ -29,10 +29,11 @@ def test_a_token_that_expires_after_sign_in_stops_working(tmp_path, monkeypatch)
     store = TokenStore(tmp_path / "t.json")
     auth = AdminAuth(UserDirectory(AtomicJsonFile(tmp_path / "u.json", default=[])), store)
     token = store.create(ROOT, label="soon", expires_in_days=1)
-    assert auth.principal_for_label("soon") is not None and auth.token_label(token) == "soon"
+    subject = auth.token_label(token)
+    assert subject and auth.principal_for_label(subject) is not None
     later = time.time() + 2 * 86_400
     monkeypatch.setattr("hive_mcp.webui.auth.time.time", lambda: later)
-    assert auth.principal_for_label("soon") is None
+    assert auth.principal_for_label(subject) is None
     assert auth.token_label(token) is None
 
 

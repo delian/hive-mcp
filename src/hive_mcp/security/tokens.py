@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from hive_mcp.domain.principal import Principal
+    from hive_mcp.security.directory import UserDirectory
 
 TOKEN_PREFIX = "hive_"  # noqa: S105 - prefix, not a secret; lets secret scanners recognise leaked tokens
 
@@ -92,13 +93,17 @@ class TokenStore:
 class StaticTokenVerifier:
     """Implements the SDK's TokenVerifier protocol over a TokenStore."""
 
-    def __init__(self, store: TokenStore, resource: str | None = None) -> None:
-        self._store, self._resource = store, resource
+    def __init__(
+        self, store: TokenStore, resource: str | None = None, directory: UserDirectory | None = None
+    ) -> None:
+        self._store, self._resource, self._directory = store, resource, directory
 
     async def verify_token(self, token: str) -> AccessToken | None:
         record = self._store.find(token) if token.startswith(TOKEN_PREFIX) else None
         if record is None or (record.expires_at is not None and record.expires_at <= time.time()):
             return None
+        if self._directory and not self._directory.permits(record.subject):
+            return None  # the person was removed or disabled: their tokens go with them
         return AccessToken(
             token=token,
             client_id=f"static:{record.label}",

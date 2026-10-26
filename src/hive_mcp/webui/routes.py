@@ -58,7 +58,7 @@ class AdminUi:
         if post:
             form = await request.form()
             if not self.signin.origin_ok(request) or not hmac.compare_digest(
-                str(form.get("csrf", "")), session.csrf
+                str(form.get("csrf", "")).encode(), session.csrf.encode()
             ):
                 return render(
                     "Not allowed", "<p>The form was not valid. Reload and retry.</p>", status=403

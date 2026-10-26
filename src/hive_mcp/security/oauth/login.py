@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from hive_mcp.security.directory import normalize_email
@@ -38,7 +38,17 @@ def check_identity(
     if (identity.hosted_domain or "").casefold() != domain:
         return Denied("not a Workspace account of that domain")
     user = directory.lookup(email)
-    return user if user is not None else Denied("not in the user directory")
+    if user is None:
+        return Denied("not in the user directory")
+    # A different Google account behind a known address means it was deleted and reassigned.
+    wrong_account = user.google_sub and user.google_sub != identity.subject
+    return Denied("Google account differs from the one first seen") if wrong_account else user
 
 
-__all__ = ["Denied", "UpstreamError", "check_identity"]
+def pin_identity(directory: UserDirectory, user: DirectoryUser, identity: GoogleIdentity) -> None:
+    """Remember which Google account this person is, the first time they sign in."""
+    if user.google_sub is None:
+        directory.upsert(replace(user, google_sub=identity.subject))
+
+
+__all__ = ["Denied", "UpstreamError", "check_identity", "pin_identity"]

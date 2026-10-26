@@ -53,3 +53,4 @@ class OAuthConfig:
     access_ttl: int = 3600
     refresh_ttl: int = 30 * 86400
     consent_ttl: int = 0  # seconds an approval is remembered; 0 = ask every time
+    redirect_hosts: frozenset[str] = frozenset()  # empty = any host may be registered

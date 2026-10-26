@@ -12,7 +12,7 @@ from starlette.routing import Route
 
 from hive_mcp.domain.clock import SystemClock
 from hive_mcp.ports.audit import AuditEvent
-from hive_mcp.security.oauth.login import Denied, check_identity
+from hive_mcp.security.oauth.login import Denied, check_identity, pin_identity
 from hive_mcp.security.oauth.upstream import UpstreamError
 from hive_mcp.webui import views
 from hive_mcp.webui.layout import redirect, render
@@ -109,7 +109,9 @@ class SignIn:
         if (
             current
             and self.origin_ok(request)
-            and hmac.compare_digest(str((await request.form()).get("csrf", "")), current[0].csrf)
+            and hmac.compare_digest(
+                str((await request.form()).get("csrf", "")).encode(), current[0].csrf.encode()
+            )
         ):
             response = redirect("/admin/login")
             response.delete_cookie(COOKIE_NAME, path="/admin")
@@ -152,6 +154,7 @@ class SignIn:
         if isinstance(outcome, Denied):
             log.warning("admin.login_denied reason=%s", outcome.reason)
             return self.login_page("This account may not sign in.", 403)
+        pin_identity(self.directory, outcome, identity)
         response = await self.start_session("user", outcome.email, outcome.principal())
         response.delete_cookie(TXN_COOKIE, path="/admin")
         return response

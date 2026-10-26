@@ -40,7 +40,7 @@ class SessionCodec:
 
     def read(self, cookie: str | None, now: float | None = None) -> AdminSession | None:
         payload, _, mac = (cookie or "").partition(".")
-        if not payload or not hmac.compare_digest(mac, self._mac(payload)):
+        if not payload or not hmac.compare_digest(mac.encode(), self._mac(payload).encode()):
             return None
         try:
             data = json.loads(base64.urlsafe_b64decode(payload))

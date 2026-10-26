@@ -307,3 +307,17 @@ def test_google_callback_must_come_from_the_browser_that_started_it(
     callback = httpx.get(start.headers["location"], follow_redirects=False).headers["location"]
     stranger = httpx.get(callback, follow_redirects=False)  # no cookie: login CSRF
     assert stranger.status_code == 403
+
+
+def test_a_different_google_account_behind_the_same_address_is_refused(
+    google_ui: Live, google: FakeGoogle
+) -> None:
+    _, first = google_login(google_ui, google, "ada@acme.com")
+    assert first.status_code == 303  # pins g-ada@acme.com
+    assert google_ui.directory.lookup("ada@acme.com").google_sub == "g-ada@acme.com"
+    google.account = {**google.account, "sub": "g-someone-else"}  # the address was reassigned
+    client = httpx.Client(base_url=google_ui.url, follow_redirects=False)
+    start = client.get("/admin/login/google")
+    callback = httpx.get(start.headers["location"], follow_redirects=False)
+    denied = client.get(callback.headers["location"].removeprefix(google_ui.url))
+    assert denied.status_code == 403 and not client.cookies.get("hive_admin")

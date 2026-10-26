@@ -38,3 +38,19 @@ def check_visibility(scope: Scope, visibility: Visibility) -> None:
     """Private knowledge can never be org-visible: it must be promoted (moved) first."""
     if scope.level is ScopeLevel.PRIVATE and visibility is not Visibility.SCOPE:
         raise ValidationError("private items cannot be org-visible; promote them first")
+
+
+def scope_key(scope: Scope) -> str:
+    """Text form used in tokens, the user directory and the CLI, e.g. `team:t1`."""
+    return f"{scope.level.name.lower()}:{scope.owner}"
+
+
+def parse_scope(text: str) -> Scope:
+    level, _, owner = text.partition(":")
+    try:
+        return Scope(ScopeLevel[level.strip().upper()], owner.strip())
+    except KeyError:
+        pass
+    raise ValidationError(
+        f"scope must look like team:<id>, project:<id> or org:<id> (got {text!r})"
+    )

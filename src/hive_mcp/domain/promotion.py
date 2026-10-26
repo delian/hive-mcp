@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING
 from hive_mcp.domain import access
 from hive_mcp.domain.errors import PermissionDenied, ValidationError
 from hive_mcp.domain.item import Item, Status
-from hive_mcp.domain.principal import Principal, Role
 
 if TYPE_CHECKING:
+    from hive_mcp.domain.principal import Principal
     from hive_mcp.domain.scope import Scope, Visibility
 
 MAX_TEXT = 2000
@@ -83,8 +83,8 @@ def authorize_request(
 
 
 def authorize_decision(principal: Principal, promotion: Promotion) -> None:
-    """Approvers are admins; nobody approves their own request (no rubber-stamping yourself)."""
-    if principal.org_id != promotion.org_id or principal.role < Role.ADMIN:
-        raise PermissionDenied("only an approver (admin) can decide promotions")
+    """Admins, or the named approvers of the target scope; nobody approves their own request."""
+    if principal.org_id != promotion.org_id or not principal.can_approve(promotion.scope):
+        raise PermissionDenied("only an approver of the target scope (or an admin) can decide")
     if principal.id == promotion.requester_id:
         raise PermissionDenied("you cannot decide your own request; ask another approver")

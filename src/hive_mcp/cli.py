@@ -15,7 +15,7 @@ from hive_mcp.bootstrap import build_services
 from hive_mcp.config import Settings
 from hive_mcp.domain.errors import HiveError
 from hive_mcp.domain.principal import Principal, Role
-from hive_mcp.domain.scope import Scope, ScopeLevel
+from hive_mcp.domain.scope import Scope, ScopeLevel, parse_scope, scope_key
 from hive_mcp.embeddings.models import fetch_model, get_spec
 from hive_mcp.ingest.files import files_under
 from hive_mcp.ops.drain import DrainingServer
@@ -67,13 +67,23 @@ def token_create(  # noqa: PLR0913, PLR0917 - one option per claim
     role: str = typer.Option("member", help="viewer, member, editor or admin."),
     team: list[str] = typer.Option([], help="Team membership (repeatable)."),  # noqa: B008
     project: list[str] = typer.Option([], help="Project membership (repeatable)."),  # noqa: B008
+    approves: list[str] = typer.Option(  # noqa: B008
+        [], help="Scope whose promotions this token approves, e.g. team:t1 (repeatable)."
+    ),
     expires_days: float | None = typer.Option(
         None, help="Token lifetime in days (default: never)."
     ),
 ) -> None:
     """Create a token. The plaintext is printed once and cannot be recovered."""
     try:
-        principal = Principal(subject, org, Role[role.upper()], frozenset(team), frozenset(project))
+        principal = Principal(
+            subject,
+            org,
+            Role[role.upper()],
+            frozenset(team),
+            frozenset(project),
+            frozenset(parse_scope(a) for a in approves),
+        )
         token = TokenStore(Settings().tokens_path).create(
             principal, label=label, expires_in_days=expires_days
         )
@@ -118,6 +128,9 @@ def user_add(  # noqa: PLR0913, PLR0917 - one option per attribute
     team: list[str] = typer.Option([], help="Team membership (repeatable)."),  # noqa: B008
     project: list[str] = typer.Option([], help="Project membership (repeatable)."),  # noqa: B008
     disabled: bool = typer.Option(False, help="Keep the entry but block sign-in and live tokens."),
+    approves: list[str] = typer.Option(  # noqa: B008
+        [], help="Scope whose promotions they approve, e.g. team:t1 (repeatable)."
+    ),
 ) -> None:
     """Add or update a user. Changes apply to live tokens immediately."""
     try:
@@ -128,6 +141,7 @@ def user_add(  # noqa: PLR0913, PLR0917 - one option per attribute
             frozenset(team),
             frozenset(project),
             disabled,
+            frozenset(scope_key(parse_scope(a)) for a in approves),
         )
         _directory().upsert(user)
     except (KeyError, HiveError) as exc:
@@ -142,7 +156,7 @@ def user_list() -> None:
     for u in _directory().list():
         flags = " (disabled)" if u.disabled else ""
         typer.echo(
-            f"{u.email}\t{u.org_id}\t{u.role.name.lower()}\tteams={sorted(u.teams)}\tprojects={sorted(u.projects)}{flags}"
+            f"{u.email}\t{u.org_id}\t{u.role.name.lower()}\tteams={sorted(u.teams)}\tprojects={sorted(u.projects)}\tapproves={sorted(u.approves)}{flags}"
         )
 
 

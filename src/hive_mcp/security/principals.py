@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from hive_mcp.domain.errors import PermissionDenied
+from hive_mcp.domain.errors import PermissionDenied, ValidationError
 from hive_mcp.domain.principal import Principal, Role
+from hive_mcp.domain.scope import Scope, parse_scope, scope_key
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -28,6 +29,13 @@ def _ids(value: object, what: str) -> frozenset[str]:
     return frozenset(_id(v, what) for v in value)
 
 
+def _scopes(value: object) -> frozenset[Scope]:
+    try:
+        return frozenset(parse_scope(s) for s in _ids(value, "approver scopes"))
+    except ValidationError:
+        raise PermissionDenied("token has an invalid approver scope") from None
+
+
 def principal_from_claims(subject: str | None, claims: Mapping[str, Any] | None) -> Principal:
     """Strict: a missing org or subject is refused, and an absent/unknown role means read-only."""
     claims = claims or {}
@@ -42,6 +50,7 @@ def principal_from_claims(subject: str | None, claims: Mapping[str, Any] | None)
         role=role,
         teams=_ids(claims.get("hive_teams"), "teams"),
         projects=_ids(claims.get("hive_projects"), "projects"),
+        approves=_scopes(claims.get("hive_approves")),
     )
 
 
@@ -52,5 +61,6 @@ def claims_for(principal: Principal, label: str = "") -> dict[str, Any]:
         "hive_role": principal.role.name.lower(),
         "hive_teams": sorted(principal.teams),
         "hive_projects": sorted(principal.projects),
+        "hive_approves": sorted(scope_key(s) for s in principal.approves),
         "label": label,
     }

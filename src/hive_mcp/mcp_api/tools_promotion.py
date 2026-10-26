@@ -97,8 +97,9 @@ def register_promotion_tools(mcp: MCPServer, get_services: Callable[[], Services
         status: Literal["pending", "approved", "rejected", "withdrawn", "stale", "all"] = "pending",
         mine: bool = False,
     ) -> list[PromotionOut]:
-        """List promotion requests. Approvers see the whole organisation's queue with the item
-        content to review; everyone else sees their own requests. `mine` limits approvers to their own."""
+        """List promotion requests. Admins see the whole organisation's queue, team/project approvers
+        the requests into the scopes they approve, each with the item content to review. Everyone
+        else sees their own requests. `mine` limits approvers to their own."""
         wanted = None if status == "all" else PromotionStatus(status)
         views = await get_services().promotions.list(current_principal(), wanted, mine=mine)
         return [_out(v.promotion, v) for v in views]

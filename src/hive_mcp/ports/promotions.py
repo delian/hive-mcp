@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from hive_mcp.domain.promotion import Promotion, PromotionStatus
+    from hive_mcp.domain.scope import Scope
 
 
 class PromotionRepository(Protocol):
@@ -37,6 +38,8 @@ class PromotionRepository(Protocol):
         *,
         status: PromotionStatus | None = None,
         requester_id: str | None = None,
+        scopes: frozenset[Scope] | None = None,
         limit: int = 100,
     ) -> list[Promotion]:
-        """Oldest first (a review queue), only this org's requests."""
+        """Oldest first (a review queue), only this org's requests. `scopes` keeps requests whose
+        target is one of them (None = any; an empty set = none)."""

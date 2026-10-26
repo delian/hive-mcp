@@ -6,6 +6,7 @@ request, the request goes stale instead of publishing content nobody reviewed.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
@@ -29,9 +30,13 @@ if TYPE_CHECKING:
     from hive_mcp.domain.scope import Scope, Visibility
     from hive_mcp.ports.audit import AuditLog
     from hive_mcp.ports.items import ItemRepository
+    from hive_mcp.ports.jobs import Job, JobQueue
     from hive_mcp.ports.promotions import PromotionRepository
     from hive_mcp.services.indexing import IndexService
 
+APPLY_JOB = "apply_promotion"
+APPLY_DELAY_SECONDS = 60.0
+log = logging.getLogger(__name__)
 Decision = Literal["approve", "reject", "withdraw"]
 
 
@@ -42,17 +47,18 @@ class PromotionView:
 
 
 class PromotionService:
-    def __init__(
+    def __init__(  # noqa: PLR0913 - collaborators
         self,
         *,
         items: ItemRepository,
         promotions: PromotionRepository,
         indexing: IndexService,
+        jobs: JobQueue,
         audit: AuditLog,
         clock: Clock,
     ) -> None:
         self._items, self._promotions, self._indexing = items, promotions, indexing
-        self._audit, self._clock = audit, clock
+        self._jobs, self._audit, self._clock = jobs, audit, clock
 
     async def _log(self, who: Principal, action: str, promo: Promotion) -> None:
         details = {
@@ -96,9 +102,13 @@ class PromotionService:
         *,
         mine: bool = False,
     ) -> list[PromotionView]:
-        approver = principal.role >= Role.ADMIN and not mine
+        approver = principal.is_approver and not mine
+        admin = principal.role >= Role.ADMIN
         found = await self._promotions.list(
-            principal.org_id, status=status, requester_id=None if approver else principal.id
+            principal.org_id,
+            status=status,
+            requester_id=None if approver else principal.id,
+            scopes=principal.approves if approver and not admin else None,
         )
         views = []
         for promo in found:
@@ -138,11 +148,37 @@ class PromotionService:
         await self._log(principal, f"promotion.{to}", done)
         return done
 
+    async def _apply(self, promo: Promotion) -> None:
+        """Move the item to the approved place (safe to repeat): raises Conflict or NotFound when
+        the item changed or vanished since the request, anything else is transient."""
+        item = await self._items.get_system(promo.org_id, promo.item_id)
+        if item is None:
+            raise NotFound(promo.item_id)
+        if item.scope == promo.scope and item.visibility == promo.visibility:
+            moved = item  # already there (an earlier attempt got this far)
+        else:
+            moved = await self._items.relocate_system(
+                promo.org_id, promo.item_id, promo.scope, promo.visibility, promo.item_revision
+            )
+        await self._indexing.sync_acl(moved)
+
+    async def _stale(self, who: str, promo: Promotion, why: str) -> None:
+        await self._promotions.transition(
+            promo.org_id, promo.id, PromotionStatus.APPROVED, PromotionStatus.STALE,
+            by=who, note=why, at=self._clock.now(),
+        )  # fmt: skip
+
     async def _approve(self, principal: Principal, promo: Promotion, note: str) -> Promotion:
         item = await self._items.get_system(promo.org_id, promo.item_id)
         if item is None or item.revision != promo.item_revision:
             await self._finish(principal, promo, PromotionStatus.STALE, "item changed or removed")
             raise Conflict("the item changed after the request; ask for a new promotion")
+        # The repair job is queued BEFORE the decision is recorded: if this process dies half way,
+        # the job finishes the move (and does nothing if the decision never got recorded).
+        await self._jobs.enqueue(
+            promo.org_id, APPLY_JOB, {"promotion_id": promo.id},
+            dedupe_key=f"apply:{promo.id}", delay_seconds=APPLY_DELAY_SECONDS,
+        )  # fmt: skip
         claimed = await self._promotions.transition(
             promo.org_id, promo.id, PromotionStatus.PENDING, PromotionStatus.APPROVED,
             by=principal.id, note=note, at=self._clock.now(),
@@ -150,15 +186,21 @@ class PromotionService:
         if claimed is None:  # another approver won the race
             raise Conflict("this request was already decided")
         try:
-            moved = await self._items.relocate_system(
-                promo.org_id, promo.item_id, promo.scope, promo.visibility, promo.item_revision
-            )
+            await self._apply(promo)
+        except (Conflict, NotFound):
+            await self._stale(principal.id, promo, "item changed after approval")
+            raise Conflict("the item changed while approving; ask for a new promotion") from None
         except HiveError:
-            await self._promotions.transition(
-                promo.org_id, promo.id, PromotionStatus.APPROVED, PromotionStatus.STALE,
-                by=principal.id, note="move failed after approval", at=self._clock.now(),
-            )  # fmt: skip
-            raise
-        await self._indexing.sync_acl(moved)
+            log.warning("promotion %s approved; the move will be completed by a job", promo.id)
         await self._log(principal, "promotion.approved", claimed)
         return claimed
+
+    async def handle_apply(self, job: Job) -> None:
+        """Job handler: completes approvals whose move did not finish. Raises to be retried."""
+        promo = await self._promotions.get(job.org_id, job.payload["promotion_id"])
+        if promo is None or promo.status is not PromotionStatus.APPROVED:
+            return  # never approved (crash before the decision) or already settled
+        try:
+            await self._apply(promo)
+        except (Conflict, NotFound):
+            await self._stale("system", promo, "item changed after approval")

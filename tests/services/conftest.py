@@ -55,6 +55,7 @@ def build_stack(
         items=backend.items,
         promotions=backend.promotions,
         indexing=indexing,
+        jobs=backend.jobs,
         audit=backend.audit,
         clock=backend.clock,
     )

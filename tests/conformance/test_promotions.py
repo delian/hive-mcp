@@ -134,3 +134,18 @@ async def test_relocate_system_moves_checks_revision_and_tenant(backend):
         await backend.items.relocate_system(
             "org1", item.id, Scope(ScopeLevel.PRIVATE, "alice"), Visibility.ORG, 2
         )
+
+
+async def test_list_can_be_limited_to_target_scopes(backend):
+    targets = {"a": TEAM, "b": Scope(ScopeLevel.TEAM, "t2"), "c": P1}
+    for pid, scope in targets.items():
+        await backend.promotions.create(
+            replace(promo(backend, pid, item_id=f"i{pid}"), scope=scope)
+        )
+    ids = lambda rows: sorted(r.id for r in rows)  # noqa: E731
+    assert ids(await backend.promotions.list("org1", scopes=frozenset({TEAM}))) == ["a"]
+    assert ids(await backend.promotions.list("org1", scopes=frozenset({TEAM, P1}))) == ["a", "c"]
+    assert await backend.promotions.list("org1", scopes=frozenset()) == []
+    assert ids(await backend.promotions.list("org1", scopes=None)) == ["a", "b", "c"]
+    same_owner_other_level = Scope(ScopeLevel.PROJECT, "t1")  # owner ids can coincide across levels
+    assert await backend.promotions.list("org1", scopes=frozenset({same_owner_other_level})) == []

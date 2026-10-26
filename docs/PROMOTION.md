@@ -1,7 +1,12 @@
 # Promotion (sharing beyond a project)
 
 Items are private. A member may share to a project they belong to (`kb_share`). Anything wider
-(team, org, or org-wide visibility) needs an approver (role `admin`); admins may share directly.
+(team, org, or org-wide visibility) needs an approver; approvers may share directly into scopes they approve.
+
+**Who approves:** admins approve everything in their org. A non-admin member can be named approver of specific
+scopes (`hive user add a@x.io --approves team:t1`, or `hive token create ... --approves project:p1`); they see and
+decide only requests into those scopes, and org-level requests stay with admins. Viewers never approve. Nobody
+approves their own request.
 
 | Tool | Who | What |
 |------|-----|------|
@@ -19,6 +24,5 @@ Guarantees (all covered by tests on every backend):
 - Approvers can read the content of any open request in their org, including private items. That is the
   review; it is audited.
 
-Not built yet: notifying approvers (they poll `kb_list_promotions`), per-team approvers (any org admin
-approves), and a crash between claiming an approval and moving the item (would leave `approved` with the
-item unmoved; the request can be re-filed).
+**Crash safety:** before an approval is recorded, a repair job is queued; if the process dies before the item is
+moved, the job finishes the move (or marks the request `stale` if the item changed meanwhile).

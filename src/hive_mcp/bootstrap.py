@@ -17,7 +17,7 @@ from hive_mcp.services.graph import GraphService
 from hive_mcp.services.indexing import INDEX_JOB, IndexService
 from hive_mcp.services.ingest import IngestService
 from hive_mcp.services.knowledge import KnowledgeService
-from hive_mcp.services.promotions import PromotionService
+from hive_mcp.services.promotions import APPLY_JOB, PromotionService
 from hive_mcp.services.runner import JobRunner
 from hive_mcp.services.sessions import SessionService
 
@@ -73,15 +73,16 @@ async def build_services(settings: Settings) -> Services:
         clock=clock,
     )
     sessions = SessionService(knowledge, backend.blobs)
-    handlers = {INDEX_JOB: indexing.handle_job}
-    runner = JobRunner(backend.jobs, handlers, worker_id=f"{socket.gethostname()}-runner")
     promotions = PromotionService(
         items=backend.items,
         promotions=backend.promotions,
         indexing=indexing,
+        jobs=backend.jobs,
         audit=backend.audit,
         clock=clock,
     )
+    handlers = {INDEX_JOB: indexing.handle_job, APPLY_JOB: promotions.handle_apply}
+    runner = JobRunner(backend.jobs, handlers, worker_id=f"{socket.gethostname()}-runner")
     graph = GraphService(items=backend.items, edges=backend.edges, audit=backend.audit, clock=clock)
     ingest = IngestService(knowledge, graph)
     curation = CurationService(

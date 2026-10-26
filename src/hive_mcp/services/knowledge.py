@@ -26,7 +26,7 @@ MAX_TAGS_LISTED = 500
 
 def can_share_directly(principal: Principal, scope: Scope, visibility: Visibility) -> bool:
     """Private notes and own projects are self-service; wider sharing needs an approver."""
-    if principal.role >= Role.ADMIN:
+    if principal.role >= Role.ADMIN or principal.can_approve(scope):
         return True
     return scope.level <= SELF_SERVICE_MAX_LEVEL and visibility is Visibility.SCOPE
 

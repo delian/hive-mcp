@@ -22,6 +22,9 @@ class Principal:
     role: Role = Role.MEMBER
     teams: frozenset[str] = field(default_factory=frozenset)
     projects: frozenset[str] = field(default_factory=frozenset)
+    approves: frozenset[Scope] = field(
+        default_factory=frozenset
+    )  # scopes this person approves promotions into
 
     def member_scopes(self) -> frozenset[Scope]:
         """Every scope this caller belongs to (their private space, projects, teams, the org)."""
@@ -30,6 +33,16 @@ class Principal:
             | {Scope(ScopeLevel.PROJECT, p) for p in self.projects}
             | {Scope(ScopeLevel.TEAM, t) for t in self.teams}
         )
+
+    def can_approve(self, scope: Scope) -> bool:
+        """Admins approve anything in their org; others only scopes they are named approver of."""
+        if scope.level is ScopeLevel.PRIVATE:
+            return False
+        return self.role >= Role.ADMIN or (self.role >= Role.MEMBER and scope in self.approves)
+
+    @property
+    def is_approver(self) -> bool:
+        return self.role >= Role.ADMIN or (self.role >= Role.MEMBER and bool(self.approves))
 
     def is_member(self, scope: Scope) -> bool:
         return scope in self.member_scopes()

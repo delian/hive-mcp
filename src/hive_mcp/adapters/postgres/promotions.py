@@ -108,19 +108,29 @@ class PgPromotions:
         *,
         status: PromotionStatus | None = None,
         requester_id: str | None = None,
+        scopes: frozenset[Scope] | None = None,
         limit: int = 100,
     ) -> list[Promotion]:
+        if scopes is not None and not scopes:
+            return []
+        pairs = sorted((int(s.level), s.owner) for s in scopes or ())
         async with self._db.tx() as conn:
             cur = await conn.execute(
                 f"SELECT {COLS} FROM promotions WHERE org_id = %s "  # noqa: S608
                 "AND (%s::text IS NULL OR status = %s) "
-                "AND (%s::text IS NULL OR requester_id = %s) ORDER BY created_at, id LIMIT %s",
+                "AND (%s::text IS NULL OR requester_id = %s) "
+                "AND (%s OR (scope_level, scope_owner) IN "
+                "(SELECT * FROM unnest(%s::smallint[], %s::text[]))) "
+                "ORDER BY created_at, id LIMIT %s",
                 (
                     org_id,
                     status and str(status),
                     status and str(status),
                     requester_id,
                     requester_id,
+                    scopes is None,
+                    [lvl for lvl, _ in pairs],
+                    [owner for _, owner in pairs],
                     limit,
                 ),
             )

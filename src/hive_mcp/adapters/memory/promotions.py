@@ -11,6 +11,8 @@ from hive_mcp.domain.promotion import TRANSITIONS, Promotion, PromotionStatus
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from hive_mcp.domain.scope import Scope
+
 
 class MemoryPromotions:
     def __init__(self) -> None:
@@ -57,6 +59,7 @@ class MemoryPromotions:
         *,
         status: PromotionStatus | None = None,
         requester_id: str | None = None,
+        scopes: frozenset[Scope] | None = None,
         limit: int = 100,
     ) -> list[Promotion]:
         rows = [
@@ -65,6 +68,7 @@ class MemoryPromotions:
             if p.org_id == org_id
             and (status is None or p.status is status)
             and (requester_id is None or p.requester_id == requester_id)
+            and (scopes is None or p.scope in scopes)
         ]
         rows.sort(key=lambda p: (p.created_at, p.id))
         return rows[:limit]

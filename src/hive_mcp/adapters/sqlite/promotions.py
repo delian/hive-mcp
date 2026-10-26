@@ -119,14 +119,23 @@ class SqlitePromotions:
         *,
         status: PromotionStatus | None = None,
         requester_id: str | None = None,
+        scopes: frozenset[Scope] | None = None,
         limit: int = 100,
     ) -> list[Promotion]:
+        if scopes is not None and not scopes:
+            return []
+
         def tx(conn: sqlite3.Connection) -> list[Promotion]:
-            sql, params = f"SELECT {COLS} FROM promotions WHERE org_id = ?", [org_id]  # noqa: S608
+            sql = f"SELECT {COLS} FROM promotions WHERE org_id = ?"  # noqa: S608
+            params: list[object] = [org_id]
             if status is not None:
                 sql, params = sql + " AND status = ?", [*params, str(status)]
             if requester_id is not None:
                 sql, params = sql + " AND requester_id = ?", [*params, requester_id]
+            if scopes is not None:
+                pairs = sorted((int(s.level), s.owner) for s in scopes)
+                sql += f" AND (scope_level, scope_owner) IN (VALUES {','.join('(?,?)' for _ in pairs)})"
+                params = [*params, *(v for pair in pairs for v in pair)]
             rows = conn.execute(sql + " ORDER BY created_at, id LIMIT ?", [*params, limit])
             return [_row(r) for r in rows.fetchall()]
 

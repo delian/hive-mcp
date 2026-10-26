@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from hive_mcp.domain.errors import ValidationError
 from hive_mcp.domain.principal import Principal, Role
+from hive_mcp.domain.scope import parse_scope, scope_key
 
 if TYPE_CHECKING:
     from hive_mcp.security.jsonfile import AtomicJsonFile
@@ -39,9 +40,11 @@ class DirectoryUser:
     teams: frozenset[str] = field(default_factory=frozenset)
     projects: frozenset[str] = field(default_factory=frozenset)
     disabled: bool = False
+    approves: frozenset[str] = field(default_factory=frozenset)  # scope keys, e.g. "team:t1"
 
     def principal(self) -> Principal:
-        return Principal(self.email, self.org_id, self.role, self.teams, self.projects)
+        approves = frozenset(parse_scope(k) for k in self.approves)
+        return Principal(self.email, self.org_id, self.role, self.teams, self.projects, approves)
 
     def to_json(self) -> dict[str, object]:
         return {
@@ -51,6 +54,7 @@ class DirectoryUser:
             "teams": sorted(self.teams),
             "projects": sorted(self.projects),
             "disabled": self.disabled,
+            "approves": sorted(self.approves),
         }
 
     @staticmethod
@@ -62,6 +66,7 @@ class DirectoryUser:
             teams=_strings(raw.get("teams")),
             projects=_strings(raw.get("projects")),
             disabled=bool(raw.get("disabled", False)),
+            approves=frozenset(scope_key(parse_scope(k)) for k in _strings(raw.get("approves"))),
         )
 
 

@@ -26,3 +26,15 @@ Guarantees (all covered by tests on every backend):
 
 **Crash safety:** before an approval is recorded, a repair job is queued; if the process dies before the item is
 moved, the job finishes the move (or marks the request `stale` if the item changed meanwhile).
+
+## Notifications
+Optional, off by default. Each channel is a durable job per event (retried with backoff, a broken channel never
+blocks the others or the workflow):
+- `HIVE_NOTIFY_WEBHOOK_URL`: Slack-style incoming webhook (or any endpoint accepting JSON with a `text` field);
+  gets every request and decision. Treat the URL as a secret.
+- Email: `HIVE_SMTP_HOST`, `HIVE_SMTP_PORT` (587), `HIVE_SMTP_FROM`, optional `HIVE_SMTP_USER`/`HIVE_SMTP_PASSWORD`,
+  `HIVE_SMTP_STARTTLS` (true). Requests go to the approvers of the target scope found in the user directory
+  (admins + named approvers, not the requester, not disabled users); decisions go to the requester when their
+  id is an email address (OAuth sign-in users).
+Messages contain the item title, who asked, where to, the reason and the outcome, never the item body.
+Delivery is at-least-once.

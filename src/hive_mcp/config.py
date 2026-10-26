@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     embedding_url: str | None = None  # openai: full .../embeddings URL
     embedding_api_key: SecretStr | None = None
     embedding_dim: int = Field(default=1024, ge=8, le=4096)  # openai: requested dimensions
+    # Notifications about promotion requests/decisions (all optional; item content is never sent).
+    notify_webhook_url: SecretStr | None = None  # Slack-style incoming webhook or any JSON endpoint
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_user: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_from: str | None = None
+    smtp_starttls: bool = True
     # Narrowest scope whose items may be embedded (private, project, team, org). Default: all for
     # local embedders; project and wider for hosted ones, so private notes never leave the server.
     embedding_min_scope: str | None = None

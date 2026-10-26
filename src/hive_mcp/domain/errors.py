@@ -33,3 +33,7 @@ class StorageBusy(HiveError):
 
 class EmbeddingUnavailable(HiveError):
     """The embedding provider failed or is unreachable; callers degrade to keyword search."""
+
+
+class NotifyError(HiveError):
+    """A notification could not be delivered (the job runner retries)."""

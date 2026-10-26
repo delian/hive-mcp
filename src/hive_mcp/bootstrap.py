@@ -10,13 +10,17 @@ from hive_mcp.config import Profile, Settings
 from hive_mcp.domain.clock import SystemClock
 from hive_mcp.domain.errors import ValidationError
 from hive_mcp.embeddings.factory import embed_min_level, make_embedder
+from hive_mcp.notify.factory import make_channels
 from hive_mcp.ports.backend import Backend, close_backend
+from hive_mcp.security.directory import UserDirectory
+from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.curation import CurationService
 from hive_mcp.services.graph import GraphService
 from hive_mcp.services.indexing import INDEX_JOB, IndexService
 from hive_mcp.services.ingest import IngestService
 from hive_mcp.services.knowledge import KnowledgeService
+from hive_mcp.services.notifications import NOTIFY_JOB, NotificationService
 from hive_mcp.services.promotions import APPLY_JOB, PromotionService
 from hive_mcp.services.runner import JobRunner
 from hive_mcp.services.sessions import SessionService
@@ -73,6 +77,18 @@ async def build_services(settings: Settings) -> Services:
         clock=clock,
     )
     sessions = SessionService(knowledge, backend.blobs)
+    channels = make_channels(settings)
+    notifications = (
+        NotificationService(
+            channels=channels,
+            promotions=backend.promotions,
+            items=backend.items,
+            directory=UserDirectory(AtomicJsonFile(settings.users_path, default=[])),
+            jobs=backend.jobs,
+        )
+        if channels
+        else None
+    )
     promotions = PromotionService(
         items=backend.items,
         promotions=backend.promotions,
@@ -80,8 +96,11 @@ async def build_services(settings: Settings) -> Services:
         jobs=backend.jobs,
         audit=backend.audit,
         clock=clock,
+        notifications=notifications,
     )
     handlers = {INDEX_JOB: indexing.handle_job, APPLY_JOB: promotions.handle_apply}
+    if notifications:
+        handlers[NOTIFY_JOB] = notifications.handle
     runner = JobRunner(backend.jobs, handlers, worker_id=f"{socket.gethostname()}-runner")
     graph = GraphService(items=backend.items, edges=backend.edges, audit=backend.audit, clock=clock)
     ingest = IngestService(knowledge, graph)

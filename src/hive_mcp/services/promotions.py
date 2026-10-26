@@ -22,6 +22,7 @@ from hive_mcp.domain.promotion import (
 )
 from hive_mcp.ports.audit import AuditEvent
 from hive_mcp.services.knowledge import can_share_directly
+from hive_mcp.services.notifications import DECIDED, REQUESTED
 
 if TYPE_CHECKING:
     from hive_mcp.domain.clock import Clock
@@ -33,6 +34,7 @@ if TYPE_CHECKING:
     from hive_mcp.ports.jobs import Job, JobQueue
     from hive_mcp.ports.promotions import PromotionRepository
     from hive_mcp.services.indexing import IndexService
+    from hive_mcp.services.notifications import NotificationService
 
 APPLY_JOB = "apply_promotion"
 APPLY_DELAY_SECONDS = 60.0
@@ -56,9 +58,11 @@ class PromotionService:
         jobs: JobQueue,
         audit: AuditLog,
         clock: Clock,
+        notifications: NotificationService | None = None,
     ) -> None:
         self._items, self._promotions, self._indexing = items, promotions, indexing
         self._jobs, self._audit, self._clock = jobs, audit, clock
+        self._notify = notifications
 
     async def _log(self, who: Principal, action: str, promo: Promotion) -> None:
         details = {
@@ -93,6 +97,7 @@ class PromotionService:
         )
         created = await self._promotions.create(promo)
         await self._log(principal, "promotion.request", created)
+        await self._announce(REQUESTED, created)
         return created
 
     async def list(
@@ -146,7 +151,13 @@ class PromotionService:
         if done is None:
             raise Conflict("this request was already decided")
         await self._log(principal, f"promotion.{to}", done)
+        if to in {PromotionStatus.REJECTED, PromotionStatus.STALE}:
+            await self._announce(DECIDED, done)
         return done
+
+    async def _announce(self, event: str, promo: Promotion) -> None:
+        if self._notify:
+            await self._notify.enqueue(event, promo)
 
     async def _apply(self, promo: Promotion) -> None:
         """Move the item to the approved place (safe to repeat): raises Conflict or NotFound when
@@ -163,10 +174,12 @@ class PromotionService:
         await self._indexing.sync_acl(moved)
 
     async def _stale(self, who: str, promo: Promotion, why: str) -> None:
-        await self._promotions.transition(
+        done = await self._promotions.transition(
             promo.org_id, promo.id, PromotionStatus.APPROVED, PromotionStatus.STALE,
             by=who, note=why, at=self._clock.now(),
         )  # fmt: skip
+        if done:
+            await self._announce(DECIDED, done)
 
     async def _approve(self, principal: Principal, promo: Promotion, note: str) -> Promotion:
         item = await self._items.get_system(promo.org_id, promo.item_id)
@@ -193,6 +206,7 @@ class PromotionService:
         except HiveError:
             log.warning("promotion %s approved; the move will be completed by a job", promo.id)
         await self._log(principal, "promotion.approved", claimed)
+        await self._announce(DECIDED, claimed)
         return claimed
 
     async def handle_apply(self, job: Job) -> None:

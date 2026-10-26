@@ -217,3 +217,48 @@ def vectors_prune(
             typer.echo(f"deleted vectors of {model} ({count} items)")
 
     _run_cli(lambda: _vector_admin(prune))
+
+
+@app.command()
+def backup(
+    dest: Path = typer.Argument(..., help="Archive file (.tar.gz) or an existing directory."),  # noqa: B008
+) -> None:
+    """Back up database, stored logs and state files into one verified archive (live-safe)."""
+    from hive_mcp.ops.backup import create_backup, verify_backup  # noqa: PLC0415
+
+    try:
+        summary = create_backup(Settings(), dest)
+        verify_backup(summary.path)  # a backup nobody has read back is not a backup
+    except HiveError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"wrote {summary.path} ({summary.files} files, {summary.bytes} bytes), verified")
+
+
+@app.command("backup-verify")
+def backup_verify(archive: Path = typer.Argument(..., exists=True)) -> None:  # noqa: B008
+    """Check an archive's checksums and database integrity without restoring it."""
+    from hive_mcp.ops.backup import verify_backup  # noqa: PLC0415
+
+    try:
+        summary = verify_backup(archive)
+    except HiveError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"ok: {summary.profile} backup, {summary.files} files")
+
+
+@app.command()
+def restore(
+    archive: Path = typer.Argument(..., exists=True),  # noqa: B008
+    force: bool = typer.Option(False, help="Replace existing data."),
+) -> None:
+    """Restore a backup into this deployment's data directory / database. Stop the server first."""
+    from hive_mcp.ops.backup import restore_backup  # noqa: PLC0415
+
+    try:
+        summary = restore_backup(Settings(), archive, force=force)
+    except HiveError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"restored {summary.files} files from {archive.name}; start the server again")

@@ -2,6 +2,7 @@
 # One image for local use and Azure. Build args:
 #   EXTRAS     optional dependency groups to install (default: all runtime extras)
 #   PYTHON_IMAGE base image (e.g. a registry mirror)
+#   PG_CLIENT  install pg_dump/pg_restore for backups of the Postgres profile (default true)
 #   BAKE_MODEL download + verify the offline embedding model into the image (needs network at build time)
 ARG PYTHON_IMAGE=python:3.12-slim
 FROM ${PYTHON_IMAGE} AS build
@@ -26,6 +27,11 @@ RUN --mount=type=secret,id=cacert,required=false \
       HIVE_DATA_DIR=/tmp/x HIVE_MODELS_DIR=/models /app/.venv/bin/hive models fetch; fi
 
 FROM ${PYTHON_IMAGE}
+# pg_dump/pg_restore for `hive backup` on the Postgres profile (must be at least the server's major version)
+ARG PG_CLIENT=true
+RUN if [ "$PG_CLIENT" = "true" ]; then apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-client \
+ && rm -rf /var/lib/apt/lists/*; fi
 RUN useradd --system --uid 10001 --create-home hive && mkdir /data && chown hive /data
 COPY --from=build /app/.venv /app/.venv
 COPY --from=build /models /models

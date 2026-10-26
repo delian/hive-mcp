@@ -53,6 +53,7 @@ def build_stack(
         audit=backend.audit,
         clock=backend.clock,
         quota=quota,
+        history=backend.history,
     )
     consult = ConsultService(
         items=backend.items,

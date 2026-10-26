@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import uuid
+from difflib import unified_diff
 from typing import TYPE_CHECKING
 
 from hive_mcp.domain.errors import PermissionDenied, ValidationError
+from hive_mcp.domain.history import KEEP_VERSIONS
 from hive_mcp.domain.item import Item, ItemPatch, ItemQuery, ItemView, Page
 from hive_mcp.domain.principal import Principal, Role
 from hive_mcp.domain.scope import Scope, ScopeLevel, Visibility
@@ -16,13 +18,16 @@ from hive_mcp.services.models import RememberRequest, RememberResult
 
 if TYPE_CHECKING:
     from hive_mcp.domain.clock import Clock
+    from hive_mcp.domain.history import ItemVersion
     from hive_mcp.ports.audit import AuditLog
+    from hive_mcp.ports.history import ItemHistory
     from hive_mcp.ports.items import ItemRepository
     from hive_mcp.services.indexing import IndexService
     from hive_mcp.services.quota import QuotaGuard
 
 SELF_SERVICE_MAX_LEVEL = ScopeLevel.PROJECT
 MAX_TAGS_LISTED = 500
+MAX_DIFF_CHARS = 20_000
 
 
 def can_share_directly(principal: Principal, scope: Scope, visibility: Visibility) -> bool:
@@ -41,7 +46,7 @@ def _require_sharing_allowed(principal: Principal, scope: Scope, visibility: Vis
 
 
 class KnowledgeService:
-    def __init__(
+    def __init__(  # noqa: PLR0913 - collaborators and policy
         self,
         *,
         items: ItemRepository,
@@ -49,7 +54,9 @@ class KnowledgeService:
         audit: AuditLog,
         clock: Clock,
         quota: QuotaGuard | None = None,
+        history: ItemHistory | None = None,
     ) -> None:
+        self._history = history
         self._items, self._indexing, self._audit, self._clock = items, indexing, audit, clock
         self._quota = quota
 
@@ -101,6 +108,54 @@ class KnowledgeService:
     async def browse(self, principal: Principal, query: ItemQuery) -> Page:
         """Newest first, only what the caller can see."""
         return await self._items.list(principal, query)
+
+    def _versions(self) -> ItemHistory:
+        if self._history is None:
+            raise ValidationError("item history is not available on this server")
+        return self._history
+
+    async def history(
+        self, principal: Principal, item_id: str, limit: int = 20
+    ) -> list[ItemVersion]:
+        """Newest first. Versions written while the item was private to someone else stay hidden."""
+        if not 1 <= limit <= KEEP_VERSIONS + 1:
+            raise ValidationError(f"limit must be between 1 and {KEEP_VERSIONS + 1}")
+        return await self._versions().versions(principal, item_id, limit)
+
+    async def version(self, principal: Principal, item_id: str, revision: int) -> ItemVersion:
+        return await self._versions().version(principal, item_id, revision)
+
+    async def diff(
+        self, principal: Principal, item_id: str, from_revision: int, to_revision: int | None = None
+    ) -> str:
+        """Unified diff (title, body) of two versions you can read; `to` defaults to the current."""
+        old = await self.version(principal, item_id, from_revision)
+        new = (
+            await self.version(principal, item_id, to_revision)
+            if to_revision is not None
+            else (await self._versions().versions(principal, item_id, 1))[0]
+        )
+        a = f"# {old.title}\n{old.body}".splitlines()
+        b = f"# {new.title}\n{new.body}".splitlines()
+        lines = unified_diff(
+            a, b, f"revision {old.revision}", f"revision {new.revision}", lineterm=""
+        )
+        return "\n".join(lines)[:MAX_DIFF_CHARS] or "(no difference)"
+
+    async def restore(
+        self, principal: Principal, item_id: str, revision: int, expected_revision: int
+    ) -> Item:
+        """Make the item say what an earlier version said (a new revision; nothing is rewritten)."""
+        old = await self.version(principal, item_id, revision)
+        current = (await self._items.get(principal, item_id)).item
+        title = old.title if old.title != current.title else None
+        body = old.body if old.body != current.body else None
+        kind = old.kind if old.kind is not current.kind else None
+        add, remove = old.tags - current.tags, current.tags - old.tags
+        if not (title or body or kind or add or remove):
+            raise ValidationError(f"the item already matches revision {revision}")
+        patch = ItemPatch(title=title, body=body, kind=kind, add_tags=add, remove_tags=remove)
+        return await self.update(principal, item_id, patch, expected_revision)
 
     async def tags(
         self, principal: Principal, prefix: str = "", limit: int = 100

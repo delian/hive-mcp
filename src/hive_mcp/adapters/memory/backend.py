@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from hive_mcp.adapters.memory.audit import MemoryAudit
 from hive_mcp.adapters.memory.blobs import MemoryBlobs
 from hive_mcp.adapters.memory.edges import MemoryEdges
+from hive_mcp.adapters.memory.history import MemoryHistory
 from hive_mcp.adapters.memory.items import MemoryItems
 from hive_mcp.adapters.memory.jobs import MemoryJobs
 from hive_mcp.adapters.memory.kv import MemoryKv
@@ -30,9 +31,11 @@ class MemoryBackend:
     promotions: MemoryPromotions = field(default_factory=MemoryPromotions)
     edges: MemoryEdges = field(default_factory=MemoryEdges)
     maintenance: MemoryMaintenance = field(init=False)
+    history: MemoryHistory = field(init=False)
 
     def __post_init__(self) -> None:
         self.items = MemoryItems(self.clock)
         self.maintenance = MemoryMaintenance(self.items)
+        self.history = MemoryHistory(self.items)
         self.jobs = MemoryJobs(self.clock)
         self.kv = MemoryKv(self.clock)

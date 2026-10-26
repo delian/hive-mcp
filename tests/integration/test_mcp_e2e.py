@@ -576,3 +576,36 @@ async def test_entity_tools_over_mcp(live: Live) -> None:
         ).structured_content
         assert {n["title"] for n in graph["nodes"]} == {"Pulse Doppler Radar", "Flight test"}
         assert (await call(alice, "kb_entity_save", name="!!!", type="system")).is_error
+
+
+async def test_history_tools_over_mcp(live: Live) -> None:
+    async with live.client(live.token_for(ALICE)) as alice, live.client(live.token_for(BOB)) as bob:
+        item = (
+            await call(alice, "kb_remember", title="Plan", body="first idea\nsecond idea")
+        ).structured_content
+        await call(
+            alice, "kb_update", id=item["id"], expected_revision=1, body="first idea\nbetter idea"
+        )
+        hist = (await call(alice, "kb_history", id=item["id"])).structured_content["result"]
+        assert [(h["revision"], h["current"]) for h in hist] == [(2, True), (1, False)]
+        assert hist[1]["replaced_by"] == "alice" and hist[1]["scope"] == "private:alice"
+        old = (await call(alice, "kb_version", id=item["id"], revision=1)).structured_content
+        assert old["body"] == "first idea\nsecond idea" and old["current"] is False
+        diff = (await call(alice, "kb_diff", id=item["id"], from_revision=1)).structured_content[
+            "result"
+        ]
+        assert "-second idea" in diff and "+better idea" in diff
+        restored = (
+            await call(alice, "kb_restore", id=item["id"], revision=1, expected_revision=2)
+        ).structured_content
+        assert restored["revision"] == 3
+        assert (
+            (await call(alice, "kb_get", id=item["id"]))
+            .structured_content["body"]
+            .endswith("second idea")
+        )
+        assert (
+            await call(alice, "kb_restore", id=item["id"], revision=1, expected_revision=3)
+        ).is_error  # no-op
+        assert (await call(bob, "kb_history", id=item["id"])).is_error  # private to alice
+        assert (await call(alice, "kb_version", id=item["id"], revision=77)).is_error

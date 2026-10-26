@@ -21,6 +21,7 @@ class MemoryMaintenance:
         if item is None or item.org_id != org_id:
             return None
         del self._store._items[item_id]
+        self._store.versions.pop(item_id, None)
         stale = [k for k, (_, target) in self._store._idem.items() if target == item_id]
         for key in stale:
             del self._store._idem[key]

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from hive_mcp.domain import access
 from hive_mcp.domain.errors import Conflict, IdempotencyConflict, NotFound
+from hive_mcp.domain.history import KEEP_VERSIONS, current_version
 from hive_mcp.domain.item import Cursor, Item, ItemView, Page, Status, apply_patch, relocate_item
 from hive_mcp.domain.rules import (
     authorize_create,
@@ -19,8 +21,10 @@ LISTED_STATUSES = frozenset({Status.ACTIVE, Status.DRAFT})
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from datetime import datetime
 
     from hive_mcp.domain.clock import Clock
+    from hive_mcp.domain.history import ItemVersion
     from hive_mcp.domain.item import ItemPatch, ItemQuery
     from hive_mcp.domain.principal import Principal
     from hive_mcp.domain.scope import Scope, Visibility
@@ -29,10 +33,17 @@ if TYPE_CHECKING:
 class MemoryItems:
     def __init__(self, clock: Clock) -> None:
         self._clock = clock
+        self.versions: dict[str, list[ItemVersion]] = {}  # replaced versions, oldest first
         self._items: dict[str, Item] = {}
         self._idem: dict[
             tuple[str, str, str], tuple[str, str]
         ] = {}  # key -> (fingerprint, item_id)
+
+    def _archive(self, before: Item, actor: str, at: datetime) -> None:
+        """Keep the replaced version (see domain.history)."""
+        kept = self.versions.setdefault(before.id, [])
+        kept.append(replace(current_version(before), replaced_at=at, replaced_by=actor))
+        del kept[: max(len(kept) - KEEP_VERSIONS, 0)]
 
     def _visible(self, principal: Principal, item_id: str) -> ItemView:
         item = self._items.get(item_id)
@@ -84,6 +95,7 @@ class MemoryItems:
         view = self._visible(principal, item_id)
         authorize_update(principal, view.item, expected_revision)
         updated = apply_patch(view.item, patch, self._clock.now())
+        self._archive(view.item, principal.id, updated.updated_at)
         self._items[item_id] = updated
         return updated
 
@@ -98,6 +110,7 @@ class MemoryItems:
         view = self._visible(principal, item_id)
         moved = relocate_item(view.item, scope, visibility, self._clock.now())
         authorize_relocate(principal, view.item, moved, expected_revision)
+        self._archive(view.item, principal.id, moved.updated_at)
         self._items[item_id] = moved
         return moved
 
@@ -127,6 +140,7 @@ class MemoryItems:
             raise NotFound(item_id)
         check_revision(current, expected_revision)
         moved = relocate_item(current, scope, visibility, self._clock.now())
+        self._archive(current, "system", moved.updated_at)
         self._items[item_id] = moved
         return moved
 

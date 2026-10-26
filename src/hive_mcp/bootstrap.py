@@ -81,7 +81,12 @@ async def build_services(settings: Settings) -> Services:
         max_chars=settings.quota_chars_per_user,
     )
     knowledge = KnowledgeService(
-        items=backend.items, indexing=indexing, audit=backend.audit, clock=clock, quota=quota
+        items=backend.items,
+        indexing=indexing,
+        audit=backend.audit,
+        clock=clock,
+        quota=quota,
+        history=backend.history,
     )
     consult = ConsultService(
         items=backend.items,

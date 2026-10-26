@@ -81,6 +81,16 @@ MIGRATIONS = [
     CREATE INDEX items_source ON items (org_id, source) WHERE source IS NOT NULL;
     CREATE INDEX items_author ON items (org_id, author_id);
     """,
+    """
+    CREATE TABLE item_revisions (
+        item_id text NOT NULL REFERENCES items(id) ON DELETE CASCADE, org_id text NOT NULL,
+        revision integer NOT NULL, title text NOT NULL, body text NOT NULL, kind text NOT NULL,
+        status text NOT NULL, tags text[] NOT NULL, scope_level smallint NOT NULL,
+        scope_owner text NOT NULL, visibility text NOT NULL, item_author text NOT NULL,
+        written_at timestamptz NOT NULL, replaced_at timestamptz NOT NULL, replaced_by text NOT NULL,
+        PRIMARY KEY (item_id, revision)
+    );
+    """,
 ]
 
 

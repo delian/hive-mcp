@@ -9,6 +9,7 @@ import psycopg
 from hive_mcp.adapters.postgres.acl import acl_where
 from hive_mcp.adapters.postgres.codec import ITEM_COLS, item_params, row_to_item
 from hive_mcp.adapters.postgres.db import lock
+from hive_mcp.adapters.postgres.history import record_version
 from hive_mcp.adapters.postgres.item_queries import fetch_item, fetch_view, list_page
 from hive_mcp.domain import access
 from hive_mcp.domain.errors import Conflict, HiveError, IdempotencyConflict, NotFound
@@ -39,7 +40,9 @@ _UPDATE = (
 )
 
 
-async def _store_update(conn: psycopg.AsyncConnection[Any], before: Item, after: Item) -> None:
+async def _store_update(
+    conn: psycopg.AsyncConnection[Any], before: Item, after: Item, actor: str
+) -> None:
     cur = await conn.execute(
         _UPDATE,
         (
@@ -60,6 +63,7 @@ async def _store_update(conn: psycopg.AsyncConnection[Any], before: Item, after:
     )
     if cur.rowcount != 1:
         raise Conflict(f"{after.id} changed concurrently")
+    await record_version(conn, before, actor, after.updated_at)
 
 
 class PgItems:
@@ -147,7 +151,7 @@ class PgItems:
                 raise NotFound(item_id)
             authorize_update(principal, view.item, expected_revision)
             updated = apply_patch(view.item, patch, self._clock.now())
-            await _store_update(conn, view.item, updated)
+            await _store_update(conn, view.item, updated, principal.id)
             return updated
 
     async def relocate(
@@ -164,7 +168,7 @@ class PgItems:
                 raise NotFound(item_id)
             moved = relocate_item(view.item, scope, visibility, self._clock.now())
             authorize_relocate(principal, view.item, moved, expected_revision)
-            await _store_update(conn, view.item, moved)
+            await _store_update(conn, view.item, moved, principal.id)
             return moved
 
     async def tag_counts(
@@ -199,7 +203,7 @@ class PgItems:
             current = row_to_item(row)
             check_revision(current, expected_revision)
             moved = relocate_item(current, scope, visibility, self._clock.now())
-            await _store_update(conn, current, moved)
+            await _store_update(conn, current, moved, "system")
             return moved
 
     async def list(self, principal: Principal, query: ItemQuery) -> Page:

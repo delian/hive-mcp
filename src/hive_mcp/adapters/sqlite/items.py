@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from hive_mcp.adapters.sqlite.acl import acl_where
 from hive_mcp.adapters.sqlite.codec import item_params, ts
+from hive_mcp.adapters.sqlite.history import record_version
 from hive_mcp.adapters.sqlite.item_queries import fetch_item, fetch_view, list_page, load_tags
 from hive_mcp.domain import access
 from hive_mcp.domain.errors import (
@@ -47,7 +48,7 @@ def _sync_tags(conn: sqlite3.Connection, before: Item, after: Item) -> None:
         conn.execute("INSERT INTO item_tags (item_id, tag) VALUES (?, ?)", (after.id, tag))
 
 
-def _store_update(conn: sqlite3.Connection, before: Item, after: Item) -> None:
+def _store_update(conn: sqlite3.Connection, before: Item, after: Item, actor: str) -> None:
     cur = conn.execute(
         "UPDATE items SET kind=?, title=?, body=?, status=?, scope_level=?, scope_owner=?, visibility=?, "
         "updated_at=?, revision=?, content_hash=? WHERE id=? AND revision=?",
@@ -68,6 +69,7 @@ def _store_update(conn: sqlite3.Connection, before: Item, after: Item) -> None:
     )
     if cur.rowcount != 1:
         raise Conflict(f"{after.id} changed concurrently")
+    record_version(conn, before, actor, after.updated_at)
     _sync_tags(conn, before, after)
 
 
@@ -158,7 +160,7 @@ class SqliteItems:
                 raise NotFound(item_id)
             authorize_update(principal, view.item, expected_revision)
             updated = apply_patch(view.item, patch, self._clock.now())
-            _store_update(conn, view.item, updated)
+            _store_update(conn, view.item, updated, principal.id)
             return updated
 
         return await self._db.run(tx, write=True)
@@ -179,7 +181,7 @@ class SqliteItems:
                 raise NotFound(item_id)
             moved = relocate_item(view.item, scope, visibility, self._clock.now())
             authorize_relocate(principal, view.item, moved, expected_revision)
-            _store_update(conn, view.item, moved)
+            _store_update(conn, view.item, moved, principal.id)
             return moved
 
         return await self._db.run(tx, write=True)
@@ -214,7 +216,7 @@ class SqliteItems:
                 raise NotFound(item_id)
             check_revision(current, expected_revision)
             moved = relocate_item(current, scope, visibility, self._clock.now())
-            _store_update(conn, current, moved)
+            _store_update(conn, current, moved, "system")
             return moved
 
         return await self._db.run(tx, write=True)

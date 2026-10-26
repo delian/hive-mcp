@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import numpy as np
 import pytest
 import pytest_asyncio
@@ -120,3 +122,129 @@ async def test_the_access_filter_applies_before_the_nearest_neighbours_are_picke
         await backend.vectors.replace(f"v{n}", "m", ACL1, [v(0.05 * (n + 1), 1)])
     hits = await backend.vectors.search(read_filter(ALICE), "m", v(1, 0), 3)
     assert sorted(h.item_id for h in hits) == ["v0", "v1", "v2"]
+
+
+# ---------------------------------------------------------------- the approximate index
+def wait_for(predicate, seconds=30.0):
+    import time  # noqa: PLC0415
+
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        if predicate():
+            return True
+        time.sleep(0.1)
+    return False
+
+
+async def fill(store, n, start=0, dim=16, seed=0):
+    rng = np.random.default_rng(seed + start)
+    centres = np.random.default_rng(99).standard_normal((12, dim))
+    vecs = []
+    for i in range(start, start + n):
+        v = (centres[i % 12] + 0.3 * rng.standard_normal(dim)).astype(np.float32)
+        vecs.append(v)
+        acl = Acl("org1", Scope(ScopeLevel.PROJECT, f"g{i % 6}"), Visibility.SCOPE)
+        await store.replace(f"i{i}", "m", acl, [v])
+    return np.array(vecs)
+
+
+async def test_a_big_enough_table_gets_an_index_in_the_background_and_still_answers_correctly(
+    tmp_path, monkeypatch
+):
+    from hive_mcp.adapters.lance import vectors as module  # noqa: PLC0415
+
+    monkeypatch.setattr(module, "OPTIMIZE_EVERY", 50)
+    store = LanceVectors(tmp_path / "lance", index_min_rows=200)
+    vecs = await fill(store, 300)
+    table = store._open("m")
+    assert wait_for(lambda: store._has_index(table)), "the index was never built"
+    flt = ScopeFilter("org1", frozenset({Scope(ScopeLevel.PROJECT, f"g{g}") for g in (0, 1, 2)}))
+    allowed = np.array([i for i in range(300) if i % 6 in (0, 1, 2)])
+    rng = np.random.default_rng(5)
+    found = total = 0
+    for _ in range(20):
+        q = rng.standard_normal(16).astype(np.float32)
+        exact = allowed[
+            np.argsort(-(vecs[allowed] @ q) / np.linalg.norm(vecs[allowed], axis=1))[:5]
+        ]
+        hits = await store.search(flt, "m", q, 5)
+        assert all(
+            int(h.item_id[1:]) % 6 in (0, 1, 2) for h in hits
+        )  # the filter holds with an index
+        found += len({int(h.item_id[1:]) for h in hits} & set(exact.tolist()))
+        total += 5
+    assert found / total >= 0.9
+
+
+async def test_small_tables_stay_exact_and_get_no_index(tmp_path, monkeypatch):
+    from hive_mcp.adapters.lance import vectors as module  # noqa: PLC0415
+
+    monkeypatch.setattr(module, "OPTIMIZE_EVERY", 20)
+    store = LanceVectors(tmp_path / "lance", index_min_rows=10_000)
+    await fill(store, 60)
+    assert not store._has_index(store._open("m")) and store._probes(store._open("m")) is None
+
+
+async def test_probes_cover_most_partitions_and_can_be_overridden(tmp_path, monkeypatch):
+    store = LanceVectors(tmp_path / "lance")
+    await fill(store, 5)
+    table = store._open("m")
+    monkeypatch.setattr(store, "_has_index", lambda t: True)
+    for built, probes in (
+        (220_000, 399),
+        (100, 9),
+        (36, 7),
+    ):  # ceil(0.85 * sqrt(n)), never below 8 partitions' worth
+        store._remember_build(table.name, built)
+        store._index_info.clear()
+        assert store._probes(table) == probes, built
+    store.nprobes = 3
+    assert store._probes(table) == 3
+
+
+async def test_the_build_size_survives_a_restart(tmp_path):
+    first = LanceVectors(tmp_path / "lance")
+    first._remember_build("vec_x", 123_456)
+    assert LanceVectors(tmp_path / "lance")._built_rows("vec_x") == 123_456
+    assert LanceVectors(tmp_path / "lance")._built_rows("vec_other") == 0
+
+
+async def test_the_index_is_rebuilt_only_after_the_table_doubles(tmp_path, monkeypatch):
+    from hive_mcp.adapters.lance import vectors as module  # noqa: PLC0415
+
+    monkeypatch.setattr(module, "OPTIMIZE_EVERY", 50)
+    store = LanceVectors(tmp_path / "lance", index_min_rows=100)
+    builds = []
+    real = store._build_index
+
+    def counting(name, rows):
+        builds.append(rows)
+        real(name, rows)
+
+    monkeypatch.setattr(store, "_build_index", counting)
+    await fill(store, 150)  # the compaction at the 100th write finds 100 rows: first build
+    assert wait_for(lambda: builds == [100] and not store._building)
+    await fill(store, 49, start=150)  # 199 rows: the compaction at write 150 saw 150, below double
+    await asyncio.sleep(0.5)
+    assert builds == [100]
+    await fill(store, 1, start=199)  # the 200th write: double the size at the last build
+    assert wait_for(lambda: builds == [100, 200] and not store._building)
+
+
+async def test_a_failing_index_build_leaves_searches_working_and_is_retried(tmp_path, monkeypatch):
+    from hive_mcp.adapters.lance import vectors as module  # noqa: PLC0415
+
+    monkeypatch.setattr(module, "OPTIMIZE_EVERY", 50)
+    store = LanceVectors(tmp_path / "lance", index_min_rows=100)
+    calls = []
+
+    def broken(name, rows):
+        calls.append(name)
+        store._building.discard(name)
+
+    monkeypatch.setattr(store, "_build_index", broken)
+    vecs = await fill(store, 160)
+    assert wait_for(lambda: len(calls) >= 1)
+    q = vecs[7]
+    flt = ScopeFilter("org1", frozenset({Scope(ScopeLevel.PROJECT, f"g{g}") for g in range(6)}))
+    assert (await store.search(flt, "m", q, 1))[0].item_id == "i7"

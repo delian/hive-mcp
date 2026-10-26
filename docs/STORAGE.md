@@ -90,23 +90,37 @@ uv run pytest
 Without `HIVE_TEST_PG_DSN` the Postgres cases are skipped. CI runs them against the `pgvector/pgvector:pg16` image.
 
 
-## Optional: LanceDB for vectors (experimental)
+## Optional: LanceDB for vectors
 `uv sync --extra lancedb` and `HIVE_VECTOR_STORE=lancedb` keep vectors in a LanceDB directory (`<data_dir>/lance`) instead of
 SQLite; items, text search and everything else stay in SQLite. Embedded profile only (Postgres uses pgvector). The adapter
 passes the shared vector conformance suite, applies the access filter *before* picking neighbours, and escapes scope names
-in its filter (tested with hostile names).
+in its filter (tested with hostile names). Vectors are derived data: after switching stores or restoring a backup run
+`hive reindex`; backups do not include the Lance directory.
 
-**Measured here (384 dimensions, 30 queries, visible set = 2.5% of the data, exact search):**
+**Small and medium tables (under 50,000 vectors): exact search, and slower than the default.** Measured (384 dimensions,
+visible set 2.5%): SQLite 34 ms vs LanceDB 65 ms at 50k vectors; writes about 4,000/s vs 70/s (every write adds a file; the
+adapter compacts every 100 writes, without which search degraded from 10 ms to 450 ms after 2,000 writes).
 
-| | SQLite | LanceDB |
+**Large tables: an IVF_FLAT index is built automatically** in the background once a table has 50,000 vectors, and rebuilt when
+it doubles (searches keep working meanwhile; rows added after a build are scanned exactly). Measured on 220,000 real
+embeddings (Simple English Wikipedia, bge-small), 60 queries, each allowed to see 0.28% of the data (about 5 of 2,000 groups):
+
+| | recall@10 | p50 |
 |---|---|---|
-| search at 50k vectors, p50 | 34 ms | 65 ms |
-| search at 200k vectors, p50 / p95 | 143 / 157 ms | 306 / 1151 ms |
-| one item written at a time | about 4,000 / s | about 70 / s (every write adds a file; compacted every 100 writes) |
+| SQLite exact (default) | 1.000 | 138 ms |
+| LanceDB exact (no index) | 1.000 | 345 ms |
+| LanceDB IVF_FLAT, 469 partitions, probing 10% | 0.38 | 25 ms |
+| ... probing 21% | 0.57 | 25 ms |
+| ... probing 43% | 0.96 | 26 ms |
+| ... probing 64% | 0.98 | 25 ms |
+| **... probing 85% (the default)** | **0.995** | **26 ms** |
 
-So **LanceDB is slower than the default at every size tested, and about 60 times slower to write**, because no ANN index is
-built: it scans exactly like SQLite does. It would only pay off with an IVF index (the Phase 0 benchmark on real embeddings:
-13 ms at 220k, recall 0.99), which this adapter does not create, because recall must be verified on your data first.
-Without compaction, search degraded from 10 ms to 450 ms after 2,000 writes: that is why the adapter compacts. Vectors are
-derived data: after switching stores or restoring a backup run `hive reindex`. Backups do not include the Lance directory.
-**Recommendation: stay on the default for the embedded profile and use Postgres + pgvector when you outgrow it.**
+The access filter leaves few vectors in each partition, so almost all partitions must be probed for good recall; the filter
+(not the probing) dominates the time, so probing most partitions is cheap. The default probes 85% of `sqrt(n)` partitions.
+This is one corpus and one kind of filter: a broader access filter (more visible data) needs fewer probes, a narrower one more.
+The number of probes can be overridden in code (`LanceVectors.nprobes`); an index never makes a result visible to someone
+who may not read it (the filter is applied before the nearest-neighbour search, with the index too: tested).
+
+**Recommendation:** the default (SQLite) is simplest and fine up to roughly 100,000 vectors; LanceDB with the index is about 5x
+faster per search at 220,000 vectors and one tenth of a percent short of exact, but writes are much slower and it adds a second
+store to run and restore. Beyond that, Postgres + pgvector is the scaling path (6 ms at the same size in the Phase 0 benchmark).

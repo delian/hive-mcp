@@ -20,6 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr poppler-utils
       - run: uv sync --frozen
       - run: uv run ruff format --check .
       - run: uv run ruff check .
@@ -71,6 +72,12 @@ jobs:
         run: >
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.0
           image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress hive-mcp:ci
+      - name: Image built with OCR has Tesseract and Poppler, and the server starts with HIVE_OCR=true
+        run: |
+          docker build --build-arg WITH_OCR=true -t hive-mcp:ocr .
+          docker run --rm hive-mcp:ocr sh -c 'tesseract --list-langs | grep -qx eng && pdftoppm -v'
+          docker run --rm -e HIVE_OCR=true -e HIVE_DATA_DIR=/tmp/d hive-mcp:ocr \
+            python -c "import asyncio; from hive_mcp.bootstrap import build_services; from hive_mcp.config import Settings; asyncio.run(build_services(Settings()))"
       - name: Compose file is valid
         run: POSTGRES_PASSWORD=x TUNNEL_TOKEN=x TS_AUTHKEY=x docker compose --profile postgres --profile cloudflare --profile tailscale config -q
 

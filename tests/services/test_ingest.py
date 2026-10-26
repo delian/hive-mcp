@@ -97,9 +97,9 @@ async def test_parsing_a_document_does_not_freeze_the_event_loop(stack, monkeypa
 
     from hive_mcp.ingest.extract import extract_text as real  # noqa: PLC0415
 
-    def slow(name, data):
+    def slow(name, data, ocr=None):
         time.sleep(0.4)  # a hostile PDF that takes a while to parse
-        return real(name, data)
+        return real(name, data, ocr)
 
     monkeypatch.setattr("hive_mcp.services.ingest.extract_text", slow)
     ticks = 0
@@ -116,3 +116,32 @@ async def test_parsing_a_document_does_not_freeze_the_event_loop(stack, monkeypa
     finally:
         beat.cancel()
     assert ticks >= 15  # the loop kept running while the parser worked in a thread
+
+
+async def test_scanned_documents_and_images_are_ingested_only_when_ocr_is_on(stack):
+    import io  # noqa: PLC0415
+    import shutil  # noqa: PLC0415
+
+    import pytest  # noqa: PLC0415
+
+    if not (shutil.which("tesseract") and shutil.which("pdftoppm")):
+        pytest.skip("tesseract/poppler absent")
+    from PIL import Image, ImageDraw, ImageFont  # noqa: PLC0415
+
+    from hive_mcp.ingest.ocr import OcrConfig  # noqa: PLC0415
+
+    image = Image.new("RGB", (1100, 200), "white")
+    ImageDraw.Draw(image).text(
+        (40, 40),
+        "Calibration interval is twelve months",
+        fill="black",
+        font=ImageFont.load_default(size=44),
+    )
+    buffer = io.BytesIO()
+    image.save(buffer, "PNG")
+    with pytest.raises(ValidationError, match="HIVE_OCR"):
+        await stack.ingest.ingest(ALICE, "scan.png", buffer.getvalue())
+    reading = IngestService(stack.knowledge, stack.graph, ocr=OcrConfig())
+    result = await reading.ingest(ALICE, "scan.png", buffer.getvalue())
+    item = result.items[0]
+    assert "format/image-ocr" in item.tags and "twelve months" in item.body.lower()

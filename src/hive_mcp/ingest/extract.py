@@ -9,6 +9,7 @@ from html.parser import HTMLParser
 from pathlib import PurePosixPath
 
 from hive_mcp.domain.errors import ValidationError
+from hive_mcp.ingest.ocr import IMAGE_SUFFIXES, OcrConfig, ocr_image, ocr_pdf_pages
 from hive_mcp.ingest.office import LEGACY, OFFICE
 
 TEXT_SUFFIXES = frozenset(
@@ -102,9 +103,10 @@ def _decode(data: bytes) -> str:
 
 
 MAX_PDF_PAGES = 2000
+MIN_CHARS_PER_PAGE = 30  # below this a PDF page counts as a scan
 
 
-def _pdf(data: bytes) -> Extracted:
+def _pdf(data: bytes, ocr: OcrConfig | None) -> Extracted:
     try:
         from pypdf import PdfReader  # noqa: PLC0415 - optional extra
     except ImportError as exc:
@@ -121,13 +123,33 @@ def _pdf(data: bytes) -> Extracted:
         raise
     except Exception as exc:
         raise ValidationError(f"cannot read PDF: {exc.__class__.__name__}") from exc
-    return Extracted("\n\n".join(p for p in pages if p), "pdf", title)
+    fmt = "pdf"
+    if ocr is not None:
+        pages, scanned = _read_scans(data, pages, ocr)
+        fmt = "pdf-ocr" if scanned else "pdf"
+    return Extracted("\n\n".join(p for p in pages if p), fmt, title)
 
 
-def extract_text(name: str, data: bytes) -> Extracted:
+def _read_scans(data: bytes, pages: list[str], ocr: OcrConfig) -> tuple[list[str], bool]:
+    """Pages with (almost) no text layer are scans: read them with OCR. A mostly-text document with
+    a few more blank pages than the OCR limit is left alone rather than rejected."""
+    sparse = [i + 1 for i, text in enumerate(pages) if len(text) < MIN_CHARS_PER_PAGE]
+    if not sparse or (len(sparse) > ocr.max_pages and len(sparse) * 2 < len(pages)):
+        return pages, False
+    read = ocr_pdf_pages(data, sparse, ocr)
+    return [read.get(i + 1, text) for i, text in enumerate(pages)], True
+
+
+def extract_text(name: str, data: bytes, ocr: OcrConfig | None = None) -> Extracted:
     suffix = PurePosixPath(name.lower()).suffix
     if data[:5] == b"%PDF-" or suffix == ".pdf":
-        result = _pdf(data)
+        result = _pdf(data, ocr)
+    elif suffix in IMAGE_SUFFIXES:
+        if ocr is None:
+            raise ValidationError(
+                "images can only be read with OCR (HIVE_OCR=true, see docs/INGEST.md)"
+            )
+        result = Extracted(ocr_image(data, ocr), "image-ocr")
     elif suffix in HTML_SUFFIXES:
         parser = _HtmlText()
         parser.feed(_decode(data))
@@ -146,5 +168,8 @@ def extract_text(name: str, data: bytes) -> Extracted:
     else:
         raise ValidationError(f"unsupported file type {suffix!r}")
     if not result.text.strip():
-        raise ValidationError("the file contains no readable text")
+        hint = (
+            " (a scan? enable OCR: HIVE_OCR=true)" if result.format == "pdf" and ocr is None else ""
+        )
+        raise ValidationError(f"the file contains no readable text{hint}")
     return result

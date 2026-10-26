@@ -33,7 +33,9 @@ MAX_REDIRECTS = 5
 REDIRECTS = {301, 302, 303, 307, 308}
 GENERIC_NAMES = {"text/html": ".html", "application/pdf": ".pdf", "text/plain": ".txt",
                  "text/markdown": ".md", "application/json": ".json", "text/csv": ".csv",
-                 "application/xml": ".xml", "text/xml": ".xml"}  # fmt: skip
+                 "application/xml": ".xml", "text/xml": ".xml", "image/png": ".png",
+                 "image/jpeg": ".jpg", "image/tiff": ".tiff", "image/bmp": ".bmp",
+                 "image/gif": ".gif", "image/webp": ".webp"}  # fmt: skip
 OFFICE_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",

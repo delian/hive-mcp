@@ -17,7 +17,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         routes = {
             "/page": (200, "text/html; charset=utf-8", PAGE),
             "/plain": (200, "text/plain", b"plain pelican text"),
-            "/image": (200, "image/png", b"\x89PNG"),
+            "/image": (200, "video/mp4", b"\x00\x00\x00"),
             "/go": (302, None, b""),
         }
         status, ctype, body = routes.get(self.path, (404, "text/plain", b"missing"))

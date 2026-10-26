@@ -31,6 +31,7 @@ OAuth refresh tokens live 30 days from login and are not extended by use; client
 |---|---|
 | Secrets in text | Redaction before storage; the PEM-key rule is a single linear pass (a lazy regex took 5 s on a 190 KB hostile body and froze the server) and masks a key whose end is missing to the end of the text |
 | PDF, Office, HTML files | Parsed in a worker thread (a slow or hostile file cannot stall other users); PDFs over 2,000 pages refused; Office archives capped at 16 MB per part / 64 MB unpacked, DTDs and entities refused; 10 MB via tools, 50 MB via the CLI |
+| Scans and images (OCR, off by default) | Separate Tesseract/Poppler processes with a 60 s time limit per page, 300 s per document, 2 GB memory limit and a page cap; files travel by stdin or a private temp directory, never a command line |
 | URL fetching (off by default) | Public addresses only, checked for every redirect and pinned for the connection; IPv4 hidden in IPv4-mapped, NAT64 and 6to4 IPv6 addresses is checked too; 20 MB, per-operation timeout and a 60 s overall deadline |
 | Git ingestion | Operator command only; shallow clone, no submodules, no `ext::` transport, symlinks and hidden paths skipped, nothing executed |
 | Backups | Archives are extracted with Python's `data` filter after a path check; entries must match a checksummed manifest |

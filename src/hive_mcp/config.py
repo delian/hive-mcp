@@ -94,6 +94,10 @@ class Settings(BaseSettings):
     # Number of server processes sharing one database (external profile). Above 1: rate limits are
     # shared through Postgres, quota reads are fresh, and a fixed HIVE_SECRET_KEY is required.
     replicas: int = Field(default=1, ge=1)
+    # Read scanned PDFs and images with Tesseract (needs tesseract + poppler-utils; docs/INGEST.md).
+    ocr: bool = False
+    ocr_languages: str = "eng"  # Tesseract codes joined with +, e.g. eng+deu
+    ocr_max_pages: int = Field(default=50, ge=1, le=500)  # pages OCR may read in one document
     run_jobs: bool = True  # run the background job runner inside the server process
     # Interactive sign-in (claude.ai, ChatGPT, Gemini) via Google Workspace; needs id and secret.
     google_client_id: str | None = None

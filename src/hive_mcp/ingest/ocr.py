@@ -1,13 +1,14 @@
 """Text from scanned documents and images, by running Tesseract (and Poppler's pdftoppm for PDFs).
 
 Both are C programs that read untrusted files, so they run as separate processes with a time limit
-per call, a memory limit, a page cap and a total deadline, and their output is only ever read as text.
+per call, a memory limit, a page cap and a total deadline; their output is only ever read as text.
 In the container they run as the unprivileged user inside the container's own limits. Nothing is
 installed by default: enable with HIVE_OCR=true on an image built with --build-arg WITH_OCR=true.
 """
 
 from __future__ import annotations
 
+import re
 import resource
 import shutil
 import subprocess
@@ -22,6 +23,7 @@ from hive_mcp.domain.errors import ValidationError
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+LANGUAGES = re.compile(r"[a-z][a-z0-9_]{1,30}(\+[a-z][a-z0-9_]{1,30}){0,5}")
 IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".gif", ".webp"})
 MIN_CHARS_PER_PAGE = 30  # a PDF page with less text than this is treated as a scan
 MEMORY_LIMIT = 2 * 1024**3
@@ -35,14 +37,22 @@ class OcrConfig:
     max_pages: int = 50
     deadline: float = 300.0  # seconds for one document
 
+    def __post_init__(self) -> None:
+        if not LANGUAGES.fullmatch(self.languages):  # it becomes an argument of `tesseract -l`
+            raise ValidationError("OCR languages are Tesseract codes joined by +, e.g. eng+deu")
+        if self.max_pages < 1 or self.deadline <= 0:
+            raise ValidationError("OCR limits must be positive")
+
 
 def check_available(need_pdf: bool = True) -> None:
     """Fail early, with the fix, when OCR is switched on but the programs are not installed."""
-    missing = [n for n in ("tesseract", *(("pdftoppm",) if need_pdf else ())) if not shutil.which(n)]
+    missing = [
+        n for n in ("tesseract", *(("pdftoppm",) if need_pdf else ())) if not shutil.which(n)
+    ]
     if missing:
         raise ValidationError(
             f"HIVE_OCR is on but {', '.join(missing)} is not installed "
-            "(build the image with --build-arg WITH_OCR=true, or install tesseract-ocr and poppler-utils)"
+            "(build the image with --build-arg WITH_OCR=true, or install tesseract-ocr and poppler)"
         )
 
 
@@ -54,7 +64,7 @@ def _run(cmd: list[str], data: bytes | None, timeout: float) -> bytes:
     try:
         result = subprocess.run(  # noqa: S603 - fixed argv; the file content goes on stdin or in a temp file
             cmd, input=data, capture_output=True, timeout=timeout, check=False,
-            preexec_fn=_limit_memory,  # noqa: PLW1509 - only calls setrlimit
+            preexec_fn=_limit_memory,
         )  # fmt: skip
     except subprocess.TimeoutExpired as exc:
         raise ValidationError(f"{cmd[0]} took longer than {timeout:.0f} seconds") from exc
@@ -80,7 +90,7 @@ def ocr_pdf_pages(
     """Text of the given 1-based pages, rendered with pdftoppm then read by Tesseract."""
     if len(pages) > config.max_pages:
         raise ValidationError(
-            f"{len(pages)} pages need OCR, more than the limit of {config.max_pages}; split the file"
+            f"{len(pages)} pages need OCR, over the limit of {config.max_pages}; split the file"
         )
     started, found = clock(), {}
     with tempfile.TemporaryDirectory(prefix="hive-ocr-") as tmp:

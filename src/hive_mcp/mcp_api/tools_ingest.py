@@ -41,7 +41,7 @@ def register_ingest_tools(mcp: MCPServer, get_services: Callable[[], Services]) 
         share_with_project: str | None = None,
         link_entities: bool = True,
     ) -> IngestOut:
-        """Add a document (.txt .md .html .pdf, source code...) as searchable, linked knowledge.
+        """Add a document (.txt .md .html .pdf .docx .xlsx .pptx, source code; scans and images when the server has OCR) as searchable, linked knowledge.
 
         `name` is the file name (its extension picks the reader). Send binary files (pdf) as base64.
         Long documents become several parts linked with part_of/next. Private unless

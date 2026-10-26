@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from hive_mcp.domain.principal import Principal
     from hive_mcp.domain.scope import Scope
     from hive_mcp.ingest.fetch import FetchPolicy
+    from hive_mcp.ingest.ocr import OcrConfig
     from hive_mcp.services.entities import EntityService
     from hive_mcp.services.graph import GraphService
     from hive_mcp.services.knowledge import KnowledgeService
@@ -54,7 +55,9 @@ class IngestService:
         entities: EntityService | None = None,
         url_policy: FetchPolicy | None = None,
         fetch_hooks: dict[str, Any] | None = None,
+        ocr: OcrConfig | None = None,
     ) -> None:
+        self._ocr = ocr
         self._url_policy, self._fetch_hooks = url_policy, fetch_hooks or {}
         self._knowledge, self._graph, self._section_chars = knowledge, graph, section_chars
         self._entities = entities
@@ -78,7 +81,7 @@ class IngestService:
         if len(data) > MAX_FILE_BYTES:
             raise ValidationError(f"file larger than {MAX_FILE_BYTES // (1024 * 1024)} MB")
         # Parsing untrusted PDFs/Office files is CPU-bound: keep it off the event loop.
-        extracted = await asyncio.to_thread(extract_text, name, data)
+        extracted = await asyncio.to_thread(extract_text, name, data, self._ocr)
         sections = await asyncio.to_thread(split_sections, extracted.text, self._section_chars)
         if len(sections) > MAX_SECTIONS:
             raise ValidationError(f"document too long ({len(sections)} parts, max {MAX_SECTIONS})")

@@ -195,7 +195,9 @@ async def test_size_status_and_content_type_limits():
     with pytest.raises(ValidationError, match="HTTP 404"):
         await get(httpx.Response(404, content=b"nope"))
     with pytest.raises(ValidationError, match="not a document"):
-        await get(httpx.Response(200, content=b"\x89PNG", headers={"content-type": "image/png"}))
+        await get(
+            httpx.Response(200, content=b"\x00\x00\x00", headers={"content-type": "video/mp4"})
+        )
     assert (
         await get(httpx.Response(200, content=b"x" * 100, headers={"content-type": "text/plain"}))
     ).data == b"x" * 100
@@ -252,3 +254,17 @@ async def test_a_server_that_dribbles_data_is_cut_off_by_the_overall_deadline():
             resolve=resolver({"example.org": [PUBLIC]}),
             transport=transport,
         )
+
+
+async def test_images_are_fetched_and_named_so_the_reader_knows_what_they_are():
+    got = await fetch(
+        "https://example.org/scans/page",
+        FetchPolicy(),
+        resolve=resolver({"example.org": [PUBLIC]}),
+        transport=httpx.MockTransport(
+            lambda r: httpx.Response(
+                200, content=b"\x89PNG....", headers={"content-type": "image/png"}
+            )
+        ),
+    )
+    assert got.name == "example.org/scans/page.png" and got.data.startswith(b"\x89PNG")

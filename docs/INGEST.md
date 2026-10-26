@@ -36,3 +36,29 @@ off), reads documents, markdown, code and Office files under 1 MB, skips binarie
 and records `git:<url>#<path>` as the source. Safe to re-run. Needs `git` (Docker build arg `WITH_GIT=true`).
 
 Not done: automatic entity *discovery* (the server has no LLM; agents add entities), OCR, legacy Office formats.
+
+
+## Scanned documents and images (OCR)
+Off by default. With `HIVE_OCR=true`, `kb_ingest`, `hive ingest` and `kb_ingest_url` also read **images** (`.png .jpg .jpeg .tif
+.tiff .bmp .gif .webp`) and **PDFs without a text layer** with [Tesseract](https://github.com/tesseract-ocr/tesseract); Poppler's
+`pdftoppm` renders the PDF pages. Results carry the tag `format/image-ocr` or `format/pdf-ocr`; OCR text is only as good as the
+scan, so check important numbers against the original.
+
+| Setting | Meaning |
+|---|---|
+| `HIVE_OCR` | `true` to enable; the server refuses to start if `tesseract` or `pdftoppm` is missing |
+| `HIVE_OCR_LANGUAGES` | Tesseract language codes joined with `+` (default `eng`, e.g. `eng+deu`); the packs must be installed |
+| `HIVE_OCR_MAX_PAGES` | most pages OCR will read in one document (default 50) |
+
+Docker: `docker build --build-arg WITH_OCR=true --build-arg OCR_LANGS="deu fra" -t hive-mcp .` (about 80 MB more).
+Elsewhere: `apt install tesseract-ocr poppler-utils`.
+
+How it works: a PDF page with fewer than 30 characters of text is treated as a scan, so documents that mix text pages and scans
+work; a text document that merely has a few blank pages more than the limit is left alone; if more than the limit of pages (or
+more than half the pages) need OCR the file is **refused** with a message to split it, never silently cut. Without OCR an image
+or a scanned PDF is refused with a message that says how to enable it. OCR is slow (seconds per page): it runs in a worker
+thread, so other requests are not held up, but the call itself waits; the limits are 60 s per page and 300 s per document.
+
+Safety: Tesseract and Poppler are C programs reading untrusted files, so each call runs as a separate process with a time limit
+and a 2 GB memory limit, as the container's unprivileged user. Nothing from the file reaches a command line (languages are
+validated, files go through stdin or a private temporary directory).

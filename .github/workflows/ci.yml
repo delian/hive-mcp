@@ -55,7 +55,7 @@ jobs:
       - name: Smoke test with the real offline embedder
         run: HIVE_EMBEDDER=onnx scripts/smoke_docker.sh hive-mcp:ci
       - name: Scan the image for known vulnerabilities (fixable high/critical only)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: hive-mcp:ci
           severity: HIGH,CRITICAL

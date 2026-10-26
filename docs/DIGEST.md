@@ -7,8 +7,10 @@ requests wait. It leaves out the caller's own items and personal session/compact
 other groups shared organisation-wide, labelled `EXTERNAL`. The result is built with the caller's own read filter, so a
 digest never shows more than a search would. `hive digest --user ann@acme.com` prints the same for a person.
 
-Items *edited* in the window are not listed (the newest-first order is by creation). Very busy knowledge bases: at most 2,000
-items are examined per digest (the text says so when that limit was hit).
+**Changed by others:** items created *before* the window that someone else edited during it are listed separately, with the
+editor (the person who produced the current version); your own edits are not echoed back. `kb_list(sort="updated")` browses
+the same way: recently edited first. Very busy knowledge bases: at most 2,000 items are examined per list (the text says so
+when that limit was hit).
 
 ## Weekly email
 Needs SMTP (`HIVE_SMTP_HOST`, `HIVE_SMTP_FROM`, see PROMOTION.md) and:

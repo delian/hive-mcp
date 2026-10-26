@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from hive_mcp.mcp_api.errors import guarded
 from hive_mcp.mcp_api.tools import READ, current_principal
-from hive_mcp.services.digest import render_text
+from hive_mcp.services.digest import DigestItem, render_text
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -25,6 +25,7 @@ class DigestItemOut(BaseModel):
     author: str
     origin: str = Field(description="'EXTERNAL: ...' means another group's knowledge.")
     tags: list[str]
+    edited_by: str | None = None
 
 
 class DigestOut(BaseModel):
@@ -32,10 +33,20 @@ class DigestOut(BaseModel):
     new_items: int = Field(description="How many new items there are; `items` may show fewer.")
     items: list[DigestItemOut]
     top_tags: dict[str, int]
+    edited: list[DigestItemOut] = Field(
+        description="Older items that someone else changed in the window."
+    )
     pending_approvals: int = Field(
         description="Promotion requests waiting for you (approvers only)."
     )
     text: str = Field(description="The same digest as readable text.")
+
+
+def _out(i: DigestItem) -> DigestItemOut:
+    return DigestItemOut(
+        id=i.id, title=i.title, kind=i.kind, author=i.author, origin=i.origin, tags=list(i.tags),
+        edited_by=i.edited_by,
+    )  # fmt: skip
 
 
 def register_digest_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None:
@@ -55,13 +66,8 @@ def register_digest_tools(mcp: MCPServer, get_services: Callable[[], Services]) 
         return DigestOut(
             since=digest.since.isoformat(),
             new_items=digest.total_new,
-            items=[
-                DigestItemOut(
-                    id=i.id, title=i.title, kind=i.kind, author=i.author, origin=i.origin,
-                    tags=list(i.tags),
-                )
-                for i in digest.items
-            ],
+            items=[_out(i) for i in digest.items],
+            edited=[_out(i) for i in digest.edited],
             top_tags=dict(digest.top_tags),
             pending_approvals=digest.pending_approvals,
             text=render_text(digest),

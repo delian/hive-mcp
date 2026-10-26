@@ -103,3 +103,31 @@ async def test_failures_are_retried_at_the_next_check(monkeypatch):
     sender = FakeSender(failed=1)
     await run_loop(sender, monkeypatch, datetime(2026, 1, 5, 9, tzinfo=UTC), 6)
     assert sender.calls >= 3
+
+
+async def test_the_tool_reports_edits_and_kb_list_can_sort_by_last_change(live: Live):
+    async with live.client(live.token_for(BOB)) as bob:
+        old = (
+            await bob.call_tool(
+                "kb_remember", {"title": "Older note", "body": "v1", "share_with_project": "p1"}
+            )
+        ).structured_content
+        newer = (
+            await bob.call_tool(
+                "kb_remember", {"title": "Newer note", "body": "v1", "share_with_project": "p1"}
+            )
+        ).structured_content
+        await bob.call_tool(
+            "kb_update", {"id": old["id"], "expected_revision": 1, "title": "Older note, edited"}
+        )
+        by_created = (await bob.call_tool("kb_list", {})).structured_content["items"]
+        by_updated = (await bob.call_tool("kb_list", {"sort": "updated"})).structured_content[
+            "items"
+        ]
+    assert [i["id"] for i in by_created][:2] == [newer["id"], old["id"]]
+    assert [i["id"] for i in by_updated][:2] == [old["id"], newer["id"]]  # the edited one rises
+    async with live.client(live.token_for(ALICE)) as alice:
+        out = (await alice.call_tool("kb_digest", {})).structured_content
+    assert (
+        out["edited"] == [] and out["new_items"] == 2
+    )  # both are new this week; nothing is an "old item edited"

@@ -60,12 +60,13 @@ async def list_page(
         member, member_params = member_where(flt)
         conds.append(member)
         params += member_params
+    column = "updated_at" if query.by_updated else "created_at"
     if query.after:
-        conds.append("(created_at, id) < (%s, %s)")
+        conds.append(f"({column}, id) < (%s, %s)")
         params += [query.after.created_at, query.after.id]
     sql = (
         f"SELECT {ITEM_COLS} FROM items WHERE {' AND '.join(conds)} "  # noqa: S608
-        "ORDER BY created_at DESC, id DESC LIMIT %s"
+        f"ORDER BY {column} DESC, id DESC LIMIT %s"
     )
     cur = await conn.execute(sql, [*params, query.limit + 1])
     rows = await cur.fetchall()
@@ -77,4 +78,5 @@ async def list_page(
         if tier is not None:
             views.append(ItemView(item, tier))
     last = views[-1].item if views else None
-    return Page(tuple(views), Cursor(last.created_at, last.id).encode() if more and last else None)
+    when = (last.updated_at if query.by_updated else last.created_at) if last else None
+    return Page(tuple(views), Cursor(when, last.id).encode() if more and last and when else None)

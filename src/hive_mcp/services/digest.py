@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -48,6 +48,7 @@ class DigestItem:
     origin: str
     external: bool
     tags: tuple[str, ...]
+    edited_by: str | None = None  # for the "edited" section: who made the latest change
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,10 +61,12 @@ class Digest:
     pending_approvals: int = 0
     scanned_all: bool = True
     by_origin: dict[str, int] = field(default_factory=dict)
+    edited: tuple[DigestItem, ...] = ()  # older items someone else changed in the window
+    total_edited: int = 0
 
     @property
     def empty(self) -> bool:
-        return not self.items and not self.pending_approvals
+        return not self.items and not self.edited and not self.pending_approvals
 
 
 class DigestService:
@@ -113,11 +116,47 @@ class DigestService:
                 complete = False
                 break
             cursor = Cursor.decode(page.next_cursor)
+        edited = await self._edited(who, since, include_external)
         pending = len(await self._promotions.list(who)) if who.is_approver else 0
         top = tuple(tags.most_common(8))
         return Digest(
-            since, until, tuple(found[:limit]), len(found), top, pending, complete, dict(origins)
-        )
+            since, until, tuple(found[:limit]), len(found), top, pending, complete, dict(origins),
+            tuple(edited[:limit]), len(edited),
+        )  # fmt: skip
+
+    async def _edited(self, who: Principal, since: datetime, external: bool) -> list[DigestItem]:
+        """Items from before the window that someone else changed during it, latest change first."""
+        found: list[DigestItem] = []
+        cursor, scanned = None, 0
+        while scanned < MAX_SCANNED:
+            query = ItemQuery(
+                limit=PAGE, after=cursor, include_referenced=external, by_updated=True
+            )
+            page = await self._knowledge.browse(who, query)
+            for view in page.items:
+                item = view.item
+                scanned += 1
+                if item.updated_at < since:
+                    return found
+                if item.created_at >= since or item.revision < 2 or str(item.kind) in QUIET_KINDS:  # noqa: PLR2004
+                    continue  # new items are already in the first list
+                editor = await self._last_editor(who, item.id, item.author_id)
+                if editor != who.id:
+                    label = provenance(item.scope, view.tier, item.author_id)
+                    found.append(replace(self._entry(view, label), edited_by=editor))
+            if not page.next_cursor:
+                break
+            cursor = Cursor.decode(page.next_cursor)
+        return found
+
+    async def _last_editor(self, who: Principal, item_id: str, author: str) -> str:
+        """Who produced the current version: the one who replaced the version before it."""
+        try:
+            versions = await self._knowledge.history(who, item_id, limit=2)
+        except HiveError:
+            return author
+        previous = next((v for v in versions if v.replaced_by), None)
+        return previous.replaced_by if previous and previous.replaced_by else author
 
     @staticmethod
     def _entry(view: ItemView, label: str) -> DigestItem:
@@ -149,6 +188,12 @@ def render_text(digest: Digest, recipient: str = "") -> str:
     for origin, items in by_origin.items():
         lines.append(f"{origin} ({digest.by_origin.get(origin, len(items))} new)")
         lines += [f"  - {i.title}  [{i.kind}, by {i.author}, id {i.id}]" for i in items]
+        lines.append("")
+    if digest.edited:
+        lines.append(f"Changed by others ({digest.total_edited})")
+        lines += [
+            f"  - {i.title}  [{i.kind}, edited by {i.edited_by}, id {i.id}]" for i in digest.edited
+        ]
         lines.append("")
     if digest.total_new > len(digest.items):
         lines.append(f"... and {digest.total_new - len(digest.items)} more (kb_digest lists them).")

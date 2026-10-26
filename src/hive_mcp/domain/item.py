@@ -169,7 +169,8 @@ def relocate_item(item: Item, scope: Scope, visibility: Visibility, now: datetim
 
 @dataclass(frozen=True, slots=True)
 class Cursor:
-    """Keyset pagination position (newest first): items strictly older than (created_at, id)."""
+    """Keyset pagination position (newest first): items strictly older than (time, id), where the
+    time is the creation time, or the last-change time when the query sorts by that."""
 
     created_at: datetime
     id: str
@@ -189,8 +190,9 @@ class Cursor:
             raise ValidationError("invalid cursor")
         return Cursor(when, str(ident))
 
-    def before(self, item: Item) -> bool:
-        return (item.created_at, item.id) < (self.created_at, self.id)
+    def before(self, item: Item, by_updated: bool = False) -> bool:
+        stamp = item.updated_at if by_updated else item.created_at
+        return (stamp, item.id) < (self.created_at, self.id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +203,7 @@ class ItemQuery:
     include_referenced: bool = True
     limit: int = 20
     after: Cursor | None = None
+    by_updated: bool = False  # order by last change instead of creation
 
     def __post_init__(self) -> None:
         if not 1 <= self.limit <= MAX_PAGE:
@@ -214,7 +217,7 @@ class ItemQuery:
             and self.tags_all <= item.tags
             and item.status in self.statuses
             and (self.include_referenced or tier is Tier.PRIMARY)
-            and (self.after is None or self.after.before(item))
+            and (self.after is None or self.after.before(item, self.by_updated))
         )
 
 

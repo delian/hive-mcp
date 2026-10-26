@@ -276,3 +276,32 @@ async def test_tag_counts_are_visibility_scoped_ordered_and_prefix_filtered(back
     assert await backend.items.tag_counts(ZOE) == []  # other tenant sees nothing
     assert "secret/carol" in dict(await backend.items.tag_counts(CAROL))
     assert await backend.items.tag_counts(ALICE, prefix="%") == []  # no wildcard semantics
+
+
+async def test_browsing_can_order_by_last_change_with_a_stable_cursor(backend):
+
+    made = []
+    for n in range(5):
+        item = make_item(backend.clock, ALICE, P1, title=f"item {n}")
+        await backend.items.create(ALICE, item)
+        made.append(item)
+        backend.clock.advance(minutes=1)
+    backend.clock.advance(hours=1)
+    await backend.items.update(ALICE, made[1].id, ItemPatch(title="edited early"), 1)
+    backend.clock.advance(minutes=5)
+    await backend.items.update(ALICE, made[3].id, ItemPatch(title="edited late"), 1)
+    by_created = await backend.items.list(ALICE, ItemQuery(limit=10))
+    assert [v.item.id for v in by_created.items] == [m.id for m in reversed(made)]
+    by_updated = await backend.items.list(ALICE, ItemQuery(limit=10, by_updated=True))
+    assert [v.item.id for v in by_updated.items][:2] == [
+        made[3].id,
+        made[1].id,
+    ]  # latest change first
+    seen, cursor = [], None
+    while True:  # paging by update time visits each item exactly once
+        page = await backend.items.list(ALICE, ItemQuery(limit=2, by_updated=True, after=cursor))
+        seen += [v.item.id for v in page.items]
+        if not page.next_cursor:
+            break
+        cursor = Cursor.decode(page.next_cursor)
+    assert seen == [v.item.id for v in by_updated.items] and len(set(seen)) == 5

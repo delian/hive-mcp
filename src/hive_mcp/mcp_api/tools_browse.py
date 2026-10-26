@@ -62,9 +62,11 @@ def register_browse_tools(mcp: MCPServer, get_services: Callable[[], Services]) 
         mine_only: bool = False,
         limit: int = 20,
         cursor: str | None = None,
+        sort: Literal["created", "updated"] = "created",
     ) -> ListOut:
         """Browse items newest first without a search query, optionally by kind and tags (all must match).
 
+        `sort`: by creation time (default) or by last change (`updated`: recently edited items first).
         `mine_only` hides other groups' items. Use `cursor` from the previous page to continue.
         For finding things by meaning, use kb_consult instead.
         """
@@ -75,6 +77,7 @@ def register_browse_tools(mcp: MCPServer, get_services: Callable[[], Services]) 
             include_referenced=not mine_only,
             limit=limit,
             after=Cursor.decode(cursor) if cursor else None,
+            by_updated=sort == "updated",
         )
         page = await get_services().knowledge.browse(current_principal(), query)
         items = [

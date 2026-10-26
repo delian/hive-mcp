@@ -198,3 +198,66 @@ async def test_a_failed_send_is_retried_at_the_next_round(stack, mailing):
     outbox.fail = False
     assert await sender.send_all() == (1, 0)  # the claim was released, so it is tried again
     assert [n.recipients for n in outbox.sent] == [("alice@acme.com",)]
+
+
+# ---------------------------------------------------------------- items changed by others
+async def edit(stack, who, item, title):
+    from hive_mcp.domain.item import ItemPatch  # noqa: PLC0415
+
+    return await stack.knowledge.update(who, item.id, ItemPatch(title=title), item.revision)
+
+
+async def test_old_items_edited_by_someone_else_are_listed_with_the_editor(stack, digests):
+    from hive_mcp.domain.principal import Role  # noqa: PLC0415
+
+    editor = Principal("eddie", "org1", Role.EDITOR, projects=frozenset({"p1"}))
+    old = await add(stack, BOB, "Dwell plan", P1)
+    stack.backend.clock.advance(days=20)
+    await edit(stack, editor, old, "Dwell plan v2")
+    digest = await digests.build(ALICE)
+    assert [(i.id, i.title, i.edited_by) for i in digest.edited] == [
+        (old.id, "Dwell plan v2", "eddie")
+    ]
+    assert digest.items == () and digest.total_edited == 1 and not digest.empty
+    text = render_text(digest)
+    assert "Changed by others (1)" in text and "edited by eddie" in text
+
+
+async def test_what_i_changed_myself_and_brand_new_items_are_not_repeated_as_edits(stack, digests):
+    mine = await add(stack, BOB, "Bob's note", P1)
+    stack.backend.clock.advance(days=20)
+    await edit(stack, BOB, mine, "Bob's note, revised")  # alice is the reader: bob edits his own
+    fresh = await add(stack, BOB, "Fresh", P1)
+    await edit(
+        stack, BOB, fresh, "Fresh, revised"
+    )  # new this week: it is under "new", not "edited"
+    digest = await digests.build(ALICE)
+    assert [i.id for i in digest.items] == [fresh.id]
+    assert [i.id for i in digest.edited] == [
+        mine.id
+    ]  # an edit by the author counts for other readers
+    own = await digests.build(BOB)
+    assert own.edited == () and own.items == ()  # bob does not hear about his own edits
+
+
+async def test_edits_outside_the_window_or_in_unreadable_places_are_ignored(stack, digests):
+    quiet = await add(stack, BOB, "Quiet", P1)
+    other = await add(stack, CAROL, "Elsewhere", P2)
+    stack.backend.clock.advance(days=20)
+    await edit(stack, CAROL, other, "Elsewhere v2")  # a project alice is not in
+    await edit(stack, BOB, quiet, "Quiet, but long ago")
+    stack.backend.clock.advance(days=20)
+    assert (await digests.build(ALICE, days=7)).edited == ()  # both edits are older than a week now
+    wide = await digests.build(
+        ALICE, days=30
+    )  # the edits (20 days ago) are inside, the creations (40) are not
+    assert [i.id for i in wide.edited] == [quiet.id]  # carol's project stays invisible to alice
+
+
+async def test_the_edited_list_respects_the_limit_but_counts_everything(stack, digests):
+    items = [await add(stack, BOB, f"Old {n}", P1) for n in range(4)]
+    stack.backend.clock.advance(days=20)
+    for item in items:
+        await edit(stack, BOB, item, item.title + "!")
+    digest = await digests.build(ALICE, limit=2)
+    assert len(digest.edited) == 2 and digest.total_edited == 4

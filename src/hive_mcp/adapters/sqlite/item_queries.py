@@ -63,14 +63,15 @@ def list_page(conn: sqlite3.Connection, principal: Principal, query: ItemQuery) 
         member, member_params = member_where(flt, "i")
         conds.append(member)
         params += member_params
+    column = "i.updated_at" if query.by_updated else "i.created_at"
     if query.after:
         stamp = ts(query.after.created_at)
-        conds.append("(i.created_at < ? OR (i.created_at = ? AND i.id < ?))")
+        conds.append(f"({column} < ? OR ({column} = ? AND i.id < ?))")
         params += [stamp, stamp, query.after.id]
     sql = (
         # only "?" marks and constant column names are interpolated; every value is bound
         f"SELECT {', '.join('i.' + c.strip() for c in ITEM_COLS.split(','))} FROM items i "  # noqa: S608
-        f"WHERE {' AND '.join(conds)} ORDER BY i.created_at DESC, i.id DESC LIMIT ?"
+        f"WHERE {' AND '.join(conds)} ORDER BY {column} DESC, i.id DESC LIMIT ?"
     )
     rows = conn.execute(sql, [*params, query.limit + 1]).fetchall()
     more = len(rows) > query.limit
@@ -83,4 +84,5 @@ def list_page(conn: sqlite3.Connection, principal: Principal, query: ItemQuery) 
         if tier is not None:  # always true; the tier is still decided in one place
             views.append(ItemView(item, tier))
     last = views[-1].item if views else None
-    return Page(tuple(views), Cursor(last.created_at, last.id).encode() if more and last else None)
+    when = (last.updated_at if query.by_updated else last.created_at) if last else None
+    return Page(tuple(views), Cursor(when, last.id).encode() if more and last and when else None)

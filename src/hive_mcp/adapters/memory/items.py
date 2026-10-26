@@ -30,6 +30,10 @@ if TYPE_CHECKING:
     from hive_mcp.domain.scope import Scope, Visibility
 
 
+def _stamp(item: Item, by_updated: bool) -> datetime:
+    return item.updated_at if by_updated else item.created_at
+
+
 class MemoryItems:
     def __init__(self, clock: Clock) -> None:
         self._clock = clock
@@ -151,8 +155,8 @@ class MemoryItems:
             tier = flt.tier(item.acl)
             if tier is not None and query.matches(item, tier):
                 rows.append(ItemView(item, tier))
-        rows.sort(key=lambda v: (v.item.created_at, v.item.id), reverse=True)
+        rows.sort(key=lambda v: (_stamp(v.item, query.by_updated), v.item.id), reverse=True)
         page, more = rows[: query.limit], len(rows) > query.limit
         last = page[-1].item if page else None
-        cursor = Cursor(last.created_at, last.id).encode() if more and last else None
+        cursor = Cursor(_stamp(last, query.by_updated), last.id).encode() if more and last else None
         return Page(tuple(page), cursor)

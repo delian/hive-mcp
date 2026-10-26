@@ -319,3 +319,36 @@ async def test_ingest_tool_over_mcp(live: Live) -> None:
         assert (
             await call(alice, "kb_ingest", name="x.pdf", content="!!!", encoding="base64")
         ).is_error
+
+
+async def test_curation_tools_over_mcp(live: Live) -> None:
+    async with live.client(live.token_for(ALICE)) as alice:
+        ids = []
+        for i in range(2):
+            r = await call(
+                alice,
+                "kb_remember",
+                title=f"Pulse {i}",
+                body="pulse repetition frequency notes",
+                tags=["Old"],
+            )
+            ids.append(r.structured_content["id"])
+        dry = (await call(alice, "kb_rename_tag", old="old", new="new")).structured_content
+        assert len(dry["changed"]) == 2  # dry run by default
+        assert (await call(alice, "kb_get", id=ids[0])).structured_content["tags"] == ["old"]
+        applied = (
+            await call(alice, "kb_rename_tag", old="old", new="new", dry_run=False)
+        ).structured_content
+        assert sorted(applied["changed"]) == sorted(ids)
+        retag = (
+            await call(alice, "kb_retag", ids=ids, add_tags=["x"], remove_tags=["new"])
+        ).structured_content
+        assert len(retag["changed"]) == 2
+        sim = (await call(alice, "kb_similar", id=ids[0])).structured_content["result"]
+        assert [s["id"] for s in sim] == [ids[1]] and sim[0]["score"] > 0.5
+        merged = (
+            await call(alice, "kb_merge", ids=ids, title="Pulse", body="consolidated")
+        ).structured_content
+        assert merged["created"] and sorted(merged["retired"]) == sorted(ids)
+        assert (await call(alice, "kb_get", id=ids[0])).structured_content["status"] == "superseded"
+        assert (await call(alice, "kb_merge", ids=ids[:1], title="x", body="y")).is_error

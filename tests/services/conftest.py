@@ -10,6 +10,7 @@ import pytest
 from hive_mcp.domain.scope import ScopeLevel
 from hive_mcp.embeddings.hashing import HashingEmbedder
 from hive_mcp.services.consult import ConsultService
+from hive_mcp.services.curation import CurationService
 from hive_mcp.services.graph import GraphService
 from hive_mcp.services.indexing import IndexService
 from hive_mcp.services.ingest import IngestService
@@ -29,6 +30,7 @@ class Stack:
     promotions: PromotionService
     graph: GraphService
     ingest: IngestService
+    curation: CurationService
 
 
 def build_stack(
@@ -60,8 +62,24 @@ def build_stack(
         items=backend.items, edges=backend.edges, audit=backend.audit, clock=backend.clock
     )
     ingest = IngestService(knowledge, graph)
+    curation = CurationService(
+        items=backend.items,
+        vectors=backend.vectors,
+        embedder=embedder,
+        knowledge=knowledge,
+        graph=graph,
+    )
     return Stack(
-        backend, embedder, indexing, knowledge, consult, sessions, promotions, graph, ingest
+        backend,
+        embedder,
+        indexing,
+        knowledge,
+        consult,
+        sessions,
+        promotions,
+        graph,
+        ingest,
+        curation,
     )
 
 

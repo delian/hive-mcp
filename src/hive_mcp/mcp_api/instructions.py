@@ -19,6 +19,8 @@ Sharing wider than a project needs an approver:
 call kb_request_promotion; approvers use kb_list_promotions and kb_decide_promotion. Identity comes from the connection; there is no user argument.
 
 kb_ingest adds a whole document (md, html, pdf, text) as linked parts.
+kb_retag / kb_rename_tag fix tags in bulk; kb_similar finds duplicates and kb_merge consolidates them
+(you write the merged text).
 kb_link connects items (derived_from, part_of, supports...); kb_graph explores the connections.
 
 Items have a revision number. To change one, read it (kb_get), then call kb_update with its current revision.

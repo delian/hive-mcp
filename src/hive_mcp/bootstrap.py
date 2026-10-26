@@ -12,6 +12,7 @@ from hive_mcp.domain.errors import ValidationError
 from hive_mcp.embeddings.factory import embed_min_level, make_embedder
 from hive_mcp.ports.backend import Backend, close_backend
 from hive_mcp.services.consult import ConsultService
+from hive_mcp.services.curation import CurationService
 from hive_mcp.services.graph import GraphService
 from hive_mcp.services.indexing import INDEX_JOB, IndexService
 from hive_mcp.services.ingest import IngestService
@@ -32,6 +33,7 @@ class Services:
     promotions: PromotionService
     graph: GraphService
     ingest: IngestService
+    curation: CurationService
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -82,6 +84,13 @@ async def build_services(settings: Settings) -> Services:
     )
     graph = GraphService(items=backend.items, edges=backend.edges, audit=backend.audit, clock=clock)
     ingest = IngestService(knowledge, graph)
+    curation = CurationService(
+        items=backend.items,
+        vectors=backend.vectors,
+        embedder=embedder,
+        knowledge=knowledge,
+        graph=graph,
+    )
     return Services(
-        knowledge, consult, sessions, indexing, runner, backend, promotions, graph, ingest
+        knowledge, consult, sessions, indexing, runner, backend, promotions, graph, ingest, curation
     )

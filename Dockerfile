@@ -3,6 +3,7 @@
 #   EXTRAS     optional dependency groups to install (default: all runtime extras)
 #   PYTHON_IMAGE base image (e.g. a registry mirror)
 #   PG_CLIENT  install pg_dump/pg_restore for backups of the Postgres profile (default true)
+#   EXTRA_MODELS space-separated model names to bake in besides the default embedder
 #   BAKE_MODEL download + verify the offline embedding model into the image (needs network at build time)
 ARG PYTHON_IMAGE=python:3.12-slim
 FROM ${PYTHON_IMAGE} AS build
@@ -20,11 +21,15 @@ RUN --mount=type=cache,target=/root/.cache/uv --mount=type=secret,id=cacert,requ
     if [ -f /run/secrets/cacert ]; then export SSL_CERT_FILE=/run/secrets/cacert UV_SYSTEM_CERTS=1; fi; \
     uv sync --frozen --no-dev --no-editable $EXTRAS
 ARG BAKE_MODEL=false
+# Further models to bake in, by name: e.g. "multilingual-e5-small-int8 ms-marco-minilm-l6-int8"
+ARG EXTRA_MODELS=""
 RUN --mount=type=secret,id=cacert,required=false \
     mkdir -p /models; \
     if [ -f /run/secrets/cacert ]; then export SSL_CERT_FILE=/run/secrets/cacert; fi; \
     if [ "$BAKE_MODEL" = "true" ]; then \
-      HIVE_DATA_DIR=/tmp/x HIVE_MODELS_DIR=/models /app/.venv/bin/hive models fetch; fi
+      HIVE_DATA_DIR=/tmp/x HIVE_MODELS_DIR=/models /app/.venv/bin/hive models fetch; fi; \
+    for m in $EXTRA_MODELS; do \
+      HIVE_DATA_DIR=/tmp/x HIVE_MODELS_DIR=/models /app/.venv/bin/hive models fetch "$m"; done
 
 FROM ${PYTHON_IMAGE}
 # pg_dump/pg_restore for `hive backup` on the Postgres profile (must be at least the server's major version)

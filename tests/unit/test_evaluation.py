@@ -91,3 +91,12 @@ async def test_core_set_is_sane_and_hashing_stays_above_a_regression_floor():
     ].false_positive_rate == 0.0
     consult = await runner.consult_check(data, HashingEmbedder(256))
     assert consult.positives.recall[10] > 0.7
+
+
+async def test_multilingual_set_loads_and_runs():
+    path = CORE.with_name("multilingual.json")
+    data = dataset.load(path)
+    assert {q.kind for q in data.queries} == {"same-language", "cross-language", "negative"}
+    assert any(not d.body.isascii() for d in data.docs)  # really non-English text
+    report = await runner.evaluate(data, HashingEmbedder(256))
+    assert {m.mode for m in report.modes} == {"keyword", "vector", "hybrid"}

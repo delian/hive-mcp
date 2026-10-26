@@ -1,0 +1,304 @@
+{
+ "name": "multilingual",
+ "description": "15 short documents in German, French, Spanish, Bulgarian and Italian; same-language paraphrases, English queries for them, and negatives.",
+ "docs": [
+  {
+   "id": "de1",
+   "title": "Datenbank-Index",
+   "body": "Ein zusammengesetzter Index auf Benutzer und Erstellungsdatum macht langsame Abfragen schnell. Die Reihenfolge der Spalten ist entscheidend."
+  },
+  {
+   "id": "de2",
+   "title": "Zugangsdaten sicher aufbewahren",
+   "body": "Passwörter und Schlüssel gehören nicht ins Repository. Sie werden zur Laufzeit aus einem Tresor geladen und regelmäßig erneuert."
+  },
+  {
+   "id": "de3",
+   "title": "Radar-Reichweite",
+   "body": "Die maximale Reichweite eines Radars wächst mit der vierten Wurzel der Sendeleistung. Eine Verdopplung der Leistung bringt nur etwa neunzehn Prozent mehr Reichweite."
+  },
+  {
+   "id": "fr1",
+   "title": "Sauvegarde de la base de données",
+   "body": "Une sauvegarde de base complète et l'archivage continu des journaux permettent de restaurer la base à n'importe quel instant. Il faut tester régulièrement la restauration."
+  },
+  {
+   "id": "fr2",
+   "title": "Déploiement sans interruption",
+   "body": "Le nouveau service démarre pendant que l'ancien termine les requêtes en cours; le répartiteur cesse d'envoyer du trafic à l'ancien."
+  },
+  {
+   "id": "fr3",
+   "title": "Limitation du débit",
+   "body": "Un seau à jetons autorise de courtes rafales mais plafonne le débit soutenu de chaque client, ce qui protège les points d'accès publics."
+  },
+  {
+   "id": "es1",
+   "title": "Preparar masa madre",
+   "body": "Alimenta el iniciador con harina y agua a partes iguales cada día. Está listo cuando duplica su tamaño en seis horas."
+  },
+  {
+   "id": "es2",
+   "title": "Consejos para viajar ligero",
+   "body": "Elige una paleta de colores, enrolla la ropa y lleva solo equipaje de mano. Es mejor lavar durante el viaje que cargar más ropa."
+  },
+  {
+   "id": "es3",
+   "title": "Revisión de código",
+   "body": "Revisa el cambio y no a la persona, explica el motivo, ofrece alternativas y aprueba pronto cuando se resuelvan los problemas principales."
+  },
+  {
+   "id": "bg1",
+   "title": "Резервни копия",
+   "body": "Редовните резервни копия и тестовото възстановяване гарантират, че данните могат да се върнат след авария. Съхранявайте копията на отделно място."
+  },
+  {
+   "id": "bg2",
+   "title": "Управление на тайни",
+   "body": "Паролите и ключовете не се пазят в кода. Зареждат се по време на работа от защитено хранилище и се сменят редовно."
+  },
+  {
+   "id": "bg3",
+   "title": "Оценка на задачи",
+   "body": "Разбийте задачите на части под един ден, включете тестване и преглед и добавете резерв според несигурността."
+  },
+  {
+   "id": "it1",
+   "title": "Cottura della pasta",
+   "body": "Sala abbondantemente l'acqua e assaggia un minuto prima del tempo indicato. Conserva una tazza d'acqua di cottura per la salsa."
+  },
+  {
+   "id": "it2",
+   "title": "Sicurezza in montagna",
+   "body": "Controlla le previsioni, comunica il percorso a qualcuno, porta acqua e una mappa e torna indietro prima del buio."
+  }
+ ],
+ "queries": [
+  {
+   "q": "Wie beschleunige ich eine Suche, die nach Besitzer filtert und nach Datum sortiert?",
+   "relevant": [
+    "de1"
+   ],
+   "type": "same-language"
+  },
+  {
+   "q": "speeding up a database query that filters by owner and sorts by date",
+   "relevant": [
+    "de1"
+   ],
+   "type": "cross-language"
+  },
+  {
+   "q": "Wo sollen Kennwörter und API-Schlüssel gespeichert werden, wenn nicht im Quellcode?",
+   "relevant": [
+    "de2"
+   ],
+   "type": "same-language"
+  },
+  {
+   "q": "where to store passwords and api keys instead of the source code",
+   "relevant": [
+    "de2"
+   ],
+   "type": "cross-language"
+  },
+  {
+   "q": "Um wie viel sieht ein Impulsradar weiter, wenn der Sender doppelt so stark ist?",
+   "relevant": [
+    "de3"
+   ],
+   "type": "same-language"
+  },
+  {
+   "q": "how much further a radar sees if transmit power is doubled",
+   "relevant": [
+    "de3"
+   ],
+   "type": "cross-language"
+  },
+  {
+   "q": "Comment remettre la base dans l'état d'il y a dix minutes ?",
+   "relevant": [
+    "fr1"
+   ],
+   "type": "same-language"
+  },
+  {
+   "q": "restoring the database to exactly ten minutes ago",
+   "relevant": [
+    "fr1"
+   ],
+   "type": "cross-language"
+  },
+  {
+   "q": "Mettre à jour une application sans couper les requêtes qui sont en train d'être traitées",
+   "relevant": [
+    "fr2"
+   ],
+   "type": "same-language"
+  },
+  {
+   "q": "upgrading a service without dropping requests in progress",
+   "relevant": [
+    "fr2"
+   ],
+   "type": "cross-language"
+  },
+  {
+   "q": "Protéger un formulaire d'inscription public contre les envois massifs par un script",
+   "relevant": [
+    "fr3"
+   ],
+   "type": "same-language"
+  },
+  {
+   "q": "protecting a public sign up form from being flooded by a script",
+   "relevant": [
+    "fr3"
+   ],
+   "type": "cross-language"
+  },
+  {
+   "q": "Cómo mantener viva la levadura natural para hacer pan",
+   "relevant": [
+    "es1"
+   ],
+   "type": "same-language"
+  },
+  {
+   "q": "keeping a bread starter culture alive",
+   "relevant": [
+    "es1"
+   ],
+   "type": "cross-language"
+  },
+  {
+   "q": "Qué llevar en la maleta para dos semanas sin facturar equipaje",
+   "relevant": [
+    "es2"
+   ],
+   "type": "same-language"
+  },
+  {
+   "q": "what to pack for two weeks with only carry-on luggage",
+   "relevant": [
+    "es2"
+   ],
+   "type": "cross-language"
+  },
+  {
+   "q": "Cómo dar comentarios amables sobre la solicitud de cambios de un compañero",
+   "relevant": [
+    "es3"
+   ],
+   "type": "same-language"
+  },
+  {
+   "q": "how to give kind feedback on a colleague's pull request",
+   "relevant": [
+    "es3"
+   ],
+   "type": "cross-language"
+  },
+  {
+   "q": "Как да се подготвим за загуба на данни след повреда на сървъра",
+   "relevant": [
+    "bg1"
+   ],
+   "type": "same-language"
+  },
+  {
+   "q": "preparing for data loss after a server failure",
+   "relevant": [
+    "bg1"
+   ],
+   "type": "cross-language"
+  },
+  {
+   "q": "Къде да пазим пароли и ключове, ако не в хранилището с кода",
+   "relevant": [
+    "bg2"
+   ],
+   "type": "same-language"
+  },
+  {
+   "q": "where to keep passwords and keys other than the code repository",
+   "relevant": [
+    "bg2"
+   ],
+   "type": "cross-language"
+  },
+  {
+   "q": "Как да предвидим колко време ще отнеме един проект без прекален оптимизъм",
+   "relevant": [
+    "bg3"
+   ],
+   "type": "same-language"
+  },
+  {
+   "q": "predicting how long a project will take without wishful thinking",
+   "relevant": [
+    "bg3"
+   ],
+   "type": "cross-language"
+  },
+  {
+   "q": "Come cuocere gli spaghetti in modo che restino un po' duri al centro",
+   "relevant": [
+    "it1"
+   ],
+   "type": "same-language"
+  },
+  {
+   "q": "cooking spaghetti so they stay slightly firm",
+   "relevant": [
+    "it1"
+   ],
+   "type": "cross-language"
+  },
+  {
+   "q": "Precauzioni prima di una lunga camminata in quota",
+   "relevant": [
+    "it2"
+   ],
+   "type": "same-language"
+  },
+  {
+   "q": "precautions before a long mountain walk",
+   "relevant": [
+    "it2"
+   ],
+   "type": "cross-language"
+  },
+  {
+   "q": "Quarterly budget for the marketing department",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "Wie spielt man Gitarre für Anfänger",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "Résultats du championnat de football",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "Cómo tejer un suéter de lana",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "Как се засаждат домати",
+   "relevant": [],
+   "type": "negative"
+  },
+  {
+   "q": "Storia degli imperatori romani",
+   "relevant": [],
+   "type": "negative"
+  }
+ ]
+}

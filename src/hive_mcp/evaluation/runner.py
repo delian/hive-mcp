@@ -21,6 +21,7 @@ from hive_mcp.services.models import ConsultRequest
 if TYPE_CHECKING:
     from hive_mcp.evaluation.dataset import Dataset
     from hive_mcp.ports.embeddings import Embedder
+    from hive_mcp.ports.rerank import Reranker
 
 OWNER = Principal("eval", "eval", projects=frozenset({"eval"}))
 POOL = 50
@@ -106,18 +107,20 @@ async def evaluate(
     return Report(dataset.name, embedder.model_id, modes, points)
 
 
-async def consult_check(dataset: Dataset, embedder: Embedder) -> ModeReport:
+async def consult_check(
+    dataset: Dataset, embedder: Embedder, reranker: Reranker | None = None
+) -> ModeReport:
     """The same questions through the real ConsultService (adds filtering, weighting, snippets)."""
     backend, _ = await build(dataset, embedder)
     service = ConsultService(
         items=backend.items, text=backend.text, vectors=backend.vectors,
-        embedder=embedder, clock=backend.clock,
+        embedder=embedder, clock=backend.clock, reranker=reranker,
     )  # fmt: skip
     ranked = []
     for q in dataset.queries:
         res = await service.consult(OWNER, ConsultRequest(q.text, limit=10))
         ranked.append([m.item_id for m in res.primary])
-    return _report(dataset, ranked, "consult")
+    return _report(dataset, ranked, "rerank" if reranker else "consult")
 
 
 def format_report(report: Report) -> str:

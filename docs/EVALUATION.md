@@ -28,3 +28,10 @@ What the evaluation changed:
 Keyword retrieval is the weak part on paraphrase-heavy queries; vectors alone remain slightly better than the
 hybrid on this set, which is dominated by paraphrases. Sets with many exact names or error codes will favour the
 keyword list - which is why it is kept.
+
+## Multilingual set
+`evals/multilingual.json`: 14 short documents (German, French, Spanish, Bulgarian, Italian), each with a
+same-language paraphrase query and an English query for the same document, plus 6 unrelated queries.
+bge-small (English-only) reaches recall@3 0.61; multilingual-e5-small 0.82 (same-language and cross-language
+queries together). Floors: the e5 floor of 0.81 is a compromise between the English set (R@3 0.92 there; 0.94 at
+no floor) and this one; e5 separates relevant from unrelated less sharply than bge does.

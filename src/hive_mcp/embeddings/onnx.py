@@ -46,7 +46,11 @@ class OnnxEmbedder:
         self._tok.enable_truncation(max_length=spec.max_tokens)
         self._tok.enable_padding()
         self._input_names = {i.name for i in self._session.get_inputs()}
-        self._prefix = spec.query_prefix
+        self._prefix, self._doc_prefix, self._pooling = (
+            spec.query_prefix,
+            spec.doc_prefix,
+            spec.pooling,
+        )
         self.dim, self.model_id, self.min_similarity = spec.dim, spec.model_id, spec.min_similarity
 
     def _encode(self, texts: list[str]) -> list[NDArray[np.float32]]:
@@ -60,21 +64,29 @@ class OnnxEmbedder:
             }
             if "token_type_ids" in self._input_names:
                 feed["token_type_ids"] = np.zeros_like(ids)
-            cls = np.asarray(self._session.run(None, feed)[0])[:, 0, :].astype(np.float32)
-            norms = np.linalg.norm(cls, axis=1, keepdims=True)
-            if not np.all(np.isfinite(cls)) or np.any(norms == 0):
+            hidden = np.asarray(self._session.run(None, feed)[0]).astype(np.float32)
+            pooled = self._pool(hidden, np.array([e.attention_mask for e in enc], dtype=np.float32))
+            norms = np.linalg.norm(pooled, axis=1, keepdims=True)
+            if not np.all(np.isfinite(pooled)) or np.any(norms == 0):
                 raise EmbeddingUnavailable("model produced a non-finite or zero vector")
-            out.extend(cls / norms)
+            out.extend(pooled / norms)
         return out
 
-    async def _run(self, texts: Sequence[str]) -> list[NDArray[np.float32]]:
+    def _pool(self, hidden: NDArray[np.float32], mask: NDArray[np.float32]) -> NDArray[np.float32]:
+        if self._pooling == "cls":
+            return hidden[:, 0, :]
+        weights = mask[:, :, None]  # mean over real tokens only, not padding
+        pooled = (hidden * weights).sum(axis=1) / np.maximum(weights.sum(axis=1), 1.0)
+        return pooled.astype(np.float32)
+
+    async def _run(self, texts: Sequence[str], prefix: str) -> list[NDArray[np.float32]]:
         for text in texts:
-            if not text.strip():
+            if not text.strip():  # checked before the prefix is added, which would hide emptiness
                 raise ValidationError("cannot embed empty text")
-        return await asyncio.to_thread(self._encode, list(texts))
+        return await asyncio.to_thread(self._encode, [prefix + t for t in texts])
 
     async def embed(self, texts: Sequence[str]) -> list[NDArray[np.float32]]:
-        return await self._run(texts)
+        return await self._run(texts, self._doc_prefix)
 
     async def embed_query(self, text: str) -> NDArray[np.float32]:
-        return (await self._run([self._prefix + text]))[0]
+        return (await self._run([text], self._prefix))[0]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from hive_mcp.domain.access import Tier, read_filter
@@ -20,9 +21,11 @@ if TYPE_CHECKING:
     from hive_mcp.ports.embeddings import Embedder
     from hive_mcp.ports.indexes import TextIndex, VectorIndex
     from hive_mcp.ports.items import ItemRepository
+    from hive_mcp.ports.rerank import Reranker
     from hive_mcp.services.models import ConsultRequest
 
 SNIPPET_CHARS = 400
+RERANK_CHARS = 1200
 
 
 class ConsultService:
@@ -36,8 +39,11 @@ class ConsultService:
         clock: Clock,
         ranking: RankingConfig | None = None,
         edges: EdgeRepository | None = None,
+        reranker: Reranker | None = None,
+        rerank_depth: int = 15,
     ) -> None:
         self._edges = edges
+        self._reranker, self._rerank_depth = reranker, rerank_depth
         self._items, self._text, self._vectors = items, text, vectors
         self._embedder, self._clock, self._ranking = embedder, clock, ranking or RankingConfig()
 
@@ -76,6 +82,11 @@ class ConsultService:
             )
             scored.append((fused[it.id] * w, view))
         scored.sort(key=lambda pair: (-pair[0], pair[1].item.id))
+        if self._reranker and scored:
+            try:
+                scored = await self._rerank(req.query, scored, req.limit)
+            except EmbeddingUnavailable:
+                notes.append("reranking unavailable; showing the first-stage order")
         primary = [
             self._match(s, v, chunk_of, req.query) for s, v in scored if v.tier is Tier.PRIMARY
         ]
@@ -96,6 +107,24 @@ class ConsultService:
             shown, extra = linked[: len(shown)], linked[len(shown) :]
             notes.extend(link_notes)
         return ConsultResult(tuple(shown), tuple(extra), tuple(notes))
+
+    async def _rerank(
+        self, query: str, scored: list[tuple[float, ItemView]], limit: int
+    ) -> list[tuple[float, ItemView]]:
+        """Reorder the best candidates by a cross-encoder that reads query and passage together
+        (and drop any scoring under its min_score). Candidates below the depth are not shown."""
+        assert self._reranker  # noqa: S101 - guarded by the caller
+        head = scored[: max(self._rerank_depth, limit * 2)]
+        texts = [f"{v.item.title}\n{v.item.body[:RERANK_CHARS]}" for _, v in head]
+        logits = await self._reranker.score(query, texts)
+        ranked = sorted(
+            (-logit, position)  # best logit first; equal scores keep the first-stage order
+            for position, logit in enumerate(logits)
+            if logit >= self._reranker.min_score
+        )
+        return [
+            (1.0 / (1.0 + math.exp(max(min(neg, 50.0), -50.0))), head[p][1]) for neg, p in ranked
+        ]
 
     @staticmethod
     def _foreign_slice(

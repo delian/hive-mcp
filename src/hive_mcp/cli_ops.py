@@ -156,7 +156,7 @@ def evaluate_command(
     floor: float | None = typer.Option(None, help="Override the embedder's relevance floor."),
 ) -> None:
     """Score keyword, vector and hybrid retrieval with the configured embedder (HIVE_EMBEDDER)."""
-    from hive_mcp.embeddings.factory import make_embedder  # noqa: PLC0415
+    from hive_mcp.embeddings.factory import make_embedder, make_reranker  # noqa: PLC0415
     from hive_mcp.evaluation import dataset, runner  # noqa: PLC0415
 
     async def run() -> None:
@@ -165,6 +165,17 @@ def evaluate_command(
         points = tuple(x / 100 for x in range(0, 100, 5)) if sweep else ()
         report = await runner.evaluate(data, embedder, floor=floor, sweep=points)
         typer.echo(runner.format_report(report))
+        reranker = make_reranker(Settings())
+        extra = [await runner.consult_check(data, embedder)]
+        if reranker:
+            extra.append(await runner.consult_check(data, embedder, reranker))
+        for m in extra:  # the full search path, without and with the reranker
+            r = m.positives.recall
+            typer.echo(
+                f"{m.mode:<9} {r[1]:5.2f} {r[3]:5.2f} {r[5]:5.2f} {r[10]:5.2f} "
+                f"{m.positives.mrr:5.2f} {m.positives.returned_nothing:6.2f} "
+                f"{m.false_positive_rate:7.2f}"
+            )
 
     _run_cli(run)
 

@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     database_url: str | None = None  # required for the external profile (Postgres + pgvector)
     tokens_file: Path | None = None  # default: <data_dir>/tokens.json
     embedder: str = "hashing"  # "hashing" (dev/test only), "onnx" (offline) or "openai" (hosted)
+    reranker: str = (
+        "none"  # "onnx": reorder the best results with a cross-encoder (see docs/EVALUATION.md)
+    )
+    rerank_model: str = "ms-marco-minilm-l6-int8"
+    rerank_depth: int = Field(default=15, ge=1, le=50)
     embedding_model: str = "bge-small-en-v1.5-int8"  # onnx: pinned model name; openai: model id
     models_dir: Path | None = None  # onnx model files; default: <data_dir>/models
     embedding_url: str | None = None  # openai: full .../embeddings URL

@@ -7,13 +7,15 @@ from typing import TYPE_CHECKING
 from hive_mcp.domain.errors import ValidationError
 from hive_mcp.domain.scope import ScopeLevel
 from hive_mcp.embeddings.hashing import HashingEmbedder
-from hive_mcp.embeddings.models import get_spec, model_files
+from hive_mcp.embeddings.models import get_rerank_spec, get_spec, model_files
 from hive_mcp.embeddings.onnx import OnnxEmbedder
 from hive_mcp.embeddings.openai_compat import OpenAICompatEmbedder
+from hive_mcp.embeddings.rerank import OnnxReranker
 
 if TYPE_CHECKING:
     from hive_mcp.config import Settings
     from hive_mcp.ports.embeddings import Embedder
+    from hive_mcp.ports.rerank import Reranker
 
 KINDS = ("hashing", "onnx", "openai")
 
@@ -51,3 +53,13 @@ def make_embedder(settings: Settings) -> Embedder:
             min_similarity=settings.embedding_min_similarity,
         )
     raise ValidationError(f"unknown embedder {kind!r} (available: {', '.join(KINDS)})")
+
+
+def make_reranker(settings: Settings) -> Reranker | None:
+    if settings.reranker == "none":
+        return None
+    if settings.reranker != "onnx":
+        raise ValidationError(f"unknown reranker {settings.reranker!r} (available: none, onnx)")
+    spec = get_rerank_spec(settings.rerank_model)
+    model, tokenizer = model_files(spec, settings.models_path)
+    return OnnxReranker(spec, model, tokenizer)

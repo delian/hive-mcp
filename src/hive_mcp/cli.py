@@ -14,7 +14,7 @@ from hive_mcp.config import Settings
 from hive_mcp.domain.errors import HiveError
 from hive_mcp.domain.principal import Principal, Role
 from hive_mcp.domain.scope import parse_scope, scope_key
-from hive_mcp.embeddings.models import fetch_model, get_spec
+from hive_mcp.embeddings.models import fetch_model, find_files
 from hive_mcp.ops.drain import DrainingServer
 from hive_mcp.ops.state import Lifecycle
 from hive_mcp.security.directory import DirectoryUser, UserDirectory, normalize_email
@@ -178,7 +178,7 @@ def models_fetch(
     """Download and checksum-verify a local embedding model (needed once for HIVE_EMBEDDER=onnx)."""
     try:
         settings = Settings()
-        model, _ = fetch_model(get_spec(name), settings.models_path)
+        model, _ = fetch_model(find_files(name), settings.models_path)
     except HiveError as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(1) from exc

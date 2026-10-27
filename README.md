@@ -24,7 +24,8 @@ against real Google, real assistants or a real Azure deployment** - see the open
 | Sharing and approvals | [PROMOTION](docs/PROMOTION.md) |
 | One container (local, Azure, any cloud) | [SINGLE-CONTAINER](docs/SINGLE-CONTAINER.md) (self-backup, restore, one-command demo) |
 | Catching up | [DIGEST](docs/DIGEST.md) (kb_digest, project digests, weekly email, stale-note review) |
-| Bringing knowledge in | [CONNECTORS](docs/CONNECTORS.md) (Drive, GitHub, URLs), [SLACK](docs/SLACK.md) (/hive command, Save to Hive), [INGEST](docs/INGEST.md) |
+| Bringing knowledge in | [CONNECTORS](docs/CONNECTORS.md) (Drive, SharePoint, GitHub, Confluence, Jira, Notion, URLs), [SLACK](docs/SLACK.md), [TEAMS](docs/TEAMS.md), [INGEST](docs/INGEST.md) |
+| Optional model | [LLM](docs/LLM.md) (merge proposals, contradiction checks, ranking nudges) |
 | Knowledge work | [CURATION](docs/CURATION.md), [GRAPH](docs/GRAPH.md), [ENTITIES](docs/ENTITIES.md), [HISTORY](docs/HISTORY.md), [INGEST](docs/INGEST.md) |
 | Operating | [ADMIN](docs/ADMIN.md) (audit, usage, quotas, web page), [GROUPS](docs/GROUPS.md) (Workspace group sync), [RETENTION](docs/RETENTION.md), [OBSERVABILITY](docs/OBSERVABILITY.md) (logs, metrics, alerts) |
 | Design | [PLAN](docs/PLAN.md), [STORAGE](docs/STORAGE.md), [SERVICES](docs/SERVICES.md), [BENCHMARK](docs/BENCHMARK.md) |

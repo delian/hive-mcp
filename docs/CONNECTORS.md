@@ -22,12 +22,16 @@ HIVE_CONNECTORS='[
 Common fields: `name` (lowercase, unique), `org`, `owner` (the identity that authors the imported items; it does not need
 to be a person), `project` (the project that can read them; items are written at project level, widening goes through
 the normal promotion workflow), `tags`, `every_minutes` (default 360, minimum 5). A bad entry stops the server at startup.
-Secrets are never in the setting: a key file path, or the *name* of an environment variable.
+Secrets are never in the setting: a key file path, or the *name* of an environment variable (`token_env`, `secret_env`).
 
 | type | options | notes |
 |---|---|---|
 | `urls` | `urls` | each address is fetched with the URL safety rules (public hosts only unless `HIVE_INGEST_URL_ALLOW_PRIVATE`; allow-list `HIVE_INGEST_URL_HOSTS`). Re-fetched every run; unchanged content is detected by hash. |
 | `github` | `repo` (`owner/name`), `ref`, `paths` (prefixes), `token_env`, `api_base` (GitHub Enterprise) | REST API, no `git` needed. Readable files only (markdown, text, html, pdf, office), no vendored/minified files, 1 MB each, 2000 files. A file is downloaded again only when its blob sha changes. A token is needed for private repositories (read-only `contents` scope). |
+| `confluence` | `base_url` (`https://x.atlassian.net/wiki`), `space`, `email`, `token_env` | Pages of a space as HTML, change marker = page version. Atlassian Cloud account email + API token (read-only is enough). |
+| `jira` | `base_url`, `jql`, `email`, `token_env` | Issues matching the JQL, with status, labels, description and up to 50 comments, as one note each; change marker = `updated`. |
+| `notion` | `token_env`, optional `database` (id) | Every page the integration was shared with (that sharing is the access control), or one database. Blocks flattened to text, three levels deep; change marker = `last_edited_time`. |
+| `sharepoint` | `tenant`, `client_id`, `secret_env`, `drive_id`, optional `folder` | A SharePoint library or OneDrive via Microsoft Graph with an Entra app (application permission `Files.Read.All`, or `Sites.Selected` for one site). Recursive (5 deep, 2000 files); change marker = eTag. |
 | `drive` | `folder` (id), `key_file`, `as_user` | A Google service account with domain-wide delegation for the read-only scope `https://www.googleapis.com/auth/drive.readonly`, reading as `as_user`. Sub-folders (5 deep, 2000 files), Docs and Slides exported as text, Sheets as CSV, PDFs/Office/text downloaded; other types skipped. Change marker: checksum or modified time. |
 
 ## Safety rules

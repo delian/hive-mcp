@@ -56,6 +56,22 @@ class RateOut(BaseModel):
     recorded: bool = Field(description="False when this server does not collect search feedback.")
 
 
+class MergeProposalOut(BaseModel):
+    title: str
+    body: str
+    sources: list[str]
+    flagged: bool = Field(description="The draft itself looks unsafe: read it with care.")
+
+
+class ConflictOut(BaseModel):
+    id: str
+    title: str
+    score: float
+    reasons: list[str] = Field(description="Why it looks like a disagreement (heuristics).")
+    model_says_contradiction: bool | None = Field(description="None: no model was asked.")
+    explanation: str
+
+
 def register_hygiene_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None:
     @mcp.tool(annotations=READ)
     @guarded
@@ -132,7 +148,40 @@ def register_hygiene_tools(mcp: MCPServer, get_services: Callable[[], Services])
         svc = get_services()
         principal = current_principal()
         await svc.knowledge.get(principal, id)  # you can only rate what you can see
-        if svc.feedback is None:
-            return RateOut(recorded=False)
-        await svc.feedback.rated(principal, id, useful, query)
-        return RateOut(recorded=True)
+        if svc.signals is not None:  # counts only: one vote per person and note
+            await svc.signals.record_vote(principal.org_id, principal.id, id, useful)
+        if svc.feedback is not None:
+            await svc.feedback.rated(principal, id, useful, query)
+        return RateOut(recorded=svc.signals is not None or svc.feedback is not None)
+
+    @mcp.tool(annotations=READ)
+    @guarded
+    async def kb_merge_propose(ids: list[str]) -> MergeProposalOut:
+        """Ask the server's language model to draft ONE note that merges several (2 to 8).
+
+        Nothing is saved: read the draft, fix it, then call kb_merge with the final text. Only notes
+        at project level or wider are sent to the model (private ones are refused). Needs an admin to
+        have configured a model; otherwise write the merged text yourself.
+        """
+        assist = get_services().assist
+        assert assist is not None  # noqa: S101 - always built by bootstrap
+        p = await assist.propose_merge(current_principal(), ids)
+        return MergeProposalOut(title=p.title, body=p.body, sources=p.sources, flagged=p.flagged)
+
+    @mcp.tool(annotations=READ)
+    @guarded
+    async def kb_conflicts(id: str, limit: int = 5) -> list[ConflictOut]:
+        """Find notes that may contradict this one: very similar notes whose numbers or yes/no differ
+        (and, when a model is configured, that it judges to contradict). Read both, then record the
+        result with kb_link relation=contradicts, or fix or retire the wrong one.
+        """
+        assist = get_services().assist
+        assert assist is not None  # noqa: S101
+        found = await assist.conflicts(current_principal(), id, limit)
+        return [
+            ConflictOut(
+                id=c.other.view.item.id, title=c.other.view.item.title, score=round(c.score, 4),
+                reasons=c.reasons, model_says_contradiction=c.model_verdict, explanation=c.explanation,
+            )
+            for c in found
+        ]  # fmt: skip

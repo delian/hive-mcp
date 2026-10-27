@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from hive_mcp.ports.items import ItemRepository
     from hive_mcp.ports.rerank import Reranker
     from hive_mcp.services.models import ConsultRequest
+    from hive_mcp.services.signals import RankSignals
 
 SNIPPET_CHARS = 400
 RERANK_CHARS = 1200
@@ -41,7 +42,9 @@ class ConsultService:
         edges: EdgeRepository | None = None,
         reranker: Reranker | None = None,
         rerank_depth: int = 15,
+        signals: RankSignals | None = None,
     ) -> None:
+        self._signals = signals
         self._edges = edges
         self._reranker, self._rerank_depth = reranker, rerank_depth
         self._items, self._text, self._vectors = items, text, vectors
@@ -65,6 +68,7 @@ class ConsultService:
         chunk_of = {h.item_id: h.chunk_ord for h in vector_hits}
         views = await self._items.get_many(principal, list(fused))  # authoritative access re-check
         now, scored = self._clock.now(), []
+        nudges = await self._signals.factors([v.item.id for v in views]) if self._signals else {}
         for view in views:
             it = view.item
             if it.status not in req.statuses or (req.kinds and it.kind not in req.kinds):
@@ -80,7 +84,7 @@ class ConsultService:
                 updated_at=it.updated_at,
                 now=now,
             )
-            scored.append((fused[it.id] * w, view))
+            scored.append((fused[it.id] * w * nudges.get(it.id, 1.0), view))
         scored.sort(key=lambda pair: (-pair[0], pair[1].item.id))
         if self._reranker and scored:
             try:

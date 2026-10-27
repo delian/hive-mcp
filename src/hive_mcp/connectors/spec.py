@@ -20,6 +20,19 @@ TYPES = {
     "urls": {"urls"},
     "github": {"repo", "ref", "paths", "token_env", "api_base"},
     "drive": {"folder", "key_file", "as_user"},
+    "confluence": {"base_url", "space", "email", "token_env"},
+    "jira": {"base_url", "jql", "email", "token_env"},
+    "notion": {"token_env", "database"},
+    "sharepoint": {"tenant", "client_id", "secret_env", "drive_id", "folder"},
+}
+REQUIRED = {
+    "urls": ("urls",),
+    "github": ("repo",),
+    "drive": ("folder", "key_file", "as_user"),
+    "confluence": ("base_url", "space", "email", "token_env"),
+    "jira": ("base_url", "jql", "email", "token_env"),
+    "notion": ("token_env",),
+    "sharepoint": ("tenant", "client_id", "secret_env", "drive_id"),
 }
 COMMON = {"name", "type", "org", "owner", "project", "tags", "every_minutes"}
 NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,39}")
@@ -73,8 +86,7 @@ def parse_specs(raw: list[dict[str, Any]]) -> list[ConnectorSpec]:
 
 
 def _check_options(name: str, kind: str, options: dict[str, Any]) -> None:
-    need = {"urls": ("urls",), "github": ("repo",), "drive": ("folder", "key_file", "as_user")}
-    for key in need[kind]:
+    for key in REQUIRED[kind]:
         if not options.get(key):
             raise ValidationError(f"connector {name}: {key} is required for {kind}")
     if kind == "urls" and (

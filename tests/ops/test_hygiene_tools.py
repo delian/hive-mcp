@@ -68,3 +68,50 @@ async def test_admin_activity_tool_and_page(live: Live):
     assert out["people"][0]["writes"] == 1 and out["people"][0]["items"] == 1
     assert bad.is_error
     assert METER._counts[("org1", "alice")]["kb_remember"] >= 1  # every tool call is counted
+
+
+async def test_merge_proposal_needs_a_model_and_conflicts_work_without_one(live: Live):
+    async with live.client(live.token_for(ALICE)) as alice:
+        a = (
+            await alice.call_tool(
+                "kb_remember",
+                {
+                    "title": "Dwell",
+                    "body": "the radar dwell time is 12 ms for the scan",
+                    "share_with_project": "p1",
+                },
+            )
+        ).structured_content
+        b = (
+            await alice.call_tool(
+                "kb_remember",
+                {
+                    "title": "Dwell",
+                    "body": "the radar dwell time is 20 ms for the scan",
+                    "share_with_project": "p1",
+                },
+            )
+        ).structured_content
+        proposal = await alice.call_tool("kb_merge_propose", {"ids": [a["id"], b["id"]]})
+        found = (await alice.call_tool("kb_conflicts", {"id": a["id"]})).structured_content[
+            "result"
+        ]
+        bad = await alice.call_tool("kb_conflicts", {"id": a["id"], "limit": 0})
+    assert proposal.is_error and "no language model" in proposal.content[0].text
+    assert [c["id"] for c in found] == [b["id"]] and "different numbers" in found[0]["reasons"][0]
+    assert found[0]["model_says_contradiction"] is None
+    assert bad.is_error
+
+
+async def test_votes_are_recorded_when_rank_signals_are_on(tmp_path):
+    srv = Live(tmp_path / "data", rank_signals=True)
+    srv.start()
+    try:
+        async with srv.client(srv.token_for(ALICE)) as alice:
+            made = (
+                await alice.call_tool("kb_remember", {"title": "Plan", "body": "Some plan text."})
+            ).structured_content
+            ok = await alice.call_tool("kb_rate", {"id": made["id"], "useful": True})
+        assert ok.structured_content["recorded"] is True
+    finally:
+        srv.stop()

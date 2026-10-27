@@ -16,12 +16,14 @@ from hive_mcp.domain.retention import parse_rules
 from hive_mcp.embeddings.factory import embed_min_level, make_embedder, make_reranker
 from hive_mcp.ingest.fetch import FetchPolicy
 from hive_mcp.ingest.ocr import OcrConfig, check_available
+from hive_mcp.llm.factory import llm_min_level, make_llm
 from hive_mcp.notify.factory import make_channels
 from hive_mcp.ports.backend import Backend, close_backend
 from hive_mcp.security.directory import UserDirectory
 from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.services.activity import ActivityReport
 from hive_mcp.services.admin import AdminService
+from hive_mcp.services.assist import CurationAssist
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.curation import CurationService
 from hive_mcp.services.digest import DigestSender, DigestService
@@ -39,6 +41,7 @@ from hive_mcp.services.quota import CACHE_SECONDS, QuotaGuard
 from hive_mcp.services.retention import RetentionService
 from hive_mcp.services.runner import JobRunner
 from hive_mcp.services.sessions import SessionService
+from hive_mcp.services.signals import RankSignals
 from hive_mcp.services.staleness import StaleReview
 from hive_mcp.services.vector_admin import VectorAdmin
 
@@ -73,6 +76,8 @@ class Services:
     retention: RetentionService | None = None
     activity: ActivityReport | None = None
     connectors: ConnectorSync | None = None
+    assist: CurationAssist | None = None
+    signals: RankSignals | None = None
     integrations: IntegrationStore | None = None  # set by the app: it needs the services lazily
 
     async def close(self) -> None:
@@ -136,6 +141,7 @@ async def build_services(settings: Settings) -> Services:
         quota=quota,
         history=backend.history,
     )
+    signals = RankSignals(backend.kv, clock) if settings.rank_signals else None
     consult = ConsultService(
         items=backend.items,
         text=backend.text,
@@ -145,6 +151,7 @@ async def build_services(settings: Settings) -> Services:
         edges=backend.edges,
         reranker=make_reranker(settings),
         rerank_depth=settings.rerank_depth,
+        signals=signals,
     )
     sessions = SessionService(knowledge, backend.blobs)
     channels = make_channels(settings)
@@ -256,4 +263,6 @@ async def build_services(settings: Settings) -> Services:
         ),
         ActivityReport(backend.audit, backend.maintenance, clock, _teams_of(settings)),
         ConnectorSync(ingest, knowledge, backend.kv, backend.audit, clock),
+        CurationAssist(backend.items, curation, make_llm(settings), llm_min_level(settings)),
+        signals,
     )

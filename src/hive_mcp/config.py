@@ -77,6 +77,16 @@ class Settings(BaseSettings):
     backup_keep: int = Field(default=8, ge=1, le=1000)
     # Seconds a starting instance waits for a running one to release the backup directory.
     backup_lease_wait: float = Field(default=90.0, ge=0)
+    # An optional language model for merge proposals and contradiction checks (docs/LLM.md). Notes
+    # narrower than llm_min_scope (default: project) are never sent to it.
+    llm_provider: Literal["none", "openai", "anthropic"] = "none"
+    llm_url: str | None = None  # openai: the chat completions URL; anthropic: optional override
+    llm_api_key: SecretStr | None = None
+    llm_model: str | None = None
+    llm_azure: bool = False  # openai: send the key as an `api-key` header (Azure OpenAI)
+    llm_min_scope: str = "project"
+    # Small bounded ranking nudges from votes (kb_rate) and age; off by default.
+    rank_signals: bool = False
     # Delete-by-age rules: [{"kind": "session", "days": 90}, {"scope": "private", "days": 730}].
     # Each needs a kind or a scope; age counts from the last change. See docs/RETENTION.md.
     retention_rules: list[dict[str, Any]] = Field(default_factory=list)

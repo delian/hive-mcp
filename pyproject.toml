@@ -121,6 +121,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "--cov=hive_mcp --cov-report=term-missing"
 timeout = 60  # a hung test fails after a minute instead of stalling CI
+markers = ["stress: concurrency and scale tests (HIVE_STRESS_SCALE=<n> multiplies their size)"]
 
 [tool.mutmut]
 # Mutation testing (scripts/mutation.sh, weekly in CI): security-critical modules, tested by

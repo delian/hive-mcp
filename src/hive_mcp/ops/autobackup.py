@@ -38,18 +38,21 @@ def archives(directory: Path) -> list[Path]:
     return sorted(p for p in directory.glob(f"{PREFIX}*{SUFFIX}") if p.is_file())
 
 
-def restore_if_empty(settings: Settings) -> Path | None:
-    """On a disk without a database, restore the newest backup that verifies. Returns it."""
-    if (
-        settings.backup_dir is None
-        or settings.profile is not Profile.EMBEDDED  # Postgres keeps its own data
-        or (settings.data_dir / "hive.db").exists()
-    ):
+def restore_if_empty(settings: Settings, *, fresh_pg: bool = False) -> Path | None:
+    """On a disk without a database, restore the newest backup that verifies. Returns it.
+
+    `fresh_pg`: the embedded Postgres cluster was just created, so it is empty."""
+    if settings.backup_dir is None:
         return None
+    if settings.embedded_postgres:
+        if not fresh_pg:
+            return None
+    elif settings.profile is not Profile.EMBEDDED or (settings.data_dir / "hive.db").exists():
+        return None  # an external Postgres keeps its own data
     for archive in reversed(archives(settings.backup_dir)):
         try:
             verify_backup(archive)
-            restore_backup(settings, archive)
+            restore_backup(settings, archive, force=settings.embedded_postgres)
         except HiveError as exc:
             log.error("backup %s unusable (%s); trying an older one", archive.name, exc)
             continue
@@ -58,10 +61,33 @@ def restore_if_empty(settings: Settings) -> Path | None:
     return None
 
 
+_PG_SEEN: dict[str, object] = {}  # the activity counters at the last backup, per database
+
+
+def pg_activity(dsn: str) -> object | None:
+    """Rows written so far in this database (None when it cannot be asked): changes if data did."""
+    import psycopg  # noqa: PLC0415 - postgres extra
+
+    try:
+        with psycopg.connect(dsn, connect_timeout=5) as conn:
+            row = conn.execute(
+                "SELECT tup_inserted, tup_updated, tup_deleted FROM pg_stat_database "
+                "WHERE datname = current_database()"
+            ).fetchone()
+        return tuple(row) if row else None
+    except psycopg.Error:
+        return None
+
+
 def _changed_since(settings: Settings, since: float) -> bool:
     """Has the database (or its write-ahead log) been touched after the last backup began?"""
     names = ("hive.db", "hive.db-wal", "tokens.json", "users.json")
-    return any((p := settings.data_dir / n).exists() and p.stat().st_mtime > since for n in names)
+    if any((p := settings.data_dir / n).exists() and p.stat().st_mtime > since for n in names):
+        return True
+    if settings.embedded_postgres and settings.database_url:  # no file to look at: ask it
+        activity = pg_activity(settings.database_url)
+        return activity is None or activity != _PG_SEEN.get(settings.database_url)
+    return False
 
 
 def backup_once(settings: Settings, last_start: float | None, now: float) -> float | None:
@@ -70,9 +96,13 @@ def backup_once(settings: Settings, last_start: float | None, now: float) -> flo
     if last_start is not None and not _changed_since(settings, last_start):
         return last_start
     settings.backup_dir.mkdir(parents=True, exist_ok=True)
+    dsn = settings.database_url if settings.embedded_postgres else None
+    seen = pg_activity(dsn) if dsn else None
     name = f"{PREFIX}{datetime.now(UTC):%Y%m%d-%H%M%S}{SUFFIX}"
     summary = create_backup(settings, settings.backup_dir / name)
     verify_backup(summary.path)  # an archive nobody has read back is not a backup
+    if seen is not None and dsn:
+        _PG_SEEN[dsn] = seen  # taken before the dump: later writes show next time
     for old in archives(settings.backup_dir)[: -settings.backup_keep]:
         old.unlink(missing_ok=True)
     log.info("backup written: %s (%d files)", summary.path.name, summary.files)

@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import SettingsConfigDict
 
-from hive_mcp.config_extras import ExtrasSettings
+from hive_mcp.config_extras import EMBEDDED_PG_DSN, ExtrasSettings
 
 
 class Profile(StrEnum):
@@ -149,6 +149,24 @@ class Settings(ExtrasSettings):
     def _check_sso(self) -> Settings:
         if self.sso_provider == "entra" and not self.entra_tenant:
             raise ValueError("HIVE_SSO_PROVIDER=entra needs HIVE_ENTRA_TENANT (the directory id)")
+        return self
+
+    @model_validator(mode="after")
+    def _check_embedded_postgres(self) -> Settings:
+        if not self.embedded_postgres:
+            return self
+        if self.database_url or (
+            "profile" in self.model_fields_set and (self.profile is Profile.EMBEDDED)
+        ):
+            raise ValueError(
+                "HIVE_EMBEDDED_POSTGRES runs its own database: do not set HIVE_DATABASE_URL "
+                "or HIVE_PROFILE=embedded"
+            )
+        if self.replicas > 1:
+            raise ValueError(
+                "HIVE_EMBEDDED_POSTGRES lives in one container: HIVE_REPLICAS must be 1"
+            )
+        self.profile, self.database_url = Profile.EXTERNAL, EMBEDDED_PG_DSN
         return self
 
     @model_validator(mode="after")

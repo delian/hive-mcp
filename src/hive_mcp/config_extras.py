@@ -10,6 +10,10 @@ from typing import Any, Literal, Self
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# short, because unix socket paths are limited to ~100 characters; the server checks it is ours
+EMBEDDED_PG_SOCKET = "/tmp/hive-pg"  # noqa: S108
+EMBEDDED_PG_DSN = f"host={EMBEDDED_PG_SOCKET} dbname=hive user=hive"
+
 
 class ExtrasSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="HIVE_", extra="ignore")
@@ -26,6 +30,10 @@ class ExtrasSettings(BaseSettings):
     # revision id (HIVE_REVISION; Azure Container Apps supplies CONTAINER_APP_REVISION).
     backup_handoff: bool = False
     revision: str | None = None
+    # Run PostgreSQL + pgvector inside this container too (image built with WITH_POSTGRES=true):
+    # the external profile without a second service. Data in <data_dir>/pg; with HIVE_BACKUP_DIR
+    # the usual archives (pg_dump) protect it. docs/SINGLE-CONTAINER.md
+    embedded_postgres: bool = False
     # An optional language model for merge proposals and contradiction checks (docs/LLM.md). Notes
     # narrower than llm_min_scope (default: project) are never sent to it.
     llm_provider: Literal["none", "openai", "anthropic"] = "none"

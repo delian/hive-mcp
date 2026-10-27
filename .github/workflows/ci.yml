@@ -77,6 +77,10 @@ jobs:
         run: scripts/smoke_docker.sh hive-mcp:ci
       - name: One container only - a replaced container comes back with its data, two cannot overlap
         run: scripts/smoke_single_container.sh hive-mcp:ci
+      - name: Image with PostgreSQL inside - the same promise with the external profile in one container
+        run: |
+          docker build --build-arg WITH_POSTGRES=true -t hive-mcp:pg .
+          SMOKE_ARGS='-e HIVE_EMBEDDED_POSTGRES=true' scripts/smoke_single_container.sh hive-mcp:pg
       - name: Smoke test with the real offline embedder
         run: HIVE_EMBEDDER=onnx scripts/smoke_docker.sh hive-mcp:ci
       - name: Scan the image for known vulnerabilities (fixable high/critical only)

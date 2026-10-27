@@ -5,6 +5,7 @@
 #   WITH_GIT   install git so `hive ingest-git` works in the container (default false)
 #   WITH_OCR   install Tesseract + Poppler so HIVE_OCR=true can read scans and images (+~80 MB)
 #   OCR_LANGS  extra Tesseract language packs, e.g. "deu fra" (English is always included)
+#   WITH_POSTGRES install a PostgreSQL server + pgvector so HIVE_EMBEDDED_POSTGRES=true works (+~150 MB)
 #   PG_CLIENT  install pg_dump/pg_restore for backups of the Postgres profile (default true)
 #   EXTRA_MODELS space-separated model names to bake in besides the default embedder
 #   BAKE_MODEL download + verify the offline embedding model into the image (needs network at build time)
@@ -43,6 +44,8 @@ ARG WITH_GIT=false
 # scanned PDFs and images (HIVE_OCR=true); language packs are Debian's tesseract-ocr-<code>
 ARG WITH_OCR=false
 ARG OCR_LANGS=""
+# PostgreSQL + pgvector in the same container (HIVE_EMBEDDED_POSTGRES=true); needs pgvector >= 0.7 (halfvec)
+ARG WITH_POSTGRES=false
 RUN PKGS=""; \
     [ "$PG_CLIENT" = "true" ] && PKGS="$PKGS postgresql-client"; \
     [ "$WITH_GIT" = "true" ] && PKGS="$PKGS git"; \
@@ -50,6 +53,16 @@ RUN PKGS=""; \
       for l in $OCR_LANGS; do PKGS="$PKGS tesseract-ocr-$l"; done; fi; \
     if [ -n "$PKGS" ]; then apt-get update && apt-get install -y --no-install-recommends $PKGS \
  && rm -rf /var/lib/apt/lists/*; fi
+# No cluster is created at install time: ours is made in /data/pg on first start.
+RUN if [ "$WITH_POSTGRES" = "true" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends postgresql-common \
+ && sed -i 's/^#\?create_main_cluster.*/create_main_cluster = false/' /etc/postgresql-common/createcluster.conf \
+ && apt-get install -y --no-install-recommends postgresql \
+ && V=$(ls /usr/lib/postgresql | sort -n | tail -1) \
+ && apt-get install -y --no-install-recommends "postgresql-$V-pgvector" \
+ && rm -rf /var/lib/apt/lists/* \
+ && grep -E "default_version = '(0\.(7|8|9)|[1-9])" "/usr/share/postgresql/$V/extension/vector.control" >/dev/null \
+ || { echo "pgvector 0.7 or newer is needed (halfvec); use a newer base image" >&2; exit 1; }; fi
 RUN useradd --system --uid 10001 --create-home hive && mkdir /data && chown hive /data
 COPY --from=build /app/.venv /app/.venv
 COPY --from=build /models /models

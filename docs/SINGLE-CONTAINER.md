@@ -76,7 +76,28 @@ az deployment group create ... -p imageTag=<new>                                
 share, copy the archives in, deploy. Outside Azure set `HIVE_REVISION` to anything that differs between releases (an
 image tag or digest) together with `HIVE_BACKUP_HANDOFF=true`.
 
+## PostgreSQL inside the same container (optional)
+For a bigger knowledge base, or to use the Postgres profile's features, without a second service: build the image with
+a PostgreSQL server and pgvector in it and let the server run it.
+```bash
+docker build --build-arg WITH_POSTGRES=true -t hive-mcp:pg .        # +~150 MB; pgvector >= 0.7 is checked at build time
+docker run -d -p 8080:8080 -v hive:/data -e HIVE_EMBEDDED_POSTGRES=true hive-mcp:pg
+```
+- `HIVE_EMBEDDED_POSTGRES=true` selects the external profile against a database it creates itself: do not also set
+  `HIVE_DATABASE_URL` or `HIVE_PROFILE=embedded` (startup refuses). The cluster lives in `<data dir>/pg`, listens on a unix
+  socket only (no network port, no password: the socket directory belongs to the container user), and is started before
+  and stopped (fast, clean) after the server, so after the final backup.
+- With `HIVE_BACKUP_DIR` the archives, the final backup, the restore on a new disk and the one-writer lease work exactly as
+  above; the database part of an archive is a `pg_dump` instead of a SQLite snapshot. An archive is written only if rows
+  changed (or tokens, users or files did). Archives of the two profiles are not interchangeable.
+- Without a backup directory the data is only as durable as the `/data` volume.
+- It is one more process to babysit: if Postgres dies while the server runs, requests fail until the container is
+  restarted (the readiness check fails, so a platform restarts it). Tuning is Postgres' defaults.
+- Tested here against PostgreSQL 16 started by the server as an unprivileged user (start, restart, stale `postmaster.pid`,
+  archives, restore into a new cluster, clean stop). The image build and its smoke test run in CI; they have not been run
+  on Azure.
+
 ## What cannot run in one container
-- **Several replicas**: SQLite is single-process (`HIVE_REPLICAS > 1` needs Postgres).
+- **Several replicas**: SQLite and the embedded Postgres are single-instance (`HIVE_REPLICAS > 1` needs an external Postgres).
 - **Very large knowledge bases**: past a few hundred thousand notes use Postgres, or LanceDB (docs/STORAGE.md).
 - **OCR**: needs an image built with `--build-arg WITH_OCR=true` (Tesseract and Poppler are inside the same image).

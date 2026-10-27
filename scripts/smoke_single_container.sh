@@ -3,6 +3,7 @@
 # Writes a note, stops the container, destroys it, starts a brand-new one on the same backups: the note is back.
 # Also checks that a second instance cannot start while the first runs.
 # Usage: scripts/smoke_single_container.sh [image]   (default hive-mcp:ci)
+# SMOKE_ARGS adds docker options, e.g. SMOKE_ARGS='-e HIVE_EMBEDDED_POSTGRES=true' for the Postgres image.
 set -euo pipefail
 IMAGE=${1:-hive-mcp:ci}
 ID=$$
@@ -20,7 +21,7 @@ start() { # name port [extra docker args...]
   local name=$1 port=$2; shift 2
   docker run -d --name "$name" --network host -v "$BACKUPS":/backups \
     -e HIVE_PORT="$port" -e HIVE_PUBLIC_URL="http://127.0.0.1:$port" -e HIVE_BACKUP_DIR=/backups \
-    -e HIVE_BACKUP_LEASE_WAIT=3 -e HIVE_EMBEDDER=hashing "$@" "$IMAGE" >/dev/null
+    -e HIVE_BACKUP_LEASE_WAIT=3 -e HIVE_EMBEDDER=hashing ${SMOKE_ARGS:-} "$@" "$IMAGE" >/dev/null
 }
 ready() { for _ in $(seq 60); do curl -fs "http://127.0.0.1:$1/readyz" >/dev/null && return 0; sleep 1; done; return 1; }
 rpc() { # port token method params-json

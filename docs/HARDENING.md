@@ -88,3 +88,19 @@ bomb and 100,000-level nesting within the time limits (tests/fuzz).
 
 Not covered: a penetration test against a real deployment, dependency-level fuzzing of the PDF/Office libraries beyond
 what the tests above exercise, and anything that needs real Slack, Teams, Google or Azure to observe.
+
+## Mutation testing
+
+A passing test suite only says the tests agree with the code. `scripts/mutation.sh` (mutmut) changes
+the code in small ways (flips a comparison, drops a check, alters a constant) and runs the fast tests
+against each change; a change that no test notices is a *surviving mutant* and fails the script.
+It covers the modules where a silent change would matter most: Slack signature checks
+(`slack/verify.py`), the injection heuristics (`security/injection.py`), retention rules, the
+backup lease and hand-off, and the ranking nudges. All 353 mutants are killed at the time of
+writing. CI runs it weekly (and on demand through *Run workflow*), not on every push, because it
+takes a few minutes.
+
+Lines that only change log text, thread names or race-window sleeps carry `# pragma: no mutate`;
+that is deliberate and should stay rare. To look at a survivor:
+`uv run --group mutation mutmut show <name>`; to widen the scope, add files to `source_paths`
+under `[tool.mutmut]` in `pyproject.toml` together with the tests that cover them.

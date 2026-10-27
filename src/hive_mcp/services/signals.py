@@ -62,7 +62,7 @@ class RankSignals:
         for item_id in item_ids:
             factor = 1.0
             if counts := await self._kv.get(VOTES_NS, item_id):
-                factor *= vote_factor(int(counts["up"]), int(counts["down"]))
+                factor = vote_factor(int(counts["up"]), int(counts["down"]))
             confirmed = await self._kv.get(CONFIRMED_NS, item_id)
             if confirmed and now - datetime.fromisoformat(confirmed["at"]) <= CONFIRM_FRESH:
                 factor *= 1.0 + CONFIRM_BONUS

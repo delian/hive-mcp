@@ -7,3 +7,7 @@ __pycache__/
 .coverage
 /data/
 .env
+
+# mutation testing
+/mutants/
+.mutmut-cache/

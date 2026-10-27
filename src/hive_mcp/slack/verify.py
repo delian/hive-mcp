@@ -29,7 +29,8 @@ def verify(
     body: bytes,
     now: Callable[[], float] = time.time,
 ) -> bool:
-    if not timestamp or not signature or not timestamp.isdigit():
+    # str.isdigit() accepts characters such as '²' that int() then rejects: ASCII only
+    if not timestamp or not signature or not (timestamp.isascii() and timestamp.isdigit()):
         return False
     if abs(now() - int(timestamp)) > WINDOW_SECONDS:
         return False

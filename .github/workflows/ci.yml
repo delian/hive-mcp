@@ -2,6 +2,7 @@ name: ci
 on:
   push:
   pull_request:
+  workflow_dispatch:
   schedule:
     - cron: "17 5 * * 1"  # weekly: new advisories can appear without any change of ours
 jobs:
@@ -98,3 +99,12 @@ jobs:
       - run: az bicep build --file deploy/azure/main.bicep --stdout > /dev/null
       - run: az bicep build --file deploy/azure/single.bicep --stdout > /dev/null
       - run: az bicep build-params --file deploy/azure/main.bicepparam --stdout > /dev/null
+  mutation:
+    # Slow and only for the weekly run (or by hand): a surviving mutant is a change to the
+    # security-critical code that no test notices. See docs/HARDENING.md.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: scripts/mutation.sh

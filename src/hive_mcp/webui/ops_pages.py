@@ -164,7 +164,7 @@ class OpsPages:
             await review.confirm(gate[1], str(form.get("id", "")))
         except HiveError as exc:
             return self._failed(exc, gate, "/admin/stale")
-        days = "".join(c for c in str(form.get("days", "180")) if c.isdigit()) or "180"
+        days = "".join(c for c in str(form.get("days", "180")) if c in "0123456789") or "180"
         return redirect(f"/admin/stale?days={days}&done=confirmed")
 
     async def duplicates(self, request: Request) -> Response:

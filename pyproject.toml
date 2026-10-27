@@ -77,6 +77,9 @@ dev = [
     "pip-audit>=2.10.1",
     "pillow>=13.0.0",
 ]
+mutation = [
+    "mutmut>=3.8.0",
+]
 
 [tool.ruff]
 line-length = 100
@@ -116,3 +119,21 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "--cov=hive_mcp --cov-report=term-missing"
 timeout = 60  # a hung test fails after a minute instead of stalling CI
+
+[tool.mutmut]
+# Mutation testing (scripts/mutation.sh, weekly in CI): small, security-critical modules, tested by
+# fast tests that need no server.
+debug = false
+also_copy = ["src/", "clients/", "scripts/", "evals/"]
+source_paths = [
+    "src/hive_mcp/slack/verify.py",
+    "src/hive_mcp/security/injection.py",
+    "src/hive_mcp/domain/retention.py",
+    "src/hive_mcp/ops/lease.py",
+    "src/hive_mcp/services/signals.py",
+]
+pytest_add_cli_args = ["-o", "addopts=", "-p", "no:cacheprovider"]
+pytest_add_cli_args_test_selection = [
+    "tests/unit/", "tests/fuzz/", "tests/ops/test_lease.py",
+    "tests/unit/test_retention_rule.py", "tests/unit/test_rank_signals.py",
+]

@@ -25,7 +25,7 @@ MAX_FORM_BYTES = 64 * 1024
 def revoke_route(provider: HiveOAuthProvider) -> Route:
     async def revoke(request: Request) -> Response:
         declared = request.headers.get("content-length") or "0"
-        if not declared.isdigit() or int(declared) > MAX_FORM_BYTES:
+        if not (declared.isascii() and declared.isdigit()) or int(declared) > MAX_FORM_BYTES:
             return JSONResponse({"error": "invalid_request"}, status_code=413)
         try:
             client = await ClientAuthenticator(provider).authenticate_request(request)

@@ -209,7 +209,7 @@ async def _read(response: httpx.Response, url: str, policy: FetchPolicy) -> Fetc
     if not _acceptable(content_type):
         raise ValidationError(f"content type {content_type.split(';')[0]!r} is not a document")
     declared = response.headers.get("content-length", "")
-    if declared.isdigit() and int(declared) > policy.max_bytes:
+    if declared.isascii() and declared.isdigit() and int(declared) > policy.max_bytes:
         raise ValidationError(f"the document is larger than {policy.max_bytes // (1024 * 1024)} MB")
     chunks: list[bytes] = []
     total = 0

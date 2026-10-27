@@ -147,3 +147,93 @@ def test_old_retirements_are_forgotten_after_a_day(tmp_path):
     Lease(tmp_path, "x", revision="r-old").acquire(0)  # long forgotten: allowed again
     with pytest.raises(ValidationError, match="handed over"):
         Lease(tmp_path, "y", revision="r-new").acquire(0)
+
+
+# ---------------------------------------------------------------- details people rely on
+def test_the_lease_file_says_who_holds_it_and_which_revision(tmp_path):
+    held = Lease(tmp_path / "deep" / "dir", "me", revision="r7")  # the directory is created
+    held.acquire(0)
+    try:
+        record = json.loads((tmp_path / "deep" / "dir" / FILE).read_text())
+        assert record == {"owner": "me", "pid": os.getpid(), "revision": "r7"}
+        assert not list((tmp_path / "deep" / "dir").glob(f"{FILE}.*"))  # no half-written leftovers
+    finally:
+        held.release()
+
+
+def test_the_refusal_tells_the_operator_what_to_do(tmp_path):
+    first = Lease(tmp_path, "one")
+    first.acquire(0)
+    try:
+        with pytest.raises(ValidationError) as caught:
+            Lease(tmp_path, "two").acquire(0)
+        assert str(caught.value) == (
+            "another instance is using this backup directory (lease held); two instances "
+            "must not run at once. Stop it first, or wait for it to finish shutting down"
+        )
+    finally:
+        first.release()
+
+
+def test_a_handoff_request_names_the_asker_and_is_not_rewritten_while_unanswered(tmp_path):
+    first = Lease(tmp_path, "one", revision="r1")
+    first.acquire(0)
+    try:
+        asker = Lease(tmp_path, "two", revision="r2")
+        with pytest.raises(ValidationError):
+            asker.acquire(0)
+        request = tmp_path / lease_module.HANDOFF_FILE
+        assert json.loads(request.read_text()) == {"revision": "r2", "owner": "two"}
+        request.write_text(json.dumps({"revision": "r2", "owner": "marker"}))
+        with pytest.raises(ValidationError):
+            asker.acquire(0)
+        assert json.loads(request.read_text())["owner"] == "marker"
+    finally:
+        first.release()
+
+
+def test_a_lease_held_by_someone_else_and_fresh_is_not_taken_by_a_matching_revision_field(
+    tmp_path,
+):
+    (tmp_path / FILE).write_text(json.dumps({"owner": "other", "revision": "me"}))
+    with pytest.raises(ValidationError):  # the owner is compared, not the revision
+        Lease(tmp_path, "me", revision="me").acquire(0)
+
+
+def test_a_missing_lease_after_writing_is_not_ours(tmp_path, monkeypatch):
+    mine = Lease(tmp_path, "me")
+    monkeypatch.setattr(mine, "_read", lambda: None)  # nothing readable even after we wrote
+    monkeypatch.setattr(lease_module.time, "sleep", lambda _s: None)
+    with pytest.raises(ValidationError):
+        mine.acquire(0)
+
+
+def test_release_before_acquire_is_harmless_and_the_watcher_thread_stops(tmp_path):
+    Lease(tmp_path, "never").release()
+    held = Lease(tmp_path, "me")
+    held.acquire(0)
+    thread = held._thread
+    assert thread is not None and thread.daemon and thread.name == "hive-lease"
+    held.release()
+    assert not thread.is_alive()
+
+
+def test_releasing_from_the_watcher_thread_itself_does_not_wait_for_itself(tmp_path, monkeypatch):
+    import threading
+
+    fast(monkeypatch)
+    done, errors = threading.Event(), []
+    holder: dict[str, Lease] = {}
+
+    def yield_now() -> None:
+        try:
+            holder["lease"].release()  # runs on the hive-lease thread, as a real hand-off might
+        except RuntimeError as exc:
+            errors.append(exc)
+        done.set()
+
+    holder["lease"] = Lease(tmp_path, "old", revision="r1", on_handoff=yield_now)
+    holder["lease"].acquire(0)
+    (tmp_path / lease_module.HANDOFF_FILE).write_text(json.dumps({"revision": "r2"}))
+    assert done.wait(5) and errors == []
+    assert not (tmp_path / FILE).exists()

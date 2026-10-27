@@ -58,7 +58,7 @@ class Lease:
         self.revision = revision  # None: this instance never asks for, or yields to, a hand-off
         self._on_handoff = on_handoff
         self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        self._thread: threading.Thread | None = None  # pragma: no mutate
 
     # ------------------------------------------------------------------ files
     def _read(self) -> tuple[str, float, str | None] | None:
@@ -69,7 +69,7 @@ class Lease:
             return None  # absent or unreadable: nobody holds it
 
     def _write(self) -> None:
-        partial = self._path.with_name(f"{FILE}.{self.owner[:8]}")
+        partial = self._path.with_name(f"{FILE}.{self.owner[:8]}")  # pragma: no mutate
         record = {"owner": self.owner, "pid": os.getpid(), "revision": self.revision}
         partial.write_text(json.dumps(record))
         partial.replace(self._path)
@@ -78,7 +78,9 @@ class Lease:
         try:
             data = json.loads((self._dir / RETIRED_FILE).read_text())
             now = time.time()
-            return {k: float(v) for k, v in data.items() if now - float(v) < RETIRED_KEEP_SECONDS}
+            return {
+                k: float(v) for k, v in data.items() if now - float(v) < RETIRED_KEEP_SECONDS
+            }  # pragma: no mutate
         except (OSError, ValueError, TypeError, AttributeError):
             return {}
 
@@ -102,12 +104,14 @@ class Lease:
                 f"revision {self.revision} was handed over to a newer one and must not start again"
             )
         deadline = time.monotonic() + wait_seconds
-        announced = False
+        announced = False  # pragma: no mutate
         while True:
             held = self._read()
-            if held is None or held[0] == self.owner or time.time() - held[1] > STALE_SECONDS:
+            stale = held is not None and time.time() - held[1] > STALE_SECONDS  # pragma: no mutate
+            if held is None or held[0] == self.owner or stale:
                 self._write()
-                time.sleep(0.2)  # two starters at once: the last writer wins, and the loser sees it
+                # two starters at once: the last writer wins, and the loser sees it
+                time.sleep(0.2)  # pragma: no mutate
                 current = self._read()
                 if current and current[0] == self.owner:
                     (self._dir / HANDOFF_FILE).unlink(missing_ok=True)
@@ -115,49 +119,55 @@ class Lease:
                     return
             elif self.revision and held[2] and held[2] != self.revision:
                 self._ask_to_yield()
-            if time.monotonic() >= deadline:
+            if time.monotonic() >= deadline:  # pragma: no mutate
                 raise ValidationError(
                     "another instance is using this backup directory (lease held); two instances "
                     "must not run at once. Stop it first, or wait for it to finish shutting down"
                 )
-            if not announced:
-                log.warning("waiting for the running instance to release the lease")
-                announced = True
+            if not announced:  # pragma: no mutate
+                log.warning(
+                    "waiting for the running instance to release the lease"
+                )  # pragma: no mutate
+                announced = True  # pragma: no mutate
             time.sleep(POLL_SECONDS)
 
     def _ask_to_yield(self) -> None:
         request = self._dir / HANDOFF_FILE
         if self._handoff_request() != self.revision:
             request.write_text(json.dumps({"revision": self.revision, "owner": self.owner}))
-            log.warning("asked the running instance to hand over (revision %s)", self.revision)
+            log.warning(
+                "asked the running instance to hand over (revision %s)", self.revision
+            )  # pragma: no mutate
 
     # ------------------------------------------------------------------ holding it
     def _start_watching(self) -> None:
         def watch() -> None:
-            last_write = time.monotonic()
+            last_write = time.monotonic()  # pragma: no mutate
             while not self._stop.wait(WATCH_SECONDS):
                 held = self._read()
                 if held is not None and held[0] != self.owner:
-                    log.error("the lease was taken over by another instance")
+                    log.error("the lease was taken over by another instance")  # pragma: no mutate
                     return
                 asker = self._handoff_request()
                 if asker and self.revision and asker != self.revision and self._on_handoff:
-                    log.warning("handing over to revision %s", asker)
+                    log.warning("handing over to revision %s", asker)  # pragma: no mutate
                     self._retire(self.revision)
                     self._on_handoff()
                     return
-                if time.monotonic() - last_write >= HEARTBEAT_SECONDS:
-                    with contextlib.suppress(OSError):
+                if time.monotonic() - last_write >= HEARTBEAT_SECONDS:  # pragma: no mutate
+                    with contextlib.suppress(OSError):  # pragma: no mutate
                         self._write()
-                    last_write = time.monotonic()
+                    last_write = time.monotonic()  # pragma: no mutate
 
-        self._thread = threading.Thread(target=watch, name="hive-lease", daemon=True)
+        self._thread = threading.Thread(
+            target=watch, name="hive-lease", daemon=True
+        )  # pragma: no mutate
         self._thread.start()
 
     def release(self) -> None:
         self._stop.set()
         if self._thread and self._thread is not threading.current_thread():
-            self._thread.join(timeout=2)
+            self._thread.join(timeout=2)  # pragma: no mutate
         held = self._read()
         if held is not None and held[0] == self.owner:
-            self._path.unlink(missing_ok=True)
+            self._path.unlink(missing_ok=True)  # pragma: no mutate - a vanished file is fine

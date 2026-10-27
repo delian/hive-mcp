@@ -304,12 +304,6 @@ def test_a_chain_of_revisions_each_hands_over_to_the_next(
     assert not (tmp_path / FILE).exists()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-STRESS-1: an instance of a retired revision that is already waiting in "
-    "Lease.acquire() takes the lease the holder just yielded; the retired check runs only once, "
-    "before the wait loop (src/hive_mcp/ops/lease.py:103-135)",
-)
 def test_a_waiting_instance_of_the_yielding_revision_must_not_take_the_lease_back(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -337,12 +331,6 @@ def test_a_waiting_instance_of_the_yielding_revision_must_not_take_the_lease_bac
             waiting.lease.release()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-STRESS-2: the half-written lease file is named after owner[:8], so two owners with "
-    "the same 8-character prefix share it and acquire() dies with FileNotFoundError "
-    "(src/hive_mcp/ops/lease.py:78-80)",
-)
 def test_owners_sharing_a_name_prefix_do_not_trample_each_others_temp_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

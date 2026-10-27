@@ -41,7 +41,7 @@ NOT_LINKED = (
 )
 
 
-MENTION = re.compile(r"<@[A-Z0-9]+(?:\|[^>]*)?>")
+MENTION = re.compile(r"<@[A-Z0-9]{1,30}(?:\|[^<>]{0,100})?>")
 POST_MESSAGE = "https://slack.com/api/chat.postMessage"
 
 

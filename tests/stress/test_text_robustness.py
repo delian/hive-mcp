@@ -156,10 +156,7 @@ def text_functions() -> dict[str, Callable[[str], Any]]:
 
 # Known product bugs, covered by the xfail tests at the bottom (the sweep skips them so that it
 # keeps guarding everything else; remove an entry when its bug is fixed).
-KNOWN = {
-    ("teams.clean_text", "angle-open"),
-    ("slack.mention", "mention-tags"),
-}
+KNOWN = {}
 
 
 @pytest.mark.parametrize("name", sorted(text_functions()))
@@ -440,13 +437,6 @@ def test_hostile_json_bodies_get_4xx_and_the_server_stays_healthy(server: Live) 
 
 
 # ======================================================================== known product bugs
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-STRESS-3: the markdown-image-exfil rule backtracks quadratically (cubically on "
-    "repeated openers): scanning a megabyte takes minutes and blocks the event loop; kb_remember "
-    "sanitises BEFORE it checks the 200,000-character limit "
-    "(src/hive_mcp/security/injection.py:38-41, src/hive_mcp/services/knowledge.py:75)",
-)
 def test_scan_and_sanitize_of_a_megabyte_of_image_openers_are_bounded() -> None:
     text = "![a](http://x?" * (MEGABYTE // 14)
     for fn in (scan, lambda t: sanitize("t", t)):
@@ -456,12 +446,6 @@ def test_scan_and_sanitize_of_a_megabyte_of_image_openers_are_bounded() -> None:
         assert time.perf_counter() - started < XFAIL_BOUND
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-STRESS-4: teams clean_text: AT_TAG '<at[^>]*>.*?</at>' (DOTALL) is quadratic "
-    "when '<at>' is not closed; a 200 KB message body (the route allows 256 KB) takes ~25 s "
-    "of CPU on the event loop (src/hive_mcp/teams/handlers.py:36)",
-)
 def test_teams_message_cleaning_is_bounded_for_unclosed_mentions() -> None:
     text = "<at>" * 50_000
     started = time.perf_counter()
@@ -470,12 +454,6 @@ def test_teams_message_cleaning_is_bounded_for_unclosed_mentions() -> None:
     assert time.perf_counter() - started < XFAIL_BOUND
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-STRESS-5: TeamsRoutes.messages parses the JSON body before checking the token and "
-    "catches only ValueError, so a 100 KB body of '[' raises RecursionError (unauthenticated "
-    "500) instead of 400 (src/hive_mcp/teams/routes.py:50)",
-)
 async def test_teams_route_answers_deeply_nested_json_with_a_client_error() -> None:
     from hive_mcp.integrations.config import IntegrationConfig
     from hive_mcp.teams.routes import TeamsRoutes
@@ -496,14 +474,6 @@ async def test_teams_route_answers_deeply_nested_json_with_a_client_error() -> N
     assert 400 <= response.status_code < 500
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-STRESS-6: kb_consult has no cap on the number of query terms; 30,000 distinct "
-    "words take ~1.5 s (quadratic) on SQLite (one serialised connection: every other caller waits) and fail "
-    "with a misleading retryable StorageBusy on Postgres (StatementTooComplex: stack depth) "
-    "(src/hive_mcp/search/tokenize.py query_terms, adapters/sqlite/text.py:54, "
-    "adapters/postgres/text.py:40)",
-)
 async def test_a_query_of_thirty_thousand_distinct_words_is_answered_quickly(stack) -> None:
     if type(stack.backend).__name__ == "MemoryBackend":
         pytest.skip("the in-memory index has no query planner to overload")
@@ -514,12 +484,6 @@ async def test_a_query_of_thirty_thousand_distinct_words_is_answered_quickly(sta
     assert time.perf_counter() - started < 0.8
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-STRESS-7 (low: real Slack escapes '<' in user text): the Slack MENTION regex "
-    "'<@[A-Z0-9]+(?:\\|[^>]*)?>' is quadratic on unclosed '<@U1|' runs; 200 KB takes ~28 s, "
-    "the 64 KB the route allows ~3 s (src/hive_mcp/slack/handlers.py:44)",
-)
 def test_slack_mention_removal_is_bounded_for_unclosed_mentions() -> None:
     text = "<@U1|" * (200_000 // 5)
     started = time.perf_counter()

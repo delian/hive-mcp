@@ -49,6 +49,9 @@ def _recent(stamp: float, now: float) -> bool:
     return now - stamp < RETIRED_KEEP_SECONDS  # pragma: no mutate - a time-of-day boundary
 
 
+RETIRED_MESSAGE = "revision {} was handed over to a newer one and must not start again"
+
+
 class Lease:
     def __init__(
         self,
@@ -75,7 +78,7 @@ class Lease:
             return None  # absent or unreadable: nobody holds it
 
     def _write(self) -> None:
-        partial = self._path.with_name(f"{FILE}.{self.owner[:8]}")  # pragma: no mutate
+        partial = self._path.with_name(f"{FILE}.{os.getpid()}.{id(self):x}")  # pragma: no mutate
         record = {"owner": self.owner, "pid": os.getpid(), "revision": self.revision}
         partial.write_text(json.dumps(record))
         partial.replace(self._path)
@@ -104,12 +107,12 @@ class Lease:
         """Take the lease, waiting up to `wait_seconds` for a live holder to let go."""
         self._dir.mkdir(parents=True, exist_ok=True)
         if self.revision and self.revision in self._retired():
-            raise ValidationError(
-                f"revision {self.revision} was handed over to a newer one and must not start again"
-            )
+            raise ValidationError(RETIRED_MESSAGE.format(self.revision))
         deadline = time.monotonic() + wait_seconds
         announced = False  # pragma: no mutate
         while True:
+            if self.revision and self.revision in self._retired():  # handed over while we waited
+                raise ValidationError(RETIRED_MESSAGE.format(self.revision))
             held = self._read()
             stale = held is not None and time.time() - held[1] > STALE_SECONDS  # pragma: no mutate
             if held is None or held[0] == self.owner or stale:

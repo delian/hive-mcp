@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from hive_mcp.domain.errors import HiveError, PermissionDenied, ValidationError
 from hive_mcp.domain.history import KEEP_VERSIONS
-from hive_mcp.domain.item import Item, ItemPatch, ItemQuery, ItemView, Page
+from hive_mcp.domain.item import MAX_BODY, Item, ItemPatch, ItemQuery, ItemView, Page
 from hive_mcp.domain.principal import Principal, Role
 from hive_mcp.domain.scope import Scope, ScopeLevel, Visibility
 from hive_mcp.domain.tags import normalize_tags
@@ -72,6 +72,8 @@ class KnowledgeService:
     async def remember(self, principal: Principal, req: RememberRequest) -> RememberResult:
         scope = req.scope or Scope(ScopeLevel.PRIVATE, principal.id)
         _require_sharing_allowed(principal, scope, req.visibility)
+        if len(req.body) > MAX_BODY:  # before sanitising: that pass costs time in proportion
+            raise ValidationError(f"body must be 1-{MAX_BODY} characters")
         clean = sanitize(req.title, req.body)
         size = len(clean.title) + len(clean.body)
         if self._quota:

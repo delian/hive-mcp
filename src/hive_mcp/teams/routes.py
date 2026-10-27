@@ -50,7 +50,7 @@ class TeamsRoutes:
             activity = json.loads(body)
             if not isinstance(activity, dict):
                 raise ValueError
-        except ValueError:
+        except (ValueError, RecursionError):  # deeply nested JSON raises RecursionError
             return Response("bad activity", status_code=400)
         try:
             await verifier.verify(

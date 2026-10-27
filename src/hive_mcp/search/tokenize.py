@@ -94,7 +94,10 @@ STOPWORDS = frozenset(
 )
 
 
+MAX_QUERY_TERMS = 64
+
+
 def query_terms(query: str) -> list[str]:
     """A query's words minus stopwords (or all of them if only stopwords are left)."""
-    words = tokenize(query)
-    return [w for w in words if w not in STOPWORDS] or words
+    words = tokenize(query)  # a pasted page is not a query
+    return ([w for w in words if w not in STOPWORDS] or words)[:MAX_QUERY_TERMS]

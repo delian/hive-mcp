@@ -37,7 +37,7 @@ _RULES: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         (
             "markdown-image-exfil",
             # bounded and anchored on the first ?/&: unbounded `[^)\s]*[?&][^)\s]*` is quadratic or worse
-            r"!\[[^\]]{0,2000}\]\(https?://[^)\s?&]{0,4000}[?&][^)\s]{0,4000}?(?:\{|%7B|data=|q=)",
+            r"!\[[^\]]{0,300}\]\(https?://[^)\s?&]{0,500}[?&][^)\s]{0,500}?(?:\{|%7B|data=|q=)",
         ),
         (
             "conceal-from-user",
@@ -53,7 +53,10 @@ def strip_invisible(text: str) -> tuple[str, int]:
     return clean, count
 
 
+MAX_SCANNED = 250_000  # a note is at most 200,000 characters; never scan a megabyte of repeats
+
+
 def scan(text: str) -> list[str]:
     """Names of the heuristics that match (NFKC-folded, so look-alike letters do not dodge them)."""
-    folded = unicodedata.normalize("NFKC", text)
+    folded = unicodedata.normalize("NFKC", text[:MAX_SCANNED])
     return [name for name, rx in _RULES if rx.search(folded)]

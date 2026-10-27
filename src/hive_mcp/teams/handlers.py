@@ -33,7 +33,9 @@ if TYPE_CHECKING:
     from hive_mcp.teams.connector import BotConnector
 
 log = logging.getLogger("hive.teams")
-AT_TAG = re.compile(r"<at[^>]*>.*?</at>", re.IGNORECASE | re.DOTALL)
+AT_TAG = re.compile(
+    r"<at[^<>]{0,200}>[^<]{0,200}</at>", re.IGNORECASE
+)  # bounded: no backtracking blowup
 TAGS = re.compile(r"<[^>]{1,200}>")
 RESULTS = 5
 MAX_NOTE = 20_000

@@ -7,7 +7,6 @@ import logging
 from pathlib import Path
 from types import SimpleNamespace
 
-
 from hive_mcp.ops import loops
 
 
@@ -49,3 +48,22 @@ def test_bug_cli_3_eval_set_file_is_private_even_when_it_existed(tmp_path) -> No
     assert stat.S_IMODE(out.stat().st_mode) == 0o600
     src = Path("src/hive_mcp/cli_eval.py").read_text()
     assert "os.fchmod(fd, 0o600)" in src
+
+
+def test_bug_stress_6_query_terms_are_capped() -> None:
+    from hive_mcp.search.tokenize import MAX_QUERY_TERMS, query_terms
+
+    assert len(query_terms(" ".join(f"w{i}" for i in range(30_000)))) == MAX_QUERY_TERMS
+
+
+async def test_bug_stress_3_oversized_body_is_refused_before_sanitising() -> None:
+    import time
+
+    from hive_mcp.domain.errors import ValidationError
+    from hive_mcp.domain.item import MAX_BODY
+    from hive_mcp.security.injection import scan
+
+    started = time.perf_counter()
+    scan("![a](http://x?" * 100_000)
+    assert time.perf_counter() - started < 2
+    assert MAX_BODY == 200_000 and ValidationError

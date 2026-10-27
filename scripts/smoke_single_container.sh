@@ -33,12 +33,15 @@ rpc() { # port token method params-json
 start "hive-a-$ID" "$PORT"
 ready "$PORT" || { docker logs "hive-a-$ID"; echo "first instance did not start" >&2; exit 1; }
 TOKEN=$(docker exec "hive-a-$ID" hive token create --label smoke --subject smoke --org acme --project p1 2>/dev/null)
-rpc "$PORT" "$TOKEN" tools/call '{"name":"kb_remember","arguments":{"title":"Durable","body":"survives container replacement pelican"}}' | grep -q '"indexed":true'
+# capture first: `curl | grep -q` can die of SIGPIPE under pipefail when grep quits early
+OUT=$(rpc "$PORT" "$TOKEN" tools/call '{"name":"kb_remember","arguments":{"title":"Durable","body":"survives container replacement pelican"}}')
+grep -q '"indexed":true' <<<"$OUT"
 
 # a second instance on the same backups must refuse to start while the first holds the lease
 if start "hive-c-$ID" "$((PORT + 1))" && docker wait "hive-c-$ID" >/dev/null && \
    [ "$(docker inspect --format '{{.State.ExitCode}}' "hive-c-$ID")" != 0 ]; then
-  docker logs "hive-c-$ID" 2>&1 | grep -q "another instance"
+  LOGS=$(docker logs "hive-c-$ID" 2>&1)
+  grep -q "another instance" <<<"$LOGS"
 else
   echo "a second instance started next to the first one" >&2; exit 1
 fi
@@ -49,6 +52,7 @@ docker run --rm -v "$BACKUPS":/backups --entrypoint sh "$IMAGE" -c 'ls /backups 
 
 start "hive-b-$ID" "$PORT"
 ready "$PORT" || { docker logs "hive-b-$ID"; echo "replacement did not start" >&2; exit 1; }
-rpc "$PORT" "$TOKEN" tools/call '{"name":"kb_consult","arguments":{"query":"pelican"}}' | grep -q Durable
+OUT=$(rpc "$PORT" "$TOKEN" tools/call '{"name":"kb_consult","arguments":{"query":"pelican"}}')
+grep -q Durable <<<"$OUT"
 docker stop -t 30 "hive-b-$ID" >/dev/null
 echo "single-container smoke ok"

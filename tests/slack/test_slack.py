@@ -15,7 +15,7 @@ from hive_mcp.domain.principal import Role
 from hive_mcp.security.directory import DirectoryUser
 from hive_mcp.slack.handlers import mrkdwn
 from hive_mcp.slack.verify import WINDOW_SECONDS, sign, verify
-from tests.integration.conftest import Live, live  # noqa: F401 - the plain server fixture
+from tests.integration.conftest import Live
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

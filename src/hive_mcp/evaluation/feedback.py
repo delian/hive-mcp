@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
-from hive_mcp.services.feedback import OPEN, QUERY
+from hive_mcp.services.feedback import OPEN, QUERY, RATING
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -36,11 +36,16 @@ class Pairs:
     relevant: dict[str, set[str]] = field(default_factory=dict)  # query text -> opened result ids
     searches: int = 0
     opens: int = 0
+    rated_useful: int = 0
+    rated_useless: int = 0
+    irrelevant: dict[str, set[str]] = field(default_factory=dict)  # query text -> rated "no"
 
 
 def pair_searches_with_opens(records: Iterable[AuditRecord], window: timedelta = WINDOW) -> Pairs:
     """Records must be in the order they happened. Each open is credited to the latest search by
-    the same person, within `window`, whose results included that item."""
+    the same person, within `window`, whose results included that item. An explicit rating is
+    credited the same way (or to the query text it names); "not useful" outweighs any open of the
+    same result for that search, however early or late it came."""
     pairs = Pairs()
     recent: dict[str, list[_Recent]] = {}
     for record in records:
@@ -53,11 +58,36 @@ def pair_searches_with_opens(records: Iterable[AuditRecord], window: timedelta =
             del queue[:-KEEP_QUERIES]
         elif event.action == OPEN and event.target_id:
             pairs.opens += 1
-            for search in reversed(recent.get(event.actor_id, [])):
-                if event.at - search.at <= window and event.target_id in search.hits:
-                    pairs.relevant.setdefault(search.text, set()).add(event.target_id)
-                    break
+            if search := _credited(recent, event.actor_id, event.target_id, event.at, window):
+                pairs.relevant.setdefault(search.text, set()).add(event.target_id)
+        elif event.action == RATING and event.target_id:
+            useful = event.details.get("useful") == "1"
+            text = event.details.get("q")
+            if not text:
+                found = _credited(recent, event.actor_id, event.target_id, event.at, window)
+                text = found.text if found else None
+            if useful:
+                pairs.rated_useful += 1
+            else:
+                pairs.rated_useless += 1
+            if text:
+                bucket = pairs.relevant if useful else pairs.irrelevant
+                bucket.setdefault(text, set()).add(event.target_id)
+    for text, ids in pairs.irrelevant.items():
+        if text in pairs.relevant:
+            pairs.relevant[text] -= ids
+            if not pairs.relevant[text]:
+                del pairs.relevant[text]
     return pairs
+
+
+def _credited(
+    recent: dict[str, list[_Recent]], actor: str, item_id: str, at: datetime, window: timedelta
+) -> _Recent | None:
+    for search in reversed(recent.get(actor, [])):
+        if at - search.at <= window and item_id in search.hits:
+            return search
+    return None
 
 
 def build_set(  # noqa: PLR0913, PLR0917 - the pieces of a set

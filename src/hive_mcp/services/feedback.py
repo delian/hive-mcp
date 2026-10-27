@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 QUERY = "search.query"
 OPEN = "search.open"
+RATING = "search.rating"
 MAX_QUERY_CHARS = 200
 MAX_HITS = 25
 
@@ -39,4 +40,13 @@ class SearchFeedback:
     async def opened(self, who: Principal, item_id: str) -> None:
         await self._audit.append(
             AuditEvent(who.org_id, who.id, OPEN, self._clock.now(), item_id, {})
+        )
+
+    async def rated(self, who: Principal, item_id: str, useful: bool, query: str | None) -> None:
+        """An explicit verdict on a result: stronger than an open, and the only way to say "no"."""
+        details = {"useful": "1" if useful else "0"}
+        if query:
+            details["q"] = redact(query).text.strip()[:MAX_QUERY_CHARS]
+        await self._audit.append(
+            AuditEvent(who.org_id, who.id, RATING, self._clock.now(), item_id, details)
         )

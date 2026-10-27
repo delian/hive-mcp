@@ -44,3 +44,26 @@ async def test_nothing_is_recorded_by_default(live: Live):
         await alice.call_tool("kb_consult", {"query": "plan"})
         await alice.call_tool("kb_get", {"id": made["id"]})
     assert await trail(live, "search.query") == [] and await trail(live, "search.open") == []
+
+
+async def test_kb_rate_records_a_verdict_for_visible_items(recording: Live):
+    async with recording.client(recording.token_for(ALICE)) as alice:
+        made = (
+            await alice.call_tool("kb_remember", {"title": "Dwell time plan", "body": "Use 12 ms."})
+        ).structured_content
+        await alice.call_tool("kb_consult", {"query": "dwell time"})
+        ok = await alice.call_tool("kb_rate", {"id": made["id"], "useful": False})
+        hidden = await alice.call_tool("kb_rate", {"id": "nope", "useful": True})
+    assert ok.structured_content["recorded"] is True and hidden.is_error
+    (rated,) = await trail(recording, "search.rating")
+    assert rated["target"] == made["id"] and rated["details"] == {"useful": "0"}
+
+
+async def test_kb_rate_is_a_no_op_when_feedback_is_off(live: Live):
+    async with live.client(live.token_for(ALICE)) as alice:
+        made = (
+            await alice.call_tool("kb_remember", {"title": "Plan", "body": "Some plan text."})
+        ).structured_content
+        off = await alice.call_tool("kb_rate", {"id": made["id"], "useful": True})
+    assert off.structured_content["recorded"] is False
+    assert await trail(live, "search.rating") == []

@@ -63,3 +63,16 @@ sweeps the vector relevance floor in steps of 0.01 and prints `Suggested: HIVE_R
 recall@3 among those that answer at most 5% of the unrelated queries. Set `HIVE_RELEVANCE_FLOOR` to apply it to the
 configured embedder (any kind). Re-run when you change embedder or reranker; compare `hive eval` output before and after
 a change to catch regressions.
+
+## Telling the server what helped (`kb_rate`) and finding gaps
+
+With `HIVE_SEARCH_FEEDBACK=true`, agents are told (in the server instructions) to call `kb_rate(id, useful)` after
+`kb_consult` once they know whether a result helped. A rating counts more than an open, and it is the only way to say
+"no": `hive eval-build` credits a "useful" to the search that showed the item (or the `query` the agent passed) and drops
+any result rated "not useful" for that search, even if it had been opened. Ratings are stored in the audit trail
+(`search.rating`, admins only).
+
+`hive feedback-report --org acme --days 30` lists what to fix: searches that **found nothing** (notes to write),
+searches that **found something nobody used** (notes that are missing or badly titled), the most useful notes and the
+ones rated not useful (candidates for `kb_review_stale`). It reads the same trail; nothing is recorded when the
+setting is off, and `kb_rate` then reports `recorded: false`.

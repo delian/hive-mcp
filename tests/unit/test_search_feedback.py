@@ -183,3 +183,62 @@ def test_eval_build_writes_a_private_set_that_hive_eval_accepts(tmp_path, monkey
     assert (out.stat().st_mode & 0o777) == 0o600
     assert "keep it private" in result.output
     assert dataset.load(out).queries[0].relevant == frozenset({item_id})
+
+
+# ---------------------------------------------------------------- explicit ratings and the report
+def rating(seq, minute, actor, item, useful, q=None):  # noqa: PLR0913, PLR0917
+    from hive_mcp.services.feedback import RATING
+
+    details = {"useful": "1" if useful else "0", **({"q": q} if q else {})}
+    return AuditRecord(
+        seq, AuditEvent("o", actor, RATING, T0 + timedelta(minutes=minute), item, details)
+    )
+
+
+def test_ratings_label_results_and_a_no_outweighs_an_open():
+    pairs = pair_searches_with_opens(
+        [
+            search(1, 0, "ann", "radar range", ["a", "b", "c"]),
+            opened(2, 1, "ann", "a"),
+            opened(3, 1, "ann", "b"),
+            rating(4, 2, "ann", "a", useful=False),  # opened it, then found it wrong
+            rating(5, 2, "ann", "c", useful=True),  # credited to her latest search showing c
+        ]
+    )
+    assert pairs.relevant == {"radar range": {"b", "c"}}
+    assert pairs.irrelevant == {"radar range": {"a"}}
+    assert (pairs.rated_useful, pairs.rated_useless) == (1, 1)
+
+
+def test_a_rating_may_name_its_query_and_a_no_before_the_open_still_wins():
+    pairs = pair_searches_with_opens(
+        [
+            rating(1, 0, "ann", "a", useful=False, q="old question"),
+            search(2, 5, "ann", "old question", ["a"]),
+            opened(3, 6, "ann", "a"),
+            rating(4, 7, "bob", "x", useful=True, q="other question"),
+        ]
+    )
+    assert pairs.relevant == {"other question": {"x"}}
+    assert pairs.irrelevant == {"old question": {"a"}}
+
+
+def test_the_report_lists_gaps_empty_searches_and_winners():
+    from hive_mcp.evaluation.report import build_report
+
+    report = build_report(
+        [
+            search(1, 0, "ann", "radar range", ["a"]),
+            opened(2, 1, "ann", "a"),
+            search(3, 2, "ann", "vpn setup", ["z"]),  # results, nobody used them
+            search(4, 3, "bob", "vpn setup", ["z"]),
+            search(5, 4, "bob", "wifi password", []),  # nothing found
+            search(6, 5, "bob", "radar range", ["a", "b"]),
+            rating(7, 6, "bob", "b", useful=False),
+        ]
+    )
+    assert report.searches == 5
+    assert report.answered == 2  # by search text: both "radar range" searches
+    assert report.gaps == [("vpn setup", 2)]
+    assert report.empty == [("wifi password", 1)]
+    assert report.useful == [("a", 1)] and report.useless == [("b", 1)]

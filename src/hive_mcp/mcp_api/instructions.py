@@ -29,6 +29,9 @@ kb_digest summarises what others added recently (good at the start of a week or 
 kb_list browses newest-first; kb_tags shows tags in use (check it before inventing a tag).
 kb_retag / kb_rename_tag fix tags in bulk; kb_similar finds duplicates and kb_merge consolidates them
 (you write the merged text).
+kb_rate tells the server whether a result you used (or rejected) was actually useful: do it after kb_consult
+when you know; it improves search for everyone. kb_duplicates finds groups of near-duplicates; kb_review_stale and
+kb_confirm keep notes honest (confirm only what you have verified).
 kb_link connects items (derived_from, part_of, supports...); kb_graph explores the connections.
 
 Items have a revision number. To change one, read it (kb_get), then call kb_update with its current revision.

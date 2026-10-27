@@ -17,7 +17,8 @@ from hive_mcp.config import Settings
 from hive_mcp.domain.clock import SystemClock
 from hive_mcp.evaluation import dataset
 from hive_mcp.evaluation.feedback import build_set, pair_searches_with_opens
-from hive_mcp.services.feedback import OPEN, QUERY
+from hive_mcp.evaluation.report import build_report
+from hive_mcp.services.feedback import OPEN, QUERY, RATING
 
 if TYPE_CHECKING:
     from hive_mcp.bootstrap import Services
@@ -29,7 +30,7 @@ PAGE = 500
 
 async def _trail(services: Services, org: str, since: Any) -> list[AuditRecord]:  # noqa: ANN401
     rows: list[AuditRecord] = []
-    for action in (QUERY, OPEN):
+    for action in (QUERY, OPEN, RATING):
         after = 0
         while page := await services.backend.audit.list(
             org, after_seq=after, limit=PAGE, action=action
@@ -89,7 +90,8 @@ def eval_build(
             json.dump(built, handle, indent=1, ensure_ascii=False)
         positives = sum(1 for q in built["queries"] if q["relevant"])
         typer.echo(
-            f"{pairs.searches} searches and {pairs.opens} opens in the last {days} days gave "
+            f"{pairs.searches} searches, {pairs.opens} opens and "
+            f"{pairs.rated_useful + pairs.rated_useless} ratings in the last {days} days gave "
             f"{positives} labelled queries, {len(negs)} negatives, "
             f"{len(built['docs'])} documents -> {out}"
         )
@@ -100,5 +102,34 @@ def eval_build(
         typer.echo(
             "The file holds real item text; keep it private and delete it when done.", err=True
         )
+
+    run_cli(run)
+
+
+@app.command("feedback-report")
+def feedback_report(
+    org: str = typer.Option(..., help="Organisation id."),
+    days: int = typer.Option(30, help="Use searches from the last N days."),
+) -> None:
+    """Questions the knowledge base did not answer, and which notes helped or misled."""
+
+    async def run() -> None:
+        services = await build_services(Settings())
+        try:
+            since = SystemClock().now() - timedelta(days=days)
+            report = build_report(await _trail(services, org, since))
+        finally:
+            await services.close()
+        typer.echo(f"{report.searches} searches in {days} days, {report.answered} answered")
+        for title, rows in (
+            ("Found nothing (notes to write)", report.empty),
+            ("Found something, nothing helped", report.gaps),
+            ("Most useful notes (id)", report.useful),
+            ("Rated not useful (id)", report.useless),
+        ):
+            if rows:
+                typer.echo(f"\n{title}:")
+                for text, n in rows:
+                    typer.echo(f"  {n:>3}  {text}")
 
     run_cli(run)

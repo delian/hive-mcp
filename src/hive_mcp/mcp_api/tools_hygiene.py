@@ -52,6 +52,10 @@ class ConfirmOut(BaseModel):
     confirmed_at: str
 
 
+class RateOut(BaseModel):
+    recorded: bool = Field(description="False when this server does not collect search feedback.")
+
+
 def register_hygiene_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None:
     @mcp.tool(annotations=READ)
     @guarded
@@ -116,3 +120,19 @@ def register_hygiene_tools(mcp: MCPServer, get_services: Callable[[], Services])
         assert svc is not None  # noqa: S101
         at = await svc.confirm(current_principal(), id)
         return ConfirmOut(id=id, confirmed_at=at.isoformat())
+
+    @mcp.tool(annotations=WRITE)
+    @guarded
+    async def kb_rate(id: str, useful: bool, query: str | None = None) -> RateOut:
+        """Say whether a search result was useful for what you were doing (true) or not (false).
+
+        Call it after kb_consult once you know. Pass the search text as `query` if it was not your most
+        recent search. Ratings tune search quality for everyone; they are visible to admins only.
+        """
+        svc = get_services()
+        principal = current_principal()
+        await svc.knowledge.get(principal, id)  # you can only rate what you can see
+        if svc.feedback is None:
+            return RateOut(recorded=False)
+        await svc.feedback.rated(principal, id, useful, query)
+        return RateOut(recorded=True)

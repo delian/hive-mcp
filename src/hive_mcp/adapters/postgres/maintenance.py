@@ -32,6 +32,20 @@ class PgMaintenance:
             )
             return row_to_item(row)
 
+    async def pseudonymise_person(self, org_id: str, person_id: str, alias: str) -> int:
+        async with self._db.tx() as conn:
+            changed = 0
+            for sql in (
+                "UPDATE items SET author_id = %s WHERE org_id = %s AND author_id = %s",
+                "UPDATE item_revisions SET item_author = %s WHERE org_id = %s AND item_author = %s",
+                "UPDATE item_revisions SET replaced_by = %s WHERE org_id = %s AND replaced_by = %s",
+            ):
+                changed += (await conn.execute(sql, (alias, org_id, person_id))).rowcount
+            await conn.execute(
+                "DELETE FROM idempotency WHERE org_id = %s AND author_id = %s", (org_id, person_id)
+            )
+            return changed
+
     async def find_system(
         self, flt: ItemFilter, *, after_id: str | None = None, limit: int = 100
     ) -> list[Item]:

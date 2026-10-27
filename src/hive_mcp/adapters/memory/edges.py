@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -26,6 +27,14 @@ class MemoryEdges:
 
     async def remove(self, org_id: str, src: str, dst: str, relation: str) -> bool:
         return self._rows.pop((org_id, src, dst, relation), None) is not None
+
+    async def pseudonymise_person(self, org_id: str, person_id: str, alias: str) -> int:
+        changed = 0
+        for key, e in list(self._rows.items()):
+            if e.org_id == org_id and e.author_id == person_id:
+                self._rows[key] = replace(e, author_id=alias)
+                changed += 1
+        return changed
 
     async def remove_item(self, org_id: str, item_id: str) -> int:
         doomed = [

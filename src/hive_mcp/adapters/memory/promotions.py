@@ -53,6 +53,18 @@ class MemoryPromotions:
         self._rows[promotion_id] = updated
         return updated
 
+    async def pseudonymise_person(self, org_id: str, person_id: str, alias: str) -> int:
+        changed = 0
+        for key, p in list(self._rows.items()):
+            if p.org_id != org_id:
+                continue
+            requester = alias if p.requester_id == person_id else p.requester_id
+            decider = alias if p.decided_by == person_id else p.decided_by
+            if (requester, decider) != (p.requester_id, p.decided_by):
+                self._rows[key] = replace(p, requester_id=requester, decided_by=decider)
+                changed += 1
+        return changed
+
     async def delete_for_item(self, org_id: str, item_id: str) -> int:
         doomed = [k for k, p in self._rows.items() if p.org_id == org_id and p.item_id == item_id]
         for key in doomed:

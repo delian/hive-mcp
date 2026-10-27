@@ -34,6 +34,9 @@ class AuthorUsage:
 
 
 class ItemMaintenance(Protocol):
+    async def pseudonymise_person(self, org_id: str, person_id: str, alias: str) -> int:
+        """Replace a person's id with an alias in the records that stay; returns rows changed."""
+
     async def purge_system(self, org_id: str, item_id: str) -> Item | None:
         """Permanently delete the item row, its tags and its idempotency records in one
         transaction. Returns what was deleted (None if absent or in another org). Indexes, edges,

@@ -79,7 +79,10 @@ def forget(
         verb = "erased" if yes else "would erase"
         typer.echo(f"{verb} {len(r.purged)} items; {len(r.kept_shared)} shared items left in place")
         if r.audit_events:
-            typer.echo(f"replaced the person's id in {r.audit_events} audit events")
+            typer.echo(
+                f"replaced the person's id in {r.audit_events} audit events and "
+                f"{r.records} records (shared items, versions, promotions, links)"
+            )
         if not yes:
             typer.echo("re-run with --yes to delete")
 

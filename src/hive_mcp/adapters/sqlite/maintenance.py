@@ -34,6 +34,22 @@ class SqliteMaintenance:
 
         return await self._db.run(tx, write=True)
 
+    async def pseudonymise_person(self, org_id: str, person_id: str, alias: str) -> int:
+        def tx(conn: sqlite3.Connection) -> int:
+            changed = 0
+            for sql in (
+                "UPDATE items SET author_id = ? WHERE org_id = ? AND author_id = ?",
+                "UPDATE item_revisions SET item_author = ? WHERE org_id = ? AND item_author = ?",
+                "UPDATE item_revisions SET replaced_by = ? WHERE org_id = ? AND replaced_by = ?",
+            ):
+                changed += conn.execute(sql, (alias, org_id, person_id)).rowcount
+            conn.execute(
+                "DELETE FROM idempotency WHERE org_id = ? AND author_id = ?", (org_id, person_id)
+            )
+            return changed
+
+        return await self._db.run(tx, write=True)
+
     async def find_system(
         self, flt: ItemFilter, *, after_id: str | None = None, limit: int = 100
     ) -> list[Item]:

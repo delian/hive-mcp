@@ -11,6 +11,9 @@ if TYPE_CHECKING:
 
 
 class EdgeRepository(Protocol):
+    async def pseudonymise_person(self, org_id: str, person_id: str, alias: str) -> int:
+        """Replace a person's id with an alias in the records that stay; returns rows changed."""
+
     async def add(self, edge: Edge) -> bool:
         """Idempotent per (org, src, dst, relation); the first author is kept. True if new."""
 

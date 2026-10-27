@@ -132,3 +132,27 @@ async def test_an_archive_rule_hides_items_keeps_them_and_does_not_repeat(stack)
     assert list((await svc.run()).values()) == [1]  # only the other note is next; this one is done
     actions = [r.event.action for r in await stack.backend.audit.list("org1")]
     assert actions.count("item.archive") == 2
+
+
+async def test_forget_with_erase_replaces_the_person_in_shared_records_too(stack):
+    from hive_mcp.domain.scope import Scope, ScopeLevel
+
+    p1 = Scope(ScopeLevel.PROJECT, "p1")
+    shared = await add(stack, BOB, "bob shared note", scope=p1)  # stays, authored by an alias
+    edited = await add(stack, ALICE, "alice note", scope=p1)
+    await stack.graph.link(BOB, shared.id, edited.id, "related")
+    await stack.knowledge.update(BOB, shared.id, ItemPatch(body="bob revised"), shared.revision)
+    result = await stack.purge.forget_user(
+        ROOT, "bob", include_shared=False, dry_run=False, erase_audit=True
+    )
+    assert result.records >= 3  # the item, its previous version's author and editor, the link
+    after = await stack.backend.items.get_system("org1", shared.id)
+    assert (
+        after is not None and after.author_id.startswith("erased-") and after.body == "bob revised"
+    )
+    versions = await stack.backend.history.versions(ALICE, shared.id, 10)
+    assert all("bob" not in (v.item_author, v.replaced_by) for v in versions)
+    edges = await stack.backend.edges.incident("org1", [shared.id])
+    assert edges and all(e.author_id.startswith("erased-") for e in edges)
+    again = await stack.purge.forget_user(ROOT, "bob", dry_run=False, erase_audit=True)
+    assert again.records == 0  # nothing left to replace

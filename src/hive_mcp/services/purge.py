@@ -48,6 +48,7 @@ class ForgetResult:
     purged: list[str] = field(default_factory=list)
     kept_shared: list[str] = field(default_factory=list)  # authored in shared scopes, left in place
     audit_events: int = 0  # events whose actor or target was replaced by an alias
+    records: int = 0  # items, versions, promotions and links that named the person
 
 
 class PurgeService:
@@ -147,8 +148,13 @@ class PurgeService:
             who = user_id
             if erase_audit:  # a random alias, so the id cannot be recovered by guessing emails
                 who = f"erased-{uuid.uuid4().hex[:12]}"
+                records = 0
+                for eraser in (self._maintenance, self._promotions, self._edges):
+                    records += await eraser.pseudonymise_person(admin.org_id, user_id, who)
                 result = replace(
-                    result, audit_events=await self._audit.pseudonymise(admin.org_id, user_id, who)
+                    result,
+                    audit_events=await self._audit.pseudonymise(admin.org_id, user_id, who),
+                    records=records,
                 )
             await self._audit.append(
                 AuditEvent(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from hive_mcp.ports.maintenance import AuthorUsage
@@ -26,6 +27,25 @@ class MemoryMaintenance:
         for key in stale:
             del self._store._idem[key]
         return item
+
+    async def pseudonymise_person(self, org_id: str, person_id: str, alias: str) -> int:
+        store, changed = self._store, 0
+        for item_id, item in list(store._items.items()):
+            if item.org_id == org_id and item.author_id == person_id:
+                store._items[item_id] = replace(item, author_id=alias)
+                changed += 1
+        for versions in store.versions.values():
+            for i, v in enumerate(versions):
+                if v.org_id != org_id:
+                    continue
+                author = alias if v.item_author == person_id else v.item_author
+                by = alias if v.replaced_by == person_id else v.replaced_by
+                if (author, by) != (v.item_author, v.replaced_by):
+                    versions[i] = replace(v, item_author=author, replaced_by=by)
+                    changed += 1
+        for key in [k for k in store._idem if k[0] == org_id and k[1] == person_id]:
+            del store._idem[key]
+        return changed
 
     async def find_system(
         self, flt: ItemFilter, *, after_id: str | None = None, limit: int = 100

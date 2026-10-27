@@ -113,6 +113,18 @@ class SqlitePromotions:
 
         return await self._db.run(tx, write=True)
 
+    async def pseudonymise_person(self, org_id: str, person_id: str, alias: str) -> int:
+        def tx(conn: sqlite3.Connection) -> int:
+            changed = 0
+            for column in ("requester_id", "decided_by"):
+                changed += conn.execute(
+                    f"UPDATE promotions SET {column} = ? WHERE org_id = ? AND {column} = ?",  # noqa: S608
+                    (alias, org_id, person_id),
+                ).rowcount
+            return changed
+
+        return await self._db.run(tx, write=True)
+
     async def delete_for_item(self, org_id: str, item_id: str) -> int:
         def tx(conn: sqlite3.Connection) -> int:
             cur = conn.execute(

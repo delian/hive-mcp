@@ -102,6 +102,17 @@ class PgPromotions:
             r = await cur.fetchone()
         return _row(r) if r else None
 
+    async def pseudonymise_person(self, org_id: str, person_id: str, alias: str) -> int:
+        async with self._db.tx() as conn:
+            changed = 0
+            for column in ("requester_id", "decided_by"):
+                cur = await conn.execute(
+                    f"UPDATE promotions SET {column} = %s WHERE org_id = %s AND {column} = %s",  # noqa: S608
+                    (alias, org_id, person_id),
+                )
+                changed += cur.rowcount
+            return changed
+
     async def delete_for_item(self, org_id: str, item_id: str) -> int:
         async with self._db.tx() as conn:
             cur = await conn.execute(

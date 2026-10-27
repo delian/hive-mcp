@@ -12,6 +12,9 @@ if TYPE_CHECKING:
 
 
 class PromotionRepository(Protocol):
+    async def pseudonymise_person(self, org_id: str, person_id: str, alias: str) -> int:
+        """Replace a person's id with an alias in the records that stay; returns rows changed."""
+
     async def create(self, promotion: Promotion) -> Promotion:
         """Conflict if the item already has a PENDING request or the id exists."""
 

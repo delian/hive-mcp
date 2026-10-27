@@ -56,6 +56,16 @@ class SqliteEdges:
 
         return await self._db.run(tx, write=True)
 
+    async def pseudonymise_person(self, org_id: str, person_id: str, alias: str) -> int:
+        def tx(conn: sqlite3.Connection) -> int:
+            cur = conn.execute(
+                "UPDATE edges SET author_id = ? WHERE org_id = ? AND author_id = ?",
+                (alias, org_id, person_id),
+            )
+            return cur.rowcount
+
+        return await self._db.run(tx, write=True)
+
     async def remove_item(self, org_id: str, item_id: str) -> int:
         def tx(conn: sqlite3.Connection) -> int:
             cur = conn.execute(

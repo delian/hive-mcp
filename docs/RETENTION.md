@@ -33,7 +33,11 @@ gentler path. Preview what the rules would remove with `hive retention`, apply t
 
 ## Erasing a person
 
-`hive forget --org O --user U [--include-shared] --erase-audit --yes` also replaces the person's id in the audit log
-(as actor and as target) with one random alias, so the trail stays coherent but no longer names them (a hash would
-be guessable from a list of emails; the alias is random and stored nowhere). Still naming the person afterwards:
-promotion records and item history of *other people's* items they touched, and the `details` text of audit events.
+`hive forget --org O --user U [--include-shared] --erase-audit --yes` also replaces the person's id with one random alias
+(a hash would be guessable from a list of emails; the alias is random and stored nowhere) everywhere it stays:
+the audit log (as actor and as target), the author of shared items that were left in place, the authors and editors of
+earlier versions, promotion requesters and deciders, and link authors. The trail and the knowledge stay coherent but no
+longer name the person; their idempotency keys are deleted. What can still mention them: the free-text `details`
+of audit events, a note's own text if it names them, key-value records that expire by themselves (sign-in sessions,
+Slack email cache, digest claims), and backups until they expire. Remove the account too: `hive user remove`,
+`hive token revoke`.

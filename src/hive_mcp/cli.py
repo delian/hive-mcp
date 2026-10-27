@@ -5,12 +5,11 @@ from __future__ import annotations
 import time
 
 import typer
-import uvicorn
 from hive_hooks.cli import app as client_app
 
 from hive_mcp import __version__
-from hive_mcp.app import create_app
 from hive_mcp.cli_connectors import app as connectors_app
+from hive_mcp.cli_demo import app as demo_app
 from hive_mcp.cli_digest import app as digest_app
 from hive_mcp.cli_eval import app as eval_app
 from hive_mcp.cli_groups import app as groups_app
@@ -22,9 +21,7 @@ from hive_mcp.domain.errors import HiveError
 from hive_mcp.domain.principal import Principal, Role
 from hive_mcp.domain.scope import parse_scope, scope_key
 from hive_mcp.embeddings.models import fetch_model, find_files
-from hive_mcp.ops.drain import DrainingServer
-from hive_mcp.ops.logs import configure_logging
-from hive_mcp.ops.state import Lifecycle
+from hive_mcp.ops.serve import run_server
 from hive_mcp.security.directory import DirectoryUser, UserDirectory, normalize_email
 from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.security.tokens import TokenStore
@@ -41,6 +38,7 @@ cli.add_typer(users, name="user")
 models = typer.Typer(no_args_is_help=True, help="Manage local embedding models.")
 cli.add_typer(models, name="models")
 cli.add_typer(connectors_app, name="connectors")
+cli.add_typer(demo_app)  # demo
 cli.add_typer(ops_app)  # reindex, forget, purge, eval
 cli.add_typer(ingest_app)  # ingest, ingest-git
 cli.add_typer(maint_app)  # vectors, backup, restore
@@ -53,19 +51,7 @@ cli.add_typer(digest_app)  # digest
 @cli.command()
 def serve() -> None:
     """Run the MCP server (settings from HIVE_* env vars)."""
-    settings = Settings()
-    configure_logging(settings.log_format, settings.log_level)
-    lifecycle = Lifecycle()
-    config = uvicorn.Config(
-        create_app(settings, lifecycle),
-        host=settings.host,
-        port=settings.port,
-        timeout_graceful_shutdown=int(settings.shutdown_timeout),
-        proxy_headers=True,
-        forwarded_allow_ips=settings.forwarded_allow_ips,
-        log_config=None,  # our handler formats every line, uvicorn's included
-    )
-    DrainingServer(config, lifecycle, settings.drain_seconds).run()
+    run_server(Settings())
 
 
 @cli.command()

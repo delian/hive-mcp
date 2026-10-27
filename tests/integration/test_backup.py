@@ -201,3 +201,18 @@ def test_a_damaged_database_inside_a_consistent_archive_is_caught(tmp_path, monk
     assert out.exit_code == 1 and (
         "damaged" in out.output or "malformed" in out.output or "error" in out.output
     )
+
+
+def test_a_truncated_or_foreign_archive_is_a_clean_error_not_a_traceback(tmp_path):
+    from hive_mcp.domain.errors import ValidationError
+    from hive_mcp.ops.backup import verify_backup
+
+    junk = tmp_path / "junk.tar.gz"
+    junk.write_bytes(b"this is not a gzip file")
+    cut = tmp_path / "cut.tar.gz"
+    import gzip
+
+    cut.write_bytes(gzip.compress(b"x" * 5000)[:40])
+    for bad in (junk, cut, tmp_path / "missing.tar.gz"):
+        with pytest.raises(ValidationError, match="not a readable backup"):
+            verify_backup(bad)

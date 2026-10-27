@@ -122,6 +122,10 @@ def start_loops(services: Services, settings: Settings) -> list[asyncio.Task[Non
         )
     if settings.group_sync_minutes and group_sync_configured(settings):
         tasks.append(asyncio.create_task(group_sync_loop(settings)))
+    if settings.backup_dir is not None:
+        from hive_mcp.ops.autobackup import backup_loop  # noqa: PLC0415
+
+        tasks.append(asyncio.create_task(backup_loop(settings)))
     specs = parse_specs(settings.connectors)
     if specs and settings.run_jobs:
         tasks.append(asyncio.create_task(connector_loop(services, settings, specs)))

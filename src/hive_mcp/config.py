@@ -70,6 +70,13 @@ class Settings(BaseSettings):
     retention_session_days: int = Field(
         default=0, ge=0
     )  # purge session/compaction logs older than this; 0 = keep
+    # One-container durability (docs/SINGLE-CONTAINER.md): write verified backup archives here every
+    # few minutes (if anything changed) and restore the newest one when started on an empty disk.
+    backup_dir: Path | None = None
+    backup_every_minutes: int = Field(default=15, ge=1, le=1440)
+    backup_keep: int = Field(default=8, ge=1, le=1000)
+    # Seconds a starting instance waits for a running one to release the backup directory.
+    backup_lease_wait: float = Field(default=90.0, ge=0)
     # Delete-by-age rules: [{"kind": "session", "days": 90}, {"scope": "private", "days": 730}].
     # Each needs a kind or a scope; age counts from the last change. See docs/RETENTION.md.
     retention_rules: list[dict[str, Any]] = Field(default_factory=list)

@@ -74,6 +74,8 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Smoke test (start, call tools, restart, data survives, clean shutdown)
         run: scripts/smoke_docker.sh hive-mcp:ci
+      - name: One container only - a replaced container comes back with its data, two cannot overlap
+        run: scripts/smoke_single_container.sh hive-mcp:ci
       - name: Smoke test with the real offline embedder
         run: HIVE_EMBEDDER=onnx scripts/smoke_docker.sh hive-mcp:ci
       - name: Scan the image for known vulnerabilities (fixable high/critical only)
@@ -94,4 +96,5 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: az bicep build --file deploy/azure/main.bicep --stdout > /dev/null
+      - run: az bicep build --file deploy/azure/single.bicep --stdout > /dev/null
       - run: az bicep build-params --file deploy/azure/main.bicepparam --stdout > /dev/null

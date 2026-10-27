@@ -7,6 +7,8 @@ and shares team knowledge (session logs, compactions, research, formulas, measur
 > feature). This document is the original design plus revisions; where it disagrees with the feature pages, the
 > pages win. Differences worth knowing: the project package is `hive_mcp` (not `hive`); storage is SQLite + filesystem
 > or Postgres + pgvector (DuckDB/LanceDB were not adopted); the rerank, graph, entity, history, admin and web pages are built.
+> **Added since:** prompt-injection flags, duplicate sweeps, stale review, project digests, `kb_rate` feedback, retention
+> rules, activity report, Entra/OIDC sign-in, connectors (Drive/GitHub/URLs), Slack, and the self-backing one-container mode.
 > **Still open:** real Google/assistant/Azure verification of the sign-in and deployment paths. (LanceDB is optional and
 > only pays off above ~100k vectors; see STORAGE.md.)
 

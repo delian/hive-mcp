@@ -16,6 +16,7 @@ import sqlite3
 import subprocess
 import tarfile
 import tempfile
+import zlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -147,12 +148,15 @@ def create_backup(settings: Settings, dest: Path) -> Summary:
 
 def _safe_extract(archive: Path, target: Path) -> dict[str, dict[str, object]]:
     """Unpack only regular files with plain relative names, then check every hash."""
-    with tarfile.open(archive, "r:gz") as tar:
-        for member in tar.getmembers():
-            parts = Path(member.name).parts
-            if not member.isfile() or member.name.startswith("/") or ".." in parts:
-                raise ValidationError(f"unsafe or unexpected entry in archive: {member.name!r}")
-        tar.extractall(target, filter="data")
+    try:
+        with tarfile.open(archive, "r:gz") as tar:
+            for member in tar.getmembers():
+                parts = Path(member.name).parts
+                if not member.isfile() or member.name.startswith("/") or ".." in parts:
+                    raise ValidationError(f"unsafe or unexpected entry in archive: {member.name!r}")
+            tar.extractall(target, filter="data")
+    except (tarfile.TarError, EOFError, zlib.error, OSError) as exc:  # truncated or not a backup
+        raise ValidationError(f"{archive.name} is not a readable backup archive") from exc
     try:
         manifest = json.loads((target / MANIFEST).read_text())
         files: dict[str, dict[str, object]] = manifest["files"]

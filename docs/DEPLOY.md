@@ -1,5 +1,9 @@
 # Deploying
 
+> **One container, no database service?** See [SINGLE-CONTAINER.md](SINGLE-CONTAINER.md): `hive demo`, the
+> self-backup/restore mode (`HIVE_BACKUP_DIR`) and `deploy/azure/single.bicep`. This page covers the Postgres-backed
+> variants.
+
 One image, three ways to run it. Status: the image, the smoke test and the Bicep template were built and
 checked in the development sandbox; **nothing has been deployed to a real Azure subscription yet**.
 

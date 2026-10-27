@@ -51,25 +51,59 @@ def forget(
     include_shared: bool = typer.Option(
         False, help="Also erase items they shared with projects/teams."
     ),
+    erase_audit: bool = typer.Option(
+        False, help="Also replace the person's id in the audit log with a random alias."
+    ),
     yes: bool = typer.Option(
         False, help="Actually delete (without it, only report what would go)."
     ),
 ) -> None:
     """Erase a person's private knowledge (and with --include-shared, everything they wrote).
 
-    The audit log and promotion records keep their id; remove the user from the directory and
-    revoke their tokens separately (`hive user remove`, `hive token revoke`)."""
+    Promotion records and item history still name the person unless --erase-audit is used for the
+    audit log; remove the user from the directory and revoke their tokens separately
+    (`hive user remove`, `hive token revoke`)."""
 
     async def run() -> None:
         services = await build_services(Settings())
         try:
             r = await services.purge.forget_user(
-                _admin(org), user, include_shared=include_shared, dry_run=not yes
+                _admin(org),
+                user,
+                include_shared=include_shared,
+                dry_run=not yes,
+                erase_audit=erase_audit,
             )
         finally:
             await services.close()
         verb = "erased" if yes else "would erase"
         typer.echo(f"{verb} {len(r.purged)} items; {len(r.kept_shared)} shared items left in place")
+        if r.audit_events:
+            typer.echo(f"replaced the person's id in {r.audit_events} audit events")
+        if not yes:
+            typer.echo("re-run with --yes to delete")
+
+    run_cli(run)
+
+
+@app.command()
+def retention(
+    yes: bool = typer.Option(False, help="Actually delete (without it, only count)."),
+) -> None:
+    """Show (or with --yes apply) the HIVE_RETENTION_RULES now, instead of waiting for the sweep."""
+
+    async def run() -> None:
+        services = await build_services(Settings())
+        try:
+            assert services.retention is not None  # noqa: S101
+            if not services.retention.rules:
+                typer.echo("no retention rules (set HIVE_RETENTION_RULES)")
+                return
+            done = await services.retention.run(dry_run=not yes, max_items=1_000_000)
+        finally:
+            await services.close()
+        for rule, count in done.items():
+            typer.echo(f"{'purged' if yes else 'would purge'} {count}: {rule}")
         if not yes:
             typer.echo("re-run with --yes to delete")
 

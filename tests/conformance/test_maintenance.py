@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from hive_mcp.domain.edge import Edge
 from hive_mcp.domain.item import ItemPatch, Kind, Status
+from hive_mcp.domain.scope import ScopeLevel
 from hive_mcp.ports.maintenance import ItemFilter
 from tests.conformance.factory import ALICE, ALICE_PRIVATE, BOB, CAROL, P1, P2, make_item
 
@@ -56,6 +57,13 @@ async def test_find_system_filters_orders_and_pages(backend):
     cutoff = backend.clock.now() - timedelta(seconds=50)
     assert ids(await backend.maintenance.find_system(ItemFilter(created_before=cutoff))) == ["i1"]
     assert ids(await backend.maintenance.find_system(ItemFilter(org_id="org2"))) == []
+    assert ids(
+        await backend.maintenance.find_system(ItemFilter(scope_level=ScopeLevel.PROJECT))
+    ) == ["i2", "i3", "i4"]
+    assert ids(
+        await backend.maintenance.find_system(ItemFilter(scope_level=ScopeLevel.PRIVATE))
+    ) == ["i1"]
+    assert ids(await backend.maintenance.find_system(ItemFilter(updated_before=cutoff))) == ["i1"]
     seen, after = [], None
     while page := await backend.maintenance.find_system(ItemFilter(), after_id=after, limit=3):
         seen += ids(page)

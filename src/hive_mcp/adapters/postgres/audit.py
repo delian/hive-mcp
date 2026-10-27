@@ -1,4 +1,4 @@
-"""PostgreSQL AuditLog (append-only by construction: no update or delete is exposed)."""
+"""PostgreSQL AuditLog (events are never edited or deleted; only a person's identity can be erased)."""
 
 from __future__ import annotations
 
@@ -35,6 +35,18 @@ class PgAudit:
             )
             row = await cur.fetchone()
             return int(row["seq"]) if row else 0
+
+    async def pseudonymise(self, org_id: str, person_id: str, alias: str) -> int:
+        async with self._db.tx() as conn:
+            actor = await conn.execute(
+                "UPDATE audit SET actor_id = %s WHERE org_id = %s AND actor_id = %s",
+                (alias, org_id, person_id),
+            )
+            target = await conn.execute(
+                "UPDATE audit SET target_id = %s WHERE org_id = %s AND target_id = %s",
+                (alias, org_id, person_id),
+            )
+            return actor.rowcount + target.rowcount
 
     async def list(  # noqa: PLR0913
         self,

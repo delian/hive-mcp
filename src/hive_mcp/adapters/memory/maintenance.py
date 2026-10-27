@@ -38,6 +38,8 @@ class MemoryMaintenance:
             and (not flt.kinds or i.kind in flt.kinds)
             and (flt.created_before is None or i.created_at < flt.created_before)
             and (not flt.private_only or i.scope.level.name == "PRIVATE")
+            and (flt.scope_level is None or i.scope.level == flt.scope_level)
+            and (flt.updated_before is None or i.updated_at < flt.updated_before)
             and (after_id is None or i.id > after_id)
         ]
         return sorted(rows, key=lambda i: i.id)[:limit]

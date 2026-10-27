@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     retention_session_days: int = Field(
         default=0, ge=0
     )  # purge session/compaction logs older than this; 0 = keep
+    # Delete-by-age rules: [{"kind": "session", "days": 90}, {"scope": "private", "days": 730}].
+    # Each needs a kind or a scope; age counts from the last change. See docs/RETENTION.md.
+    retention_rules: list[dict[str, Any]] = Field(default_factory=list)
     # Fetching documents from URLs on users' behalf (kb_ingest_url): off unless enabled.
     ingest_urls_enabled: bool = False
     ingest_url_hosts: list[str] = Field(default_factory=list)  # empty = any public host
@@ -137,6 +140,17 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"HIVE_SECRET_KEY needs {MIN_SECRET_KEY}+ characters (openssl rand -hex 32)"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _check_retention_rules(self) -> Settings:
+        from hive_mcp.domain.errors import ValidationError  # noqa: PLC0415
+        from hive_mcp.domain.retention import parse_rules  # noqa: PLC0415
+
+        try:
+            parse_rules(self.retention_rules)
+        except ValidationError as exc:
+            raise ValueError(f"HIVE_RETENTION_RULES: {exc}") from exc
         return self
 
     @model_validator(mode="after")

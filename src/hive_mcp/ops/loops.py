@@ -55,3 +55,5 @@ async def purge_loop(services: Services, retention_days: int = 0) -> None:
         with contextlib.suppress(StorageBusy):
             await services.backend.kv.purge_expired()
             await services.purge.sweep(retention_days)
+            if services.retention and services.retention.rules:
+                await services.retention.run()

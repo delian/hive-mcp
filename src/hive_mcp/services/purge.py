@@ -8,7 +8,8 @@ log file. The audit trail keeps a record that it happened, with ids but no conte
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+import uuid
+from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -46,6 +47,7 @@ log = logging.getLogger(__name__)
 class ForgetResult:
     purged: list[str] = field(default_factory=list)
     kept_shared: list[str] = field(default_factory=list)  # authored in shared scopes, left in place
+    audit_events: int = 0  # events whose actor or target was replaced by an alias
 
 
 class PurgeService:
@@ -75,6 +77,10 @@ class PurgeService:
         authorize_purge(principal, item)
         await self._purge_item(item, principal.id)
         return item
+
+    async def purge_item(self, item: Item, actor: str) -> None:
+        """Delete an item for good on behalf of `actor` (an admin or a system rule)."""
+        await self._purge_item(item, actor)
 
     async def _purge_item(self, item: Item, actor: str) -> None:
         # The cleanup job is queued first: if we die after the row is gone, it finishes the job.
@@ -112,7 +118,13 @@ class PurgeService:
         await self._cleanup(job.org_id, item_id, job.payload.get("source") or None)
 
     async def forget_user(
-        self, admin: Principal, user_id: str, *, include_shared: bool = False, dry_run: bool = True
+        self,
+        admin: Principal,
+        user_id: str,
+        *,
+        include_shared: bool = False,
+        dry_run: bool = True,
+        erase_audit: bool = False,
     ) -> ForgetResult:
         """Erase what a person wrote: their private items always; shared ones only if asked
         (they may be valuable to the team, so by default they are listed and left)."""
@@ -132,6 +144,12 @@ class PurgeService:
                 else:
                     result.kept_shared.append(item.id)
         if not dry_run:
+            who = user_id
+            if erase_audit:  # a random alias, so the id cannot be recovered by guessing emails
+                who = f"erased-{uuid.uuid4().hex[:12]}"
+                result = replace(
+                    result, audit_events=await self._audit.pseudonymise(admin.org_id, user_id, who)
+                )
             await self._audit.append(
                 AuditEvent(
                     admin.org_id,
@@ -139,7 +157,7 @@ class PurgeService:
                     "user.forget",
                     self._clock.now(),
                     None,
-                    {"user": user_id, "items": str(len(result.purged))},
+                    {"user": who, "items": str(len(result.purged))},
                 )
             )
         return result

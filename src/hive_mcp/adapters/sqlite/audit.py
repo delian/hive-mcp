@@ -1,4 +1,4 @@
-"""SQLite AuditLog (append-only by construction: the adapter exposes no update or delete)."""
+"""SQLite AuditLog (events are never edited or deleted; only a person's identity can be erased)."""
 
 from __future__ import annotations
 
@@ -35,6 +35,20 @@ class SqliteAudit:
                 ),
             )
             return int(cur.lastrowid or 0)
+
+        return await self._db.run(tx, write=True)
+
+    async def pseudonymise(self, org_id: str, person_id: str, alias: str) -> int:
+        def tx(conn: sqlite3.Connection) -> int:
+            changed = conn.execute(
+                "UPDATE audit SET actor_id = ? WHERE org_id = ? AND actor_id = ?",
+                (alias, org_id, person_id),
+            ).rowcount
+            changed += conn.execute(
+                "UPDATE audit SET target_id = ? WHERE org_id = ? AND target_id = ?",
+                (alias, org_id, person_id),
+            ).rowcount
+            return changed
 
         return await self._db.run(tx, write=True)
 

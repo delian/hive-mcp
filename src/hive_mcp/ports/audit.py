@@ -1,4 +1,7 @@
-"""Append-only audit trail for writes, retags, promotions, exports and deletes."""
+"""Audit trail for writes, retags, promotions, exports and deletes.
+
+Append-only for content: the one permitted change is erasing a person's identity on request.
+"""
 
 from __future__ import annotations
 
@@ -25,6 +28,10 @@ class AuditRecord:
 
 class AuditLog(Protocol):
     async def append(self, event: AuditEvent) -> int: ...
+
+    async def pseudonymise(self, org_id: str, person_id: str, alias: str) -> int:
+        """Replace `person_id` with `alias` as actor and as target of this org's events (the
+        events stay, the person goes). Returns how many events changed."""
 
     async def list(  # noqa: PLR0913 - keyword-only filters
         self,

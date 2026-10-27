@@ -73,3 +73,22 @@ async def test_filters_combine_with_newest_first(backend):
         await backend.audit.append(event(backend, action=action))
     rows = await backend.audit.list("org1", action="a", newest_first=True, limit=2)
     assert [r.event.action for r in rows] == ["a", "a"] and rows[0].seq > rows[1].seq
+
+
+async def test_pseudonymise_replaces_one_person_in_one_org_and_keeps_the_events(backend):
+    await backend.audit.append(event(backend))  # alice as actor, target item1
+    await backend.audit.append(
+        AuditEvent("org1", "root", "user.disable", backend.clock.now(), "alice")
+    )
+    await backend.audit.append(event(backend, org="org2"))  # another tenant's alice
+    await backend.audit.append(AuditEvent("org1", "bob", "item.create", backend.clock.now(), "x"))
+    changed = await backend.audit.pseudonymise("org1", "alice", "erased-1")
+    assert changed == 2  # one as actor, one as target
+    rows = await backend.audit.list("org1")
+    assert [(r.event.actor_id, r.event.target_id) for r in rows] == [
+        ("erased-1", "item1"),
+        ("root", "erased-1"),
+        ("bob", "x"),
+    ]
+    assert [r.event.actor_id for r in await backend.audit.list("org2")] == ["alice"]
+    assert await backend.audit.pseudonymise("org1", "alice", "erased-2") == 0  # nothing left

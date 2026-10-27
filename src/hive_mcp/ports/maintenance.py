@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from hive_mcp.domain.item import Item, Kind
+    from hive_mcp.domain.scope import ScopeLevel
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +20,8 @@ class ItemFilter:
     kinds: frozenset[Kind] = field(default_factory=frozenset)  # empty = any
     created_before: datetime | None = None
     private_only: bool = False
+    scope_level: ScopeLevel | None = None  # only items at this level
+    updated_before: datetime | None = None  # last changed before (rules count from the last edit)
 
 
 @dataclass(frozen=True, slots=True)

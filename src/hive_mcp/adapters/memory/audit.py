@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from hive_mcp.ports.audit import AuditEvent, AuditRecord
 
 
@@ -13,6 +15,18 @@ class MemoryAudit:
         seq = len(self._rows) + 1
         self._rows.append(AuditRecord(seq, event))
         return seq
+
+    async def pseudonymise(self, org_id: str, person_id: str, alias: str) -> int:
+        changed = 0
+        for i, row in enumerate(self._rows):
+            e = row.event
+            if e.org_id != org_id or person_id not in (e.actor_id, e.target_id):
+                continue
+            actor = alias if e.actor_id == person_id else e.actor_id
+            target = alias if e.target_id == person_id else e.target_id
+            changed += (actor != e.actor_id) + (target != e.target_id)
+            self._rows[i] = AuditRecord(row.seq, replace(e, actor_id=actor, target_id=target))
+        return changed
 
     async def list(  # noqa: PLR0913
         self,

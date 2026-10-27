@@ -11,6 +11,7 @@ from hive_mcp.adapters.sqlite import SqliteBackend
 from hive_mcp.config import Profile, Settings
 from hive_mcp.domain.clock import SystemClock
 from hive_mcp.domain.errors import ValidationError
+from hive_mcp.domain.retention import parse_rules
 from hive_mcp.embeddings.factory import embed_min_level, make_embedder, make_reranker
 from hive_mcp.ingest.fetch import FetchPolicy
 from hive_mcp.ingest.ocr import OcrConfig, check_available
@@ -33,6 +34,7 @@ from hive_mcp.services.notifications import NOTIFY_JOB, NotificationService
 from hive_mcp.services.promotions import APPLY_JOB, PromotionService
 from hive_mcp.services.purge import PURGE_JOB, PurgeService
 from hive_mcp.services.quota import CACHE_SECONDS, QuotaGuard
+from hive_mcp.services.retention import RetentionService
 from hive_mcp.services.runner import JobRunner
 from hive_mcp.services.sessions import SessionService
 from hive_mcp.services.staleness import StaleReview
@@ -63,6 +65,7 @@ class Services:
     digest_sender: DigestSender | None = None
     duplicates: DuplicateFinder | None = None
     stale: StaleReview | None = None
+    retention: RetentionService | None = None
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -224,4 +227,5 @@ async def build_services(settings: Settings) -> Services:
         sender,
         DuplicateFinder(backend.items, curation),
         stale,
+        RetentionService(backend.maintenance, purge, parse_rules(settings.retention_rules), clock),
     )

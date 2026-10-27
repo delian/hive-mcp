@@ -42,7 +42,9 @@ class PgMaintenance:
                 "AND (%s::text IS NULL OR author_id = %s) "
                 "AND (%s OR kind = ANY(%s)) "
                 "AND (%s::timestamptz IS NULL OR created_at < %s) "
-                "AND (NOT %s OR scope_level = %s) ORDER BY id LIMIT %s",
+                "AND (NOT %s OR scope_level = %s) "
+                "AND (%s::smallint IS NULL OR scope_level = %s) "
+                "AND (%s::timestamptz IS NULL OR updated_at < %s) ORDER BY id LIMIT %s",
                 (
                     after_id or "",
                     flt.org_id, flt.org_id,
@@ -50,6 +52,9 @@ class PgMaintenance:
                     not flt.kinds, sorted(str(k) for k in flt.kinds),
                     flt.created_before, flt.created_before,
                     flt.private_only, int(ScopeLevel.PRIVATE),
+                    None if flt.scope_level is None else int(flt.scope_level),
+                    None if flt.scope_level is None else int(flt.scope_level),
+                    flt.updated_before, flt.updated_before,
                     limit,
                 ),
             )  # fmt: skip

@@ -5,9 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from hive_mcp.domain.item import ItemQuery
+from hive_mcp.domain.scope import Scope, ScopeLevel
 from hive_mcp.mcp_api.errors import guarded
 from hive_mcp.mcp_api.instructions import INSTRUCTIONS
 from hive_mcp.mcp_api.tools import BODY_LIMIT, current_principal, scope_label
+from hive_mcp.services.digest import render_text
 from hive_mcp.services.models import provenance
 
 if TYPE_CHECKING:
@@ -60,3 +62,29 @@ def register_resources(mcp: MCPServer, get_services: Callable[[], Services]) -> 
             for v in page.items
         ]
         return "# Recent knowledge\n\n" + ("\n".join(rows) or "(nothing yet)")
+
+    @mcp.resource(
+        "kb://project/{project_id}/digest",
+        title="What the project learned this week",
+        mime_type="text/plain",
+    )
+    @guarded
+    async def project_digest(project_id: str) -> str:
+        return render_text(
+            await get_services().digests.build(
+                current_principal(), days=7, scope=Scope(ScopeLevel.PROJECT, project_id)
+            )
+        )
+
+    @mcp.resource(
+        "kb://team/{team_id}/digest",
+        title="What the team learned this week",
+        mime_type="text/plain",
+    )
+    @guarded
+    async def team_digest(team_id: str) -> str:
+        return render_text(
+            await get_services().digests.build(
+                current_principal(), days=7, scope=Scope(ScopeLevel.TEAM, team_id)
+            )
+        )

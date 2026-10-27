@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
+from hive_mcp.domain.errors import ValidationError
+from hive_mcp.domain.scope import Scope, ScopeLevel
 from hive_mcp.mcp_api.errors import guarded
 from hive_mcp.mcp_api.tools import READ, current_principal
 from hive_mcp.services.digest import DigestItem, render_text
@@ -53,16 +55,33 @@ def register_digest_tools(mcp: MCPServer, get_services: Callable[[], Services]) 
     @mcp.tool(annotations=READ)
     @guarded
     async def kb_digest(
-        days: int = 7, limit: int = 30, include_external: bool = False
+        days: int = 7,
+        limit: int = 30,
+        include_external: bool = False,
+        project: str | None = None,
+        team: str | None = None,
     ) -> DigestOut:
         """What is new for the user: items others added in the last `days` days to places they can read.
 
         Use it at the start of a week or a project to catch up. Their own items and personal session
         logs are left out. `include_external` adds knowledge shared from other groups.
+
+        With `project` (or `team`) set instead, it is that group's digest: everything new or changed
+        there by anyone, your own notes included. You must be a member.
         """
-        digest = await get_services().digests.build(
-            current_principal(), days=days, limit=limit, include_external=include_external
+        if project and team:
+            raise ValidationError("give a project or a team, not both")
+        scope = (
+            Scope(ScopeLevel.PROJECT, project)
+            if project
+            else Scope(ScopeLevel.TEAM, team)
+            if team
+            else None
         )
+        digest = await get_services().digests.build(
+            current_principal(), days=days, limit=limit, include_external=include_external,
+            scope=scope,
+        )  # fmt: skip
         return DigestOut(
             since=digest.since.isoformat(),
             new_items=digest.total_new,

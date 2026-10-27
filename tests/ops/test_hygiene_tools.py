@@ -1,5 +1,7 @@
 """kb_duplicates (and, later, the stale review tools) over HTTP."""
 
+import pytest
+
 from tests.conformance.factory import ALICE
 from tests.integration.conftest import Live
 
@@ -30,3 +32,21 @@ async def test_stale_review_and_confirm_over_http(live: Live):
     assert bad.is_error and "days must be" in bad.content[0].text
     assert ok.structured_content["id"] == nid and ok.structured_content["confirmed_at"]
     assert missing.is_error
+
+
+async def test_project_digest_tool_and_pinned_resource(live: Live):
+    async with live.client(live.token_for(ALICE)) as alice:
+        await alice.call_tool(
+            "kb_remember",
+            {"title": "Dwell time plan", "body": "Use 12 ms.", "share_with_project": "p1"},
+        )
+        tool = (await alice.call_tool("kb_digest", {"project": "p1"})).structured_content
+        both = await alice.call_tool("kb_digest", {"project": "p1", "team": "t1"})
+        elsewhere = await alice.call_tool("kb_digest", {"project": "p-nope"})
+        resource = await alice.read_resource("kb://project/p1/digest")
+        with pytest.raises(Exception, match="Error creating resource"):
+            await alice.read_resource("kb://project/p-nope/digest")
+    assert [i["title"] for i in tool["items"]] == ["Dwell time plan"]
+    assert both.is_error and "not both" in both.content[0].text
+    assert elsewhere.is_error and "not a member" in elsewhere.content[0].text
+    assert "Dwell time plan" in resource.contents[0].text

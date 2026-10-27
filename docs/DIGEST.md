@@ -28,3 +28,10 @@ send releases its claim and is retried at the next check (every 10 minutes). `hi
 
 The digest is **not** posted to the chat webhook: a shared channel would show every member the titles of things only some of
 them may read.
+
+## Project and team digests
+
+`kb_digest(project="p1")` (or `team="t1"`) is the group's own digest: everything new or changed in that
+scope by anyone, **including your own notes**, with the same visibility rules as search (you must be a
+member; anything else is refused). The same text is available as a resource a client can pin:
+`kb://project/{id}/digest` and `kb://team/{id}/digest` (last 7 days).

@@ -261,3 +261,35 @@ async def test_the_edited_list_respects_the_limit_but_counts_everything(stack, d
         await edit(stack, BOB, item, item.title + "!")
     digest = await digests.build(ALICE, limit=2)
     assert len(digest.edited) == 2 and digest.total_edited == 4
+
+
+async def test_a_project_digest_shows_everyones_work_there_and_nothing_elsewhere(stack, digests):
+    mine = await add(stack, ALICE, "Alice in p1", P1)
+    bobs = await add(stack, BOB, "Bob in p1", P1)
+    await add(stack, ALICE, "Alice private")  # not in the project
+    await add(stack, CAROL, "Carol in p2", P2)  # another project
+    digest = await digests.build(ALICE, scope=P1)
+    assert {i.id for i in digest.items} == {mine.id, bobs.id}  # her own work is included
+    assert digest.scope_label == "project p1" and "in project p1" in render_text(digest)
+    # her usual digest still leaves out her own notes
+    assert {i.id for i in (await digests.build(ALICE)).items} == {bobs.id}
+
+
+async def test_a_project_digest_needs_membership_and_lists_edits_by_anyone(stack, digests):
+    from hive_mcp.domain.errors import PermissionDenied
+    from hive_mcp.domain.item import ItemPatch
+
+    note = await add(stack, ALICE, "Runbook", P1)
+    stack.backend.clock.advance(days=10)
+    await stack.knowledge.update(ALICE, note.id, ItemPatch(body="new steps"), note.revision)
+    digest = await digests.build(ALICE, scope=P1, days=7)
+    assert [i.id for i in digest.edited] == [note.id] and digest.items == ()
+    with pytest.raises(PermissionDenied):
+        await digests.build(CAROL, scope=P1)  # Carol is in p2 only
+    from dataclasses import replace
+
+    in_team = frozenset({"t1"})
+    team = await add(stack, replace(ROOT, teams=in_team), "Team note", TEAM_T1)
+    assert [
+        i.id for i in (await digests.build(replace(BOB, teams=in_team), scope=TEAM_T1)).items
+    ] == [team.id]

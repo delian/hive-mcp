@@ -12,8 +12,9 @@ from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
+from hive_mcp.domain import access
 from hive_mcp.domain.access import Tier
-from hive_mcp.domain.errors import HiveError, ValidationError
+from hive_mcp.domain.errors import HiveError, PermissionDenied, ValidationError
 from hive_mcp.domain.item import Cursor, ItemQuery, ItemView
 from hive_mcp.ports.notify import Notification
 from hive_mcp.services.models import provenance
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
 
     from hive_mcp.domain.clock import Clock
     from hive_mcp.domain.principal import Principal
+    from hive_mcp.domain.scope import Scope
     from hive_mcp.ports.kv import KeyValueStore
     from hive_mcp.ports.notify import Notifier
     from hive_mcp.security.directory import UserDirectory
@@ -63,6 +65,7 @@ class Digest:
     by_origin: dict[str, int] = field(default_factory=dict)
     edited: tuple[DigestItem, ...] = ()  # older items someone else changed in the window
     total_edited: int = 0
+    scope_label: str = ""  # set for a project or team digest
     stale: tuple[DigestItem, ...] = ()  # the reader's own notes nobody has confirmed in a long time
 
     @property
@@ -92,7 +95,11 @@ class DigestService:
         days: int = 7,
         limit: int = 30,
         include_external: bool = False,
+        scope: Scope | None = None,
     ) -> Digest:
+        """What is new for `who`; with `scope`, what is new in that project or team, all authors."""
+        if scope and scope not in access.read_filter(who).member_scopes:
+            raise PermissionDenied("you are not a member of that project or team")
         if not 1 <= days <= MAX_DAYS or not 1 <= limit <= 100:  # noqa: PLR2004
             raise ValidationError(f"days must be 1-{MAX_DAYS} and limit 1-100")
         until = self._clock.now()
@@ -111,7 +118,9 @@ class DigestService:
                     reached_older = True
                     break
                 scanned += 1
-                if item.author_id == who.id or str(item.kind) in QUIET_KINDS:
+                if scope and item.scope != scope:
+                    continue
+                if (item.author_id == who.id and not scope) or str(item.kind) in QUIET_KINDS:
                     continue
                 label = provenance(item.scope, view.tier, item.author_id)
                 origins[label] += 1
@@ -123,12 +132,13 @@ class DigestService:
                 complete = False
                 break
             cursor = Cursor.decode(page.next_cursor)
-        edited = await self._edited(who, since, include_external)
-        pending = len(await self._promotions.list(who)) if who.is_approver else 0
+        edited = await self._edited(who, since, include_external, scope)
+        pending = len(await self._promotions.list(who)) if who.is_approver and not scope else 0
         top = tuple(tags.most_common(8))
         return Digest(
             since, until, tuple(found[:limit]), len(found), top, pending, complete, dict(origins),
-            tuple(edited[:limit]), len(edited), await self._needs_review(who),
+            tuple(edited[:limit]), len(edited), scope_name(scope) if scope else "",
+            () if scope else await self._needs_review(who),
         )  # fmt: skip
 
     async def _needs_review(self, who: Principal) -> tuple[DigestItem, ...]:
@@ -143,7 +153,9 @@ class DigestService:
             for s in page.items
         )
 
-    async def _edited(self, who: Principal, since: datetime, external: bool) -> list[DigestItem]:
+    async def _edited(
+        self, who: Principal, since: datetime, external: bool, scope: Scope | None
+    ) -> list[DigestItem]:
         """Items from before the window that someone else changed during it, latest change first."""
         found: list[DigestItem] = []
         cursor, scanned = None, 0
@@ -159,8 +171,10 @@ class DigestService:
                     return found
                 if item.created_at >= since or item.revision < 2 or str(item.kind) in QUIET_KINDS:  # noqa: PLR2004
                     continue  # new items are already in the first list
+                if scope and item.scope != scope:
+                    continue
                 editor = await self._last_editor(who, item.id, item.author_id)
-                if editor != who.id:
+                if editor != who.id or scope:
                     label = provenance(item.scope, view.tier, item.author_id)
                     found.append(replace(self._entry(view, label), edited_by=editor))
             if not page.next_cursor:
@@ -192,9 +206,14 @@ class DigestService:
         )
 
 
+def scope_name(scope: Scope) -> str:
+    return f"{scope.level.name.lower()} {scope.owner}"
+
+
 def render_text(digest: Digest, recipient: str = "") -> str:
     """Plain text for email and terminals. Titles and origins only: bodies are read in the tool."""
-    lines = [f"What is new in the team knowledge base since {digest.since:%Y-%m-%d}"]
+    where = f"in {digest.scope_label}" if digest.scope_label else "in the team knowledge base"
+    lines = [f"What is new {where} since {digest.since:%Y-%m-%d}"]
     if recipient:
         lines[0] += f" (for {recipient})"
     lines.append("")

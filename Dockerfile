@@ -10,7 +10,7 @@
 #   BAKE_MODEL download + verify the offline embedding model into the image (needs network at build time)
 ARG PYTHON_IMAGE=python:3.12-slim
 FROM ${PYTHON_IMAGE} AS build
-COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13 /uv /usr/local/bin/uv
 WORKDIR /app
 ARG EXTRAS="--extra postgres --extra local-embeddings --extra documents"
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy

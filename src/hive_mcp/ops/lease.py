@@ -143,17 +143,27 @@ class Lease:
     def _start_watching(self) -> None:
         def watch() -> None:
             last_write = time.monotonic()  # pragma: no mutate
+            yielding = False  # pragma: no mutate
             while not self._stop.wait(WATCH_SECONDS):
                 held = self._read()
                 if held is not None and held[0] != self.owner:
                     log.error("the lease was taken over by another instance")  # pragma: no mutate
                     return
                 asker = self._handoff_request()
-                if asker and self.revision and asker != self.revision and self._on_handoff:
+                if (
+                    not yielding
+                    and asker
+                    and self.revision
+                    and asker != self.revision
+                    and self._on_handoff
+                ):
                     log.warning("handing over to revision %s", asker)  # pragma: no mutate
                     self._retire(self.revision)
                     self._on_handoff()
-                    return
+                    # keep beating: draining, the final backup and the database close still run,
+                    # and a lease that went stale meanwhile would let the newcomer restore an
+                    # older archive first. release() ends this thread.
+                    yielding = True
                 if time.monotonic() - last_write >= HEARTBEAT_SECONDS:  # pragma: no mutate
                     with contextlib.suppress(OSError):  # pragma: no mutate
                         self._write()

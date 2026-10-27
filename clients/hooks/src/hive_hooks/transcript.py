@@ -42,7 +42,7 @@ def _entries(path: str | Path) -> Iterator[dict[str, Any]]:
             raw = handle.read().decode("utf-8", errors="replace")
     except OSError:
         return
-    for line in raw.splitlines():
+    for line in raw.split("\n"):  # not splitlines(): U+2028, U+0085... may sit inside a JSON string
         try:
             entry = json.loads(line)
         except ValueError:
@@ -74,7 +74,11 @@ class Activity:
 
 
 EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
-_COMMIT = re.compile(r"git\s+commit\b[^\n]*?\s-[a-zA-Z]*m\s+(?:\"([^\"]+)\"|'([^']+)')")
+_COMMIT = re.compile(
+    r"git\s+commit\b[^\n]*?\s-[a-zA-Z]*m\s+"
+    r"(?:\"\$\(cat <<-?\s*['\"]?(\w+)['\"]?\n(.*?)\n\s*\1\s*\n?\s*\)\"|\"([^\"]+)\"|'([^']+)')",
+    re.S,
+)  # the first alternative is a heredoc message, how coding agents usually write multi-line ones
 MAX_FILES = 12
 
 
@@ -98,7 +102,9 @@ def read_activity(path: str | Path) -> Activity:
             elif block.get("name") == "Bash" and isinstance(args.get("command"), str):
                 commands += 1
                 for match in _COMMIT.finditer(args["command"]):
-                    commits.append((match.group(1) or match.group(2)).strip().splitlines()[0])
+                    message = (match.group(2) or match.group(3) or match.group(4) or "").strip()
+                    if message:
+                        commits.append(message.splitlines()[0])
     return Activity(tuple(files), tuple(commits), commands)
 
 

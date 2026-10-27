@@ -34,7 +34,7 @@ def env_defaults(settings: Settings) -> dict[str, IntegrationConfig]:
     token = settings.slack_bot_token
     slack = IntegrationConfig(
         SLACK,
-        enabled=secret is not None,
+        enabled=bool(secret),  # an empty HIVE_SLACK_SIGNING_SECRET= is not a secret
         workspace=settings.slack_team_id or "",
         users=dict(settings.slack_users),
         secrets={

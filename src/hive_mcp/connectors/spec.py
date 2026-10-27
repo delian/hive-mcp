@@ -70,12 +70,15 @@ def parse_specs(raw: list[dict[str, Any]]) -> list[ConnectorSpec]:
         for required in ("org", "owner", "project"):
             if not str(entry.get(required, "")).strip():
                 raise ValidationError(f"connector {name}: {required} is required")
-        minutes = int(entry.get("every_minutes", DEFAULT_MINUTES))
+        minutes = _whole_number(name, entry.get("every_minutes", DEFAULT_MINUTES))
         if minutes < MIN_MINUTES:
             raise ValidationError(f"connector {name}: every_minutes must be at least {MIN_MINUTES}")
         options = {k: v for k, v in entry.items() if k in TYPES[kind]}
         _check_options(name, kind, options)
-        tags = tuple(sorted(normalize_tags(list(entry.get("tags", [])))))
+        raw_tags = entry.get("tags", [])
+        if not isinstance(raw_tags, list) or not all(isinstance(t, str) for t in raw_tags):
+            raise ValidationError(f"connector {name}: tags must be a list of tag names")
+        tags = tuple(sorted(normalize_tags(raw_tags)))
         specs.append(
             ConnectorSpec(
                 name, kind, str(entry["org"]), str(entry["owner"]), str(entry["project"]), tags,
@@ -83,6 +86,15 @@ def parse_specs(raw: list[dict[str, Any]]) -> list[ConnectorSpec]:
             )
         )  # fmt: skip
     return specs
+
+
+def _whole_number(name: str, value: object) -> int:
+    try:
+        if isinstance(value, (int, str)) and not isinstance(value, bool):
+            return int(value)
+    except ValueError:
+        pass
+    raise ValidationError(f"connector {name}: every_minutes must be a whole number")
 
 
 def _check_options(name: str, kind: str, options: dict[str, Any]) -> None:

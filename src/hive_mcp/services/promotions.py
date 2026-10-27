@@ -20,6 +20,7 @@ from hive_mcp.domain.promotion import (
     authorize_request,
     clean_text,
 )
+from hive_mcp.domain.text import check_text
 from hive_mcp.ports.audit import AuditEvent
 from hive_mcp.services.knowledge import can_share_directly
 from hive_mcp.services.notifications import DECIDED, REQUESTED
@@ -64,12 +65,12 @@ class PromotionService:
         self._jobs, self._audit, self._clock = jobs, audit, clock
         self._notify = notifications
 
-    async def _log(self, who: Principal, action: str, promo: Promotion) -> None:
+    async def _log(self, who: str, action: str, promo: Promotion) -> None:
         details = {
             "promotion": promo.id,
             "scope": f"{promo.scope.level.name.lower()}:{promo.scope.owner}",
         }
-        event = AuditEvent(who.org_id, who.id, action, self._clock.now(), promo.item_id, details)
+        event = AuditEvent(promo.org_id, who, action, self._clock.now(), promo.item_id, details)
         await self._audit.append(event)
 
     async def request(
@@ -80,6 +81,7 @@ class PromotionService:
         visibility: Visibility,
         reason: str | None = None,
     ) -> Promotion:
+        check_text(item_id, what="id")
         view = await self._items.get(principal, item_id)  # NotFound when invisible
         if can_share_directly(principal, scope, visibility):
             raise ValidationError("you can share this yourself (kb_share); no approval is needed")
@@ -96,7 +98,7 @@ class PromotionService:
             reason=clean_text(reason, "reason"),
         )
         created = await self._promotions.create(promo)
-        await self._log(principal, "promotion.request", created)
+        await self._log(principal.id, "promotion.request", created)
         await self._announce(REQUESTED, created)
         return created
 
@@ -130,6 +132,7 @@ class PromotionService:
     async def decide(
         self, principal: Principal, promotion_id: str, decision: Decision, note: str | None = None
     ) -> Promotion:
+        check_text(promotion_id, what="id")
         promo = await self._promotions.get(principal.org_id, promotion_id)
         if promo is None:
             raise NotFound(promotion_id)
@@ -154,7 +157,7 @@ class PromotionService:
         )  # fmt: skip
         if done is None:
             raise Conflict("this request was already decided")
-        await self._log(principal, f"promotion.{to}", done)
+        await self._log(principal.id, f"promotion.{to}", done)
         if to in {PromotionStatus.REJECTED, PromotionStatus.STALE}:
             await self._announce(DECIDED, done)
         return done
@@ -183,6 +186,7 @@ class PromotionService:
             by=who, note=why, at=self._clock.now(),
         )  # fmt: skip
         if done:
+            await self._log(who, f"promotion.{PromotionStatus.STALE}", done)
             await self._announce(DECIDED, done)
 
     async def _approve(self, principal: Principal, promo: Promotion, note: str) -> Promotion:
@@ -209,7 +213,7 @@ class PromotionService:
             raise Conflict("the item changed while approving; ask for a new promotion") from None
         except HiveError:
             log.warning("promotion %s approved; the move will be completed by a job", promo.id)
-        await self._log(principal, "promotion.approved", claimed)
+        await self._log(principal.id, "promotion.approved", claimed)
         await self._announce(DECIDED, claimed)
         return claimed
 

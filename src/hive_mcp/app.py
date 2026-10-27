@@ -61,6 +61,7 @@ def transport_security(settings: Settings) -> TransportSecuritySettings:
 
 
 log = logging.getLogger("hive.app")
+BACKSTOP_FACTOR = 20  # one address may use this many tokens' worth of requests
 BURST_SECONDS = 10  # a client may use this many seconds of its allowance at once
 
 
@@ -95,8 +96,15 @@ def rate_limit_rules(
                 return None
             return own.setdefault(rate, make(rate, max(rate * BURST_SECONDS // 60, 10)))
 
+        backstop = make(per_min * BACKSTOP_FACTOR, burst * BACKSTOP_FACTOR)
         rules.append(
-            Rule((settings.mcp_path,), make(per_min, burst), by_token=True, per_key=per_key)
+            Rule(
+                (settings.mcp_path,),
+                make(per_min, burst),
+                by_token=True,
+                per_key=per_key,
+                backstop=backstop,
+            )
         )
     return rules
 

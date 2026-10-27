@@ -98,6 +98,8 @@ def plan(
     changes = []
     for email in sorted(set(existing) | set(by_user)):
         user, grants = existing.get(email), by_user.get(email, [])
+        if user is not None and user.org_id != mapping.org_id:
+            continue  # another organisation's person: this map neither grants to nor disables them
         if user is None:
             domain = email.rpartition("@")[2]
             if not (
@@ -127,8 +129,9 @@ def plan(
             and after.role < Role.ADMIN
         ):
             after = replace(after, disabled=True)
-        elif grants and after.disabled and before is not None:
-            after = replace(after, disabled=False)  # back in a group: access returns
+        elif mapping.disable_missing and grants and after.disabled and before is not None:
+            after = replace(after, disabled=False)  # back in a group: access returns (the sync
+            # disables only with disable_missing; without it a disabled person was disabled by hand)
         if before is None:
             changes.append(Change(email, "created", None, after))
         elif after != before:

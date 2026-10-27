@@ -106,14 +106,30 @@ def _escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _adf_leaf(node: dict[str, Any]) -> str | None:
+    """Text of a node that has no children worth walking, or None for a container."""
+    kind = node.get("type")
+    raw_attrs = node.get("attrs")
+    attrs: dict[str, Any] = raw_attrs if isinstance(raw_attrs, dict) else {}
+    leaves = {
+        "text": node.get("text", ""),
+        "hardBreak": "\n",
+        # "Ask @Bob": the name is part of the sentence
+        "mention": attrs.get("text") or attrs.get("shortName") or "",
+        "emoji": attrs.get("text") or attrs.get("shortName") or "",
+        "inlineCard": attrs.get("url", ""),
+    }
+    return str(leaves[kind]) if kind in leaves else None
+
+
 def adf_text(node: object) -> str:
     """Plain text of an Atlassian document (Jira descriptions and comments)."""
     if isinstance(node, str):
         return node
     if not isinstance(node, dict):
         return ""
-    if node.get("type") == "text":
-        return str(node.get("text", ""))
+    if (leaf := _adf_leaf(node)) is not None:
+        return leaf
     parts = [adf_text(child) for child in node.get("content", []) or []]
     joiner = "\n" if node.get("type") in {"doc", "bulletList", "orderedList", "codeBlock"} else ""
     text = joiner.join(parts)

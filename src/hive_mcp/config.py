@@ -5,6 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import SettingsConfigDict
@@ -19,6 +20,7 @@ class Profile(StrEnum):
     EXTERNAL = "external"
 
 
+LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
 MIN_SECRET_KEY = 32  # signs login and admin cookies: short keys can be brute-forced offline
 
 
@@ -149,6 +151,29 @@ class Settings(ExtrasSettings):
     def _check_sso(self) -> Settings:
         if self.sso_provider == "entra" and not self.entra_tenant:
             raise ValueError("HIVE_SSO_PROVIDER=entra needs HIVE_ENTRA_TENANT (the directory id)")
+        return self
+
+    @model_validator(mode="after")
+    def _check_sso_issuer(self) -> Settings:
+        """`oidc` trusts only `email_verified`; on Google's own issuer that lets a personal Google
+        account that uses a work address sign in. Google must use the `google` provider (`hd`)."""
+        if self.sso_provider == "oidc" and self.google_issuer.rstrip("/") in (
+            "https://accounts.google.com",
+            "accounts.google.com",
+        ):
+            raise ValueError(
+                "HIVE_SSO_PROVIDER=oidc needs HIVE_GOOGLE_ISSUER of your own identity provider; "
+                "for Google use HIVE_SSO_PROVIDER=google (it checks the Workspace domain)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_public_url(self) -> Settings:
+        """Sign-in cookies are `Secure` only on https: sign-in over plain http is refused
+        (docs/OAUTH.md), except on this machine."""
+        url = urlparse(self.public_url)
+        if self.oauth_enabled and url.scheme != "https" and url.hostname not in LOOPBACK_HOSTS:
+            raise ValueError("HIVE_PUBLIC_URL must be https when sign-in (OAuth) is enabled")
         return self
 
     @model_validator(mode="after")

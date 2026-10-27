@@ -6,6 +6,7 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 
 import psycopg
+import psycopg.conninfo
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -15,6 +16,17 @@ from hive_mcp.ops.migrate.tables import BY_NAME, Row, Table
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+
+def redact_dsn(dsn: str) -> str:
+    """The address of a database without its password (for messages; `make_conninfo(password=None)`
+    would keep the one in the string)."""
+    try:
+        parts = psycopg.conninfo.conninfo_to_dict(dsn)
+    except psycopg.ProgrammingError:
+        return "PostgreSQL (address not shown)"
+    parts.pop("password", None)
+    return psycopg.conninfo.make_conninfo("", **parts)
 
 
 class PgSide:
@@ -36,7 +48,7 @@ class PgSide:
         await backend.close()
 
     def describe(self) -> str:
-        return "PostgreSQL " + psycopg.conninfo.make_conninfo(self._dsn, password=None)[:80]
+        return "PostgreSQL " + redact_dsn(self._dsn)[:80]
 
     def count(self, table: str) -> int:
         row = self._conn.execute(f"SELECT count(*) AS n FROM {table}").fetchone()  # noqa: S608

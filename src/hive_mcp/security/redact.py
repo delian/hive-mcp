@@ -27,20 +27,24 @@ RULES = (
     _rule("slack-token", r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b"),
     _rule("google-api-key", r"\bAIza[0-9A-Za-z_-]{35}\b"),
     _rule("llm-api-key", r"\bsk-[A-Za-z0-9_-]{20,}\b"),
-    _rule("jwt", r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
+    # lookbehind, not \b: `-` is in the class, so "eyJ-eyJ-..." restarted at every "eyJ" (quadratic)
+    _rule("jwt", r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
     _rule("bearer-token", r"(?i)\bbearer\s+([A-Za-z0-9._~+/=-]{20,})", 1),
     _rule("azure-account-key", r"(?i)AccountKey=([A-Za-z0-9+/=]{40,})", 1),
     _rule("url-password", r"://[^/\s:@]+:([^/\s@]{3,})@", 1),
     _rule(
         "credential-assignment",
-        r"(?i)\b(?:api[_-]?key|secret|token|passwd|password|pwd)\b[\"']?\s*[=:]\s*[\"']?([^\s\"',;]{8,})",
+        # `_` is a word character, so \b missed DB_PASSWORD / access_token / SECRET_KEY: look at
+        # letters and digits instead, and allow a short `_suffix` (secret_key, token_secret)
+        r"(?i)(?<![a-z0-9])(?:api[_-]?key|secret|token|passwd|password|pwd)(?![a-z0-9])"
+        r"(?:[_-][a-z0-9_-]{0,20})?[\"']?\s*[=:]\s*[\"']?([^\s\"',;]{8,})",
         1,
     ),
 )
 
 
-PEM_BEGIN = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
-PEM_END = re.compile(r"-----END [A-Z ]*PRIVATE KEY-----")
+PEM_BEGIN = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY(?: BLOCK)?-----")  # BLOCK: PGP
+PEM_END = re.compile(r"-----END [A-Z ]*PRIVATE KEY(?: BLOCK)?-----")
 UNTERMINATED_KEY_CHARS = (
     8000  # a key block whose end is missing (truncated paste) is masked this far
 )
@@ -78,7 +82,9 @@ def redact(text: str) -> Redaction:
         marker = f"[REDACTED:{rule.name}]"
 
         def replace(match: re.Match[str], rule: Rule = rule, marker: str = marker) -> str:
-            if match.group(rule.group) == marker:  # already masked: keep the operation idempotent
+            if match.group(rule.group).startswith(
+                "[REDACTED:"
+            ):  # masked by an earlier rule or pass
                 return match.group(0)
             findings[rule.name] = findings.get(rule.name, 0) + 1
             if rule.group == 0:

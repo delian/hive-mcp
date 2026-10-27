@@ -31,6 +31,7 @@ MIN_SOURCES = 2
 MAX_SOURCES = 8
 MAX_CHARS = 40_000
 CANDIDATE_SCORE = 0.7
+_NOTE_TAG = re.compile(r"<(/?)note", re.IGNORECASE)
 NUMBER = re.compile(r"\b\d+(?:[.,]\d+)?\b")
 NEGATION = re.compile(
     r"\b(?:not|never|no longer|cannot|can't|don't|doesn't|isn't|aren't|won't|must not|without)\b",
@@ -66,8 +67,13 @@ class Conflict:
     explanation: str = ""
 
 
+def _defang(text: str) -> str:
+    """A note must not be able to close its own <note> tag (or open another) in the prompt."""
+    return _NOTE_TAG.sub(r"&lt;\1note", text)
+
+
 def _note(item: Item) -> str:
-    return f"<note id={item.id!r}>\n# {item.title}\n{item.body}\n</note>"
+    return f"<note id={item.id!r}>\n# {_defang(item.title)}\n{_defang(item.body)}\n</note>"
 
 
 def _json(text: str) -> dict[str, object]:

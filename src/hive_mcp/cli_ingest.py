@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 import typer
 
@@ -15,6 +16,14 @@ from hive_mcp.domain.scope import Scope, ScopeLevel
 from hive_mcp.ingest.files import files_under
 
 app = typer.Typer()
+
+
+def public_url(url: str) -> str:
+    """The address without `user:token@` (it is stored as items' source, which readers can see)."""
+    parts = urlsplit(url)
+    if "@" not in parts.netloc:
+        return url  # also scp-style git@host:org/repo, where `git` is a user name, not a secret
+    return urlunsplit(parts._replace(netloc=parts.netloc.rpartition("@")[2]))
 
 
 @app.command()
@@ -92,7 +101,7 @@ def ingest_git(  # noqa: PLR0913, PLR0917 - one option per identity claim
                     try:
                         done = await services.ingest.ingest(
                             who, rel, path.read_bytes(), tags=(*tag, f"repo/{name}"), scope=scope,
-                            source=f"git:{url}#{rel}"[:400],
+                            source=f"git:{public_url(url)}#{rel}"[:400],
                         )  # fmt: skip
                     except (HiveError, OSError) as exc:
                         failures += 1

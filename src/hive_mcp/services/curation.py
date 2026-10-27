@@ -58,7 +58,7 @@ class Similar:
 
 
 class CurationService:
-    def __init__(
+    def __init__(  # noqa: PLR0913 - collaborators and one policy
         self,
         *,
         items: ItemRepository,
@@ -66,8 +66,16 @@ class CurationService:
         embedder: Embedder,
         knowledge: KnowledgeService,
         graph: GraphService,
+        embed_min_level: ScopeLevel | None = None,
     ) -> None:
         self._items, self._vectors, self._embedder = items, vectors, embedder
+        # Same policy as indexing: notes narrower than this are never sent to the embedder (the
+        # factory records it on hosted embedders, so an unwired caller still gets the policy).
+        self._min_level = (
+            embed_min_level
+            if embed_min_level is not None
+            else getattr(embedder, "embed_min_level", ScopeLevel.PRIVATE)
+        )
         self._knowledge, self._graph = knowledge, graph
 
     async def _retag_one(
@@ -213,6 +221,8 @@ class CurationService:
         if not 1 <= limit <= 50:  # noqa: PLR2004
             raise ValidationError("limit must be between 1 and 50")
         view = await self._items.get(principal, item_id)
+        if view.item.scope.level < self._min_level:
+            return []  # never sent to the embedding provider, so it has no meaning-based neighbours
         texts = embedding_texts(view.item)
         if not texts:
             return []

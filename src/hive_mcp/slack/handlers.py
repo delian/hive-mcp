@@ -3,6 +3,7 @@ results and saved notes are as private as in any other front door."""
 
 from __future__ import annotations
 
+import hashlib
 import html
 import logging
 import re
@@ -164,7 +165,11 @@ class SlackBot:
         origin = f"slack:{team.get('id')}/{channel.get('id')}/{message.get('ts')}"
         try:
             return await self._save(
-                who, text, origin, note=f"From Slack #{channel.get('name', '')}"
+                who,
+                text,
+                origin,
+                note=f"From Slack #{channel.get('name', '')}",
+                project=self._project_for(who, str(channel.get("id", ""))),
             )
         except HiveError as exc:
             return f"Sorry: {mrkdwn(user_message(exc))}"
@@ -190,6 +195,9 @@ class SlackBot:
         self, who: Principal, body: str, origin: str, note: str = "", project: str | None = None
     ) -> str:
         body = body[:MAX_NOTE]
+        # the key names the place and the text: one key per place made a second, different note
+        # from the same channel fail as an idempotency conflict
+        digest = hashlib.sha256(f"{project}\0{body}".encode()).hexdigest()[:24]
         first = body.strip().splitlines()[0][:MAX_TITLE]
         saved = await self._services().knowledge.remember(
             who,
@@ -199,7 +207,7 @@ class SlackBot:
                 tags=("source/slack",),
                 scope=Scope(ScopeLevel.PROJECT, project) if project else None,
                 source=origin[:400],
-                idempotency_key=f"slack:{origin}:{who.id}"[:200],
+                idempotency_key=f"slack:{digest}:{origin}:{who.id}"[:200],
             ),
         )
         flagged = (

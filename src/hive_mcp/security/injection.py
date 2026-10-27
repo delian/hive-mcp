@@ -14,7 +14,8 @@ import unicodedata
 
 FLAG_TAG = "flag/injection"
 _INVISIBLE = re.compile(
-    r"[\U000e0000-\U000e007f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]"
+    r"[\U000e0000-\U000e007f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff"
+    r"\u00ad\u034f\u061c\u180e]"  # soft hyphen, grapheme joiner, Arabic letter mark, Mongolian vs
 )
 _RULES: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (name, re.compile(rx, re.IGNORECASE))
@@ -33,7 +34,11 @@ _RULES: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
             "exfiltration",
             r"\b(?:send|post|upload|forward|exfiltrate|leak|curl)\b[^.\n]{0,60}(?<!\w)(?:secrets?|tokens?|credentials?|api[ _-]?keys?|passwords?|private keys?|\.env)(?!\w)[^.\n]{0,60}\b(?:to|at)\b[^.\n]{0,20}(?:https?://|\w+@\w)",
         ),
-        ("markdown-image-exfil", r"!\[[^\]]*\]\(https?://[^)\s]*[?&][^)\s]*(?:\{|%7B|data=|q=)"),
+        (
+            "markdown-image-exfil",
+            # bounded and anchored on the first ?/&: unbounded `[^)\s]*[?&][^)\s]*` is quadratic or worse
+            r"!\[[^\]]{0,2000}\]\(https?://[^)\s?&]{0,4000}[?&][^)\s]{0,4000}?(?:\{|%7B|data=|q=)",
+        ),
         (
             "conceal-from-user",
             r"\b(?:do not|don't|never)\b[^.\n]{0,20}\b(?:tell|inform|mention|reveal|show)\b[^.\n]{0,20}\b(?:the )?user\b",

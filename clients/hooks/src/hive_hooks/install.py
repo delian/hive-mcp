@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -18,7 +19,6 @@ class HooksError(Exception):
     """A problem the user can fix; the message says how."""
 
 
-MARKER = " hook "  # our commands look like "hive hook <event>"
 BEGIN = "<!-- hive-mcp:begin -->"
 END = "<!-- hive-mcp:end -->"
 # (settings event, our event name, timeout seconds)
@@ -46,12 +46,26 @@ def default_command() -> str:
     return name if name in {"hive", "hive-hooks"} else "hive"
 
 
+# "hive hook <event>" / "hive-hooks hook <event>" as a command word, never a lookalike such as
+# /home/hive/bin/lint hook check
+_OURS = re.compile(r"(?:^|[\s/\\])hive(?:-hooks)?(?:\.exe)?\s+hook\s+[\w-]+(?:\s|$)")
+
+
+def _is_our_hook(hook: Any) -> bool:  # noqa: ANN401 - settings.json content
+    return isinstance(hook, dict) and bool(_OURS.search(str(hook.get("command", ""))))
+
+
 def is_ours(entry: Any) -> bool:  # noqa: ANN401 - settings.json content
     hooks = entry.get("hooks") if isinstance(entry, dict) else None
-    return isinstance(hooks, list) and any(
-        isinstance(h, dict) and MARKER in str(h.get("command", "")) and "hive" in str(h["command"])
-        for h in hooks
-    )
+    return isinstance(hooks, list) and any(map(_is_our_hook, hooks))
+
+
+def _without_ours(entry: Any) -> Any:  # noqa: ANN401 - settings.json content
+    """The entry minus our hooks, or None when nothing else is left in it."""
+    if not is_ours(entry):
+        return entry
+    rest = [h for h in entry["hooks"] if not _is_our_hook(h)]
+    return {**entry, "hooks": rest} if rest else None
 
 
 def _clean(settings: dict[str, Any]) -> dict[str, Any]:
@@ -60,7 +74,7 @@ def _clean(settings: dict[str, Any]) -> dict[str, Any]:
         return settings
     for event, entries in list(hooks.items()):
         if isinstance(entries, list):
-            kept = [e for e in entries if not is_ours(e)]
+            kept = [e for e in map(_without_ours, entries) if e is not None]
             if kept:
                 hooks[event] = kept
             else:
@@ -124,6 +138,7 @@ def load(path: Path) -> dict[str, Any]:
 
 
 def save(path: Path, settings: dict[str, Any]) -> None:
+    path = path.resolve()  # a symlinked settings file (dotfile managers) stays a symlink
     path.parent.mkdir(parents=True, exist_ok=True)
     backup = path.with_name(path.name + ".hive-backup")
     if path.exists() and not backup.exists():
@@ -133,6 +148,8 @@ def save(path: Path, settings: dict[str, Any]) -> None:
         with os.fdopen(fd, "w") as handle:
             json.dump(settings, handle, indent=2)
             handle.write("\n")
+        if path.exists():
+            Path(tmp).chmod(path.stat().st_mode & 0o777)  # mkstemp's 0600 must not replace 0644
         Path(tmp).replace(path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)

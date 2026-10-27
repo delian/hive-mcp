@@ -78,12 +78,15 @@ class IndexService:
     async def index_or_enqueue(self, item: Item) -> bool:
         """Index now; on any HiveError queue a durable job. Returns True if indexed inline."""
         try:
-            return await self.index_current(item.org_id, item.id)
+            if await self.index_current(item.org_id, item.id):
+                return True
         except HiveError:
-            await self._jobs.enqueue(
-                item.org_id, INDEX_JOB, {"item_id": item.id}, dedupe_key=f"index:{item.id}"
-            )
-            return False
+            pass
+        # Failed, or the item kept changing while it was indexed: a job brings the index up to date.
+        await self._jobs.enqueue(
+            item.org_id, INDEX_JOB, {"item_id": item.id}, dedupe_key=f"index:{item.id}"
+        )
+        return False
 
     async def reindex_org(self, org_id: str, page: int = 500) -> int:
         """Queue an index job for every item in the org (e.g. after switching embedder).

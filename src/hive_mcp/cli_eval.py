@@ -86,6 +86,7 @@ def eval_build(
         )
         built = build_set(f"feedback-{org}", pairs, docs, extra, negs)
         fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.fchmod(fd, 0o600)  # O_CREAT's mode is ignored when the file already exists
         with os.fdopen(fd, "w") as handle:
             json.dump(built, handle, indent=1, ensure_ascii=False)
         positives = sum(1 for q in built["queries"] if q["relevant"])

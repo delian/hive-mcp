@@ -34,4 +34,4 @@ def verify(
         return False
     if abs(now() - int(timestamp)) > WINDOW_SECONDS:
         return False
-    return hmac.compare_digest(sign(secret, timestamp, body), signature)
+    return hmac.compare_digest(sign(secret, timestamp, body).encode(), signature.encode())

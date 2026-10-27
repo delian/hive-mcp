@@ -6,12 +6,13 @@ import uuid
 from difflib import unified_diff
 from typing import TYPE_CHECKING
 
-from hive_mcp.domain.errors import PermissionDenied, ValidationError
+from hive_mcp.domain.errors import HiveError, PermissionDenied, ValidationError
 from hive_mcp.domain.history import KEEP_VERSIONS
 from hive_mcp.domain.item import Item, ItemPatch, ItemQuery, ItemView, Page
 from hive_mcp.domain.principal import Principal, Role
 from hive_mcp.domain.scope import Scope, ScopeLevel, Visibility
 from hive_mcp.domain.tags import normalize_tags
+from hive_mcp.domain.text import check_text
 from hive_mcp.ports.audit import AuditEvent
 from hive_mcp.security.injection import FLAG_TAG
 from hive_mcp.security.sanitize import sanitize
@@ -102,6 +103,7 @@ class KnowledgeService:
         return RememberResult(created.item, created.created, indexed, findings)
 
     async def get(self, principal: Principal, item_id: str) -> ItemView:
+        check_text(item_id, what="id")
         return await self._items.get(principal, item_id)
 
     async def browse(self, principal: Principal, query: ItemQuery) -> Page:
@@ -117,11 +119,13 @@ class KnowledgeService:
         self, principal: Principal, item_id: str, limit: int = 20
     ) -> list[ItemVersion]:
         """Newest first. Versions written while the item was private to someone else stay hidden."""
+        check_text(item_id, what="id")
         if not 1 <= limit <= KEEP_VERSIONS + 1:
             raise ValidationError(f"limit must be between 1 and {KEEP_VERSIONS + 1}")
         return await self._versions().versions(principal, item_id, limit)
 
     async def version(self, principal: Principal, item_id: str, revision: int) -> ItemVersion:
+        check_text(item_id, what="id")
         return await self._versions().version(principal, item_id, revision)
 
     async def diff(
@@ -159,6 +163,7 @@ class KnowledgeService:
     async def tags(
         self, principal: Principal, prefix: str = "", limit: int = 100
     ) -> list[tuple[str, int]]:
+        check_text(prefix, what="prefix")
         if not 1 <= limit <= MAX_TAGS_LISTED:
             raise ValidationError(f"limit must be between 1 and {MAX_TAGS_LISTED}")
         return await self._items.tag_counts(principal, prefix=prefix.strip().lower(), limit=limit)
@@ -166,9 +171,13 @@ class KnowledgeService:
     async def update(
         self, principal: Principal, item_id: str, patch: ItemPatch, expected_revision: int
     ) -> Item:
+        check_text(item_id, what="id")
         add_tags, remove_tags = patch.add_tags, patch.remove_tags
         title = body = None
-        if patch.title is not None or patch.body is not None:
+        touches_flag = FLAG_TAG in add_tags or FLAG_TAG in remove_tags
+        if patch.title is not None or patch.body is not None or touches_flag:
+            # The flag follows the content, so it is recomputed from the text the item will have
+            # (also when only tags change: nobody can strip or forge it with kb_tag).
             current = (await self._items.get(principal, item_id)).item
             checked = sanitize(
                 patch.title if patch.title is not None else current.title,
@@ -176,10 +185,16 @@ class KnowledgeService:
             )
             title = checked.title if patch.title is not None else None
             body = checked.body if patch.body is not None else None
+            add_tags, remove_tags = add_tags - {FLAG_TAG}, remove_tags - {FLAG_TAG}
             if checked.flagged:
-                add_tags, remove_tags = add_tags | {FLAG_TAG}, remove_tags - {FLAG_TAG}
+                if FLAG_TAG not in current.tags:
+                    add_tags = add_tags | {FLAG_TAG}
             elif FLAG_TAG in current.tags:
-                add_tags, remove_tags = add_tags - {FLAG_TAG}, remove_tags | {FLAG_TAG}
+                remove_tags = remove_tags | {FLAG_TAG}
+        if touches_flag and not (
+            title or body or patch.kind or patch.status or add_tags or remove_tags
+        ):
+            raise ValidationError("the injection flag follows the text and cannot be set by hand")
         clean = ItemPatch(
             title=title,
             body=body,
@@ -213,9 +228,13 @@ class KnowledgeService:
         expected_revision: int,
     ) -> Item:
         """Promote or demote; the indexes copy the access rules, so they are updated too."""
+        check_text(item_id, what="id")
         _require_sharing_allowed(principal, scope, visibility)
         item = await self._items.relocate(principal, item_id, scope, visibility, expected_revision)
-        await self._indexing.sync_acl(item)
+        try:
+            await self._indexing.sync_acl(item)
+        except HiveError:  # the move is committed: a job must finish the index, not the caller
+            await self._indexing.index_or_enqueue(item)
         await self._audit_event(
             principal,
             "item.relocate",

@@ -23,6 +23,9 @@ MAX_SUMMARY = 1_500
 MAX_EXTERNAL = 2_000
 MAX_INPUT = 30_000
 DEFAULT_TIMEOUT = 20.0
+MAX_TIMEOUT = (
+    25.0  # documented maximum; hooks._report leaves the upload the rest of the hook's 30 s
+)
 MAX_OUTCOMES = 8
 _SENTENCES = re.compile(r"(?<=[.!?])\s+|\n+")
 _SIGNALS = re.compile(
@@ -113,7 +116,9 @@ async def external_summary(turns: list[Turn]) -> str | None:
         return None
     process = None
     try:
-        timeout = min(float(os.environ.get("HIVE_HOOK_SUMMARIZER_TIMEOUT", DEFAULT_TIMEOUT)), 25.0)
+        timeout = min(
+            float(os.environ.get("HIVE_HOOK_SUMMARIZER_TIMEOUT", DEFAULT_TIMEOUT)), MAX_TIMEOUT
+        )
         process = await asyncio.create_subprocess_exec(
             *shlex.split(command),
             stdin=asyncio.subprocess.PIPE,

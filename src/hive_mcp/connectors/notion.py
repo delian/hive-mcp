@@ -113,8 +113,16 @@ class NotionConnector:
             for block in body.get("results", []):
                 budget[0] -= 1
                 kind = str(block.get("type", ""))
-                text = rich_text((block.get(kind) or {}).get("rich_text"))
+                body = block.get(kind) or {}
+                text = rich_text(body.get("rich_text"))
                 prefix = PREFIXES.get(kind, "")
+                if kind == "table_row":  # a table's text lives in `cells`, not in `rich_text`
+                    cells = body.get("cells")
+                    text = (
+                        " | ".join(rich_text(c) for c in cells) if isinstance(cells, list) else ""
+                    )
+                elif kind == "to_do" and body.get("checked"):
+                    prefix = "- [x] "
                 if text:
                     lines.append(f"{'  ' * depth}{prefix}{text}")
                 if block.get("has_children") and depth < MAX_DEPTH:

@@ -6,6 +6,7 @@ import base64
 import binascii
 from typing import TYPE_CHECKING, Literal
 
+from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 from hive_mcp.domain.errors import ValidationError
@@ -21,6 +22,9 @@ if TYPE_CHECKING:
     from hive_mcp.bootstrap import Services
 
 MAX_TOOL_BYTES = 10 * 1024 * 1024  # larger files: use the `hive ingest` command
+FETCH = ToolAnnotations(  # reaches out to the web: an open-world tool
+    readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True
+)
 
 
 class IngestOut(BaseModel):
@@ -74,7 +78,7 @@ def register_ingest_tools(mcp: MCPServer, get_services: Callable[[], Services]) 
             redactions=result.redactions,
         )
 
-    @mcp.tool(annotations=WRITE)
+    @mcp.tool(annotations=FETCH)
     @guarded
     async def kb_ingest_url(
         url: str, tags: list[str] | None = None, share_with_project: str | None = None

@@ -106,6 +106,8 @@ class AccountAdmin:
         if existing:
             self._guard(actor, existing, user)
         self._directory.upsert(user)
+        if disabled:  # as with the Disable button: enabling again must not revive old sessions
+            await self._sessions.revoke_subject(address)
         await self._log(
             actor, "admin.user.save", address, role=role, new="no" if existing else "yes"
         )

@@ -101,7 +101,7 @@ async def connector_loop(
             try:
                 report = await services.connectors.run(spec, make_connector(spec, settings))
                 log.info("connector.sync name=%s %s", spec.name, report.line())
-            except HiveError:
+            except Exception:  # one bad source (network, parser) must not stop the loop
                 log.exception("connector.failed name=%s", spec.name)
         await asyncio.sleep(CONNECTOR_CHECK_SECONDS)
 
@@ -122,11 +122,12 @@ def start_loops(services: Services, settings: Settings) -> list[asyncio.Task[Non
         )
     if settings.group_sync_minutes and group_sync_configured(settings):
         tasks.append(asyncio.create_task(group_sync_loop(settings)))
-    if settings.backup_dir is not None:
-        from hive_mcp.ops.autobackup import backup_loop  # noqa: PLC0415
-
-        tasks.append(asyncio.create_task(backup_loop(settings)))
     specs = parse_specs(settings.connectors)
     if specs and settings.run_jobs:
         tasks.append(asyncio.create_task(connector_loop(services, settings, specs)))
+    if settings.backup_dir is not None:  # last: shutdown cancels in this order, and the final
+        from hive_mcp.ops.autobackup import backup_loop  # noqa: PLC0415  backup must see every
+        #                                                  other writer already stopped
+
+        tasks.append(asyncio.create_task(backup_loop(settings)))
     return tasks

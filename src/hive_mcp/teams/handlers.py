@@ -41,6 +41,7 @@ MAX_TITLE = 80
 EMAIL_NS = "teams:email"
 REF_NS = "teams:ref"  # where to reach a person for notifications (their personal chat)
 CACHE_SECONDS = 3600
+MISS_SECONDS = 60  # a failed or empty lookup is retried soon: the connector may only have hiccuped
 HELP = (
     "Hive: the team's shared memory.\n\n"
     "Ask a question to search what the team knows.\n"
@@ -51,6 +52,17 @@ NOT_LINKED = (
     "I could not match your Teams account to a Hive user. Ask an admin to add your work email "
     "(hive user add), then try again."
 )
+
+
+def obj(value: object) -> dict[str, Any]:
+    """`value` if it is a JSON object, else an empty one: activity fields may have any shape."""
+    return value if isinstance(value, dict) else {}
+
+
+def base_conversation(conversation: str) -> str:
+    """A reply inside a channel thread has the id `<channel>;messageid=<post>`: the channel is
+    what an admin maps to a project."""
+    return conversation.partition(";")[0]
 
 
 def clean_text(raw: str) -> str:
@@ -91,10 +103,9 @@ class TeamsBot:
     async def handle(self, activity: dict[str, Any]) -> None:
         if activity.get("type") != "message" or not activity.get("text"):
             return  # conversation updates, typing, reactions...: nothing to do
-        channel_data = activity.get("channelData") or {}
-        if (channel_data.get("tenant") or {}).get("id") != self._cfg.workspace:
+        if obj(obj(activity.get("channelData")).get("tenant")).get("id") != self._cfg.workspace:
             return  # another organisation's Teams
-        conversation = activity.get("conversation") or {}
+        conversation = obj(activity.get("conversation"))
         personal = conversation.get("conversationType") == "personal"
         if not personal and not self._cfg.allow_mentions:
             return
@@ -122,7 +133,7 @@ class TeamsBot:
             return f"Sorry: {user_message(exc)}"
 
     def _project(self, who: Principal, conv: str) -> str | None:
-        project = self._cfg.channel_projects.get(conv)
+        project = self._cfg.channel_projects.get(base_conversation(conv))
         return project if project and project in who.projects else None
 
     async def _search(self, who: Principal, text: str, conv: str, personal: bool) -> str:
@@ -170,8 +181,7 @@ class TeamsBot:
         return f"{verb} {where}: {saved.item.title}"
 
     async def resolve(self, activity: dict[str, Any]) -> Principal | None:
-        sender = activity.get("from") or {}
-        aad = str(sender.get("aadObjectId", ""))
+        aad = str(obj(activity.get("from")).get("aadObjectId", ""))
         if not aad:
             return None
         email = self._cfg.users.get(aad) or await self._email(activity, aad)
@@ -188,16 +198,21 @@ class TeamsBot:
         cached = await self._get_kv().get(EMAIL_NS, key)
         if cached:
             return str(cached["email"]) or None
-        conversation = str((activity.get("conversation") or {}).get("id", ""))
+        conversation = str(obj(activity.get("conversation")).get("id", ""))
         email = await self._connector.member_email(
             str(activity.get("serviceUrl", "")), conversation,
-            str((activity.get("from") or {}).get("id", "")), self._clock(),
+            str(obj(activity.get("from")).get("id", "")), self._clock(),
         )  # fmt: skip
-        await self._get_kv().put(EMAIL_NS, key, {"email": email or ""}, ttl_seconds=CACHE_SECONDS)
+        await self._get_kv().put(
+            EMAIL_NS,
+            key,
+            {"email": email or ""},
+            ttl_seconds=CACHE_SECONDS if email else MISS_SECONDS,
+        )
         return email
 
     async def _send(self, activity: dict[str, Any], text: str) -> None:
-        conversation = str((activity.get("conversation") or {}).get("id", ""))
+        conversation = str(obj(activity.get("conversation")).get("id", ""))
         try:
             await self._connector.reply(
                 str(activity.get("serviceUrl", "")), conversation, str(activity.get("id", "")),

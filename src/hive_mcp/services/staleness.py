@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from hive_mcp.domain import access
 from hive_mcp.domain.errors import PermissionDenied, ValidationError
 from hive_mcp.domain.item import Cursor, ItemQuery, Status
+from hive_mcp.domain.text import check_text
 from hive_mcp.ports.audit import AuditEvent
 
 if TYPE_CHECKING:
@@ -62,6 +63,7 @@ class StaleReview:
         return datetime.fromisoformat(record["at"]), str(record["by"])
 
     async def confirm(self, principal: Principal, item_id: str) -> datetime:
+        check_text(item_id, what="id")
         view = await self._items.get(principal, item_id)
         item = view.item
         if not access.can_write(principal, item.acl, item.author_id):

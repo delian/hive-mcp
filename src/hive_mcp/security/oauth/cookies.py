@@ -8,10 +8,13 @@ import os
 import secrets
 from typing import TYPE_CHECKING
 
+from hive_mcp.domain.errors import ValidationError
+
 if TYPE_CHECKING:
     from pathlib import Path
 
 COOKIE_NAME = "hive_oauth"
+KEY_BYTES = 32  # pragma: no mutate - size of the generated key
 
 
 def load_secret_key(configured: str | None, path: Path) -> bytes:
@@ -19,9 +22,15 @@ def load_secret_key(configured: str | None, path: Path) -> bytes:
     if configured:
         return configured.encode()
     if path.exists():
-        return bytes.fromhex(path.read_text().strip())
+        try:
+            key = bytes.fromhex(path.read_text().strip())
+        except ValueError:
+            key = b""
+        if len(key) < KEY_BYTES:  # a crash while the file was being written: never sign with it
+            raise ValidationError(f"{path} is empty or damaged; delete it to generate a new key")
+        return key
     path.parent.mkdir(parents=True, exist_ok=True)
-    key = secrets.token_bytes(32)  # pragma: no mutate - 32 is the default
+    key = secrets.token_bytes(KEY_BYTES)
     fd = os.open(
         path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
     )  # never readable by others, even briefly

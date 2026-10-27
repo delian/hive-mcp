@@ -53,6 +53,17 @@ def clone(url: str, destination: Path, ref: str | None = None) -> None:
         )
 
 
+def _excluded(relative: str, name: str, patterns: tuple[str, ...]) -> bool:
+    """A pattern such as `vendor/*` names a directory: it applies at any depth."""
+    folders = relative.split("/")[:-1]
+    for pattern in patterns:
+        if fnmatch.fnmatch(relative, pattern) or fnmatch.fnmatch(name, pattern):
+            return True
+        if pattern.endswith("/*") and any(fnmatch.fnmatch(f, pattern[:-2]) for f in folders):
+            return True
+    return False
+
+
 def select_files(
     root: Path, excludes: tuple[str, ...] = DEFAULT_EXCLUDES, max_bytes: int = MAX_FILE_BYTES
 ) -> tuple[list[Path], int]:
@@ -67,10 +78,7 @@ def select_files(
         }
         if (
             not readable
-            or any(
-                fnmatch.fnmatch(relative, pattern) or fnmatch.fnmatch(path.name, pattern)
-                for pattern in excludes
-            )
+            or _excluded(relative, path.name, excludes)
             or path.stat().st_size > max_bytes
         ):
             skipped += 1

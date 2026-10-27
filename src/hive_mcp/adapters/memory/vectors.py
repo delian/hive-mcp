@@ -33,8 +33,11 @@ class MemoryVectors:
         self, item_id: str, model_id: str, acl: Acl, vectors: Sequence[NDArray[np.float32]]
     ) -> None:
         mats = [unit(v) for v in vectors]  # validate everything before touching state
-        for m in mats:
-            self._check_dim(model_id, m.shape[0])
+        if mats:  # all-or-nothing: a rejected call must not fix the model's dimension either
+            dim = self._dims.get(model_id, int(mats[0].shape[0]))
+            if any(m.shape[0] != dim for m in mats):
+                raise ValidationError(f"model {model_id} has dimension {dim}")
+            self._dims[model_id] = dim
         rows = self._rows.setdefault(model_id, {})
         if mats:
             rows[item_id] = (acl, np.vstack(mats))

@@ -98,22 +98,38 @@ MIGRATIONS = [
 ]
 
 
-def migrate(conn: sqlite3.Connection) -> int:
-    """Apply pending migrations (each in its own transaction); returns the schema version."""
-    current = int(conn.execute("PRAGMA user_version").fetchone()[0])
+def _version(conn: sqlite3.Connection) -> int:
+    return int(conn.execute("PRAGMA user_version").fetchone()[0])
+
+
+def _refuse_newer(current: int) -> None:
     if current > len(MIGRATIONS):
         raise HiveError(
             f"database schema v{current} is newer than this software (v{len(MIGRATIONS)})"
         )
-    for version in range(current, len(MIGRATIONS)):
+
+
+def migrate(conn: sqlite3.Connection) -> int:
+    """Apply pending migrations (each in its own transaction); returns the schema version.
+
+    The version is read *inside* the write transaction: several processes may open a fresh
+    database at once, and the loser of the race must see the winner's migration, not redo it."""
+    _refuse_newer(_version(conn))
+    while True:
         conn.execute("BEGIN IMMEDIATE")
         try:
-            for statement in MIGRATIONS[version].split(";\n"):
-                if statement.strip():
-                    conn.execute(statement)
-            conn.execute(f"PRAGMA user_version = {version + 1}")  # int formatted, not user input
+            version = _version(conn)
+            _refuse_newer(version)
+            if version < len(MIGRATIONS):
+                for statement in MIGRATIONS[version].split(";\n"):
+                    if statement.strip():
+                        conn.execute(statement)
+                conn.execute(
+                    f"PRAGMA user_version = {version + 1}"
+                )  # int formatted, not user input
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")
             raise
-    return len(MIGRATIONS)
+        if version >= len(MIGRATIONS):
+            return len(MIGRATIONS)

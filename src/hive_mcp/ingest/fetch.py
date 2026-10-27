@@ -13,7 +13,9 @@ A server that fetches URLs can be aimed at things only the server can reach (clo
 from __future__ import annotations
 
 import asyncio
+import codecs
 import ipaddress
+import re
 import socket
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
@@ -24,6 +26,8 @@ import httpx
 
 from hive_mcp import __version__
 from hive_mcp.domain.errors import ValidationError
+from hive_mcp.ingest.extract import HTML_SUFFIXES, TEXT_SUFFIXES
+from hive_mcp.ingest.ocr import IMAGE_SUFFIXES
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -41,6 +45,11 @@ OFFICE_TYPES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
 }
+
+
+CONTAINER_SUFFIXES = frozenset({".html", ".pdf", *OFFICE_TYPES.values(), *IMAGE_SUFFIXES})
+SERVER_SUFFIXES = frozenset({".php", ".aspx"})  # say nothing about the content
+KNOWN_SUFFIXES = (TEXT_SUFFIXES | HTML_SUFFIXES | CONTAINER_SUFFIXES) - {""} - SERVER_SUFFIXES
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +81,8 @@ def is_public(address: str) -> bool:
             embedded is not None
         ):  # ::ffff:10.0.0.1, 64:ff9b::10.0.0.1 and 2002:0a00:1:: all reach 10.0.0.1
             return is_public(str(embedded))
+    if isinstance(ip, ipaddress.IPv6Address) and ip.is_site_local:  # fec0::/10, intranet use
+        return False
     return ip.is_global and not ip.is_multicast
 
 
@@ -82,6 +93,8 @@ SIX_TO_FOUR = ipaddress.ip_network("2002::/16")
 def _embedded_ipv4(ip: ipaddress.IPv6Address) -> ipaddress.IPv4Address | None:
     if ip.ipv4_mapped:
         return ip.ipv4_mapped
+    if int(ip) >> 32 == 0:  # ::10.0.0.1, the deprecated IPv4-compatible form
+        return ipaddress.IPv4Address(int(ip))
     if ip in NAT64:
         return ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
     if ip in SIX_TO_FOUR:
@@ -94,7 +107,11 @@ def _host_allowed(host: str, allowed: frozenset[str]) -> bool:
 
 
 def _check_url(url: str, policy: FetchPolicy) -> tuple[str, int]:
-    parts = urlsplit(url)
+    try:  # a malformed port or bracket makes urlsplit / .port raise ValueError
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError as exc:
+        raise ValidationError("not a valid URL") from exc
     if parts.scheme not in {"http", "https"} or not parts.hostname:
         raise ValidationError("only http and https URLs can be fetched")
     if parts.username or parts.password:
@@ -102,7 +119,7 @@ def _check_url(url: str, policy: FetchPolicy) -> tuple[str, int]:
     host = parts.hostname.lower()
     if not _host_allowed(host, policy.allowed_hosts):
         raise ValidationError(f"{host} is not on this server's list of allowed hosts")
-    return host, parts.port or (443 if parts.scheme == "https" else 80)
+    return host, port or (443 if parts.scheme == "https" else 80)
 
 
 async def _pin(
@@ -130,12 +147,40 @@ def _is_literal(host: str) -> bool:
 def _file_name(url: str, content_type: str) -> str:
     parts = urlsplit(url)
     path = PurePosixPath(parts.path or "/")
-    stem = "/".join(path.parts[1:]).removesuffix(path.suffix) or "index"
-    suffix = path.suffix.lower()
+    tail = path.suffix.lower()
+    suffix = tail
     mime = content_type.split(";", maxsplit=1)[0].strip().lower()
-    if not suffix or suffix in {".php", ".aspx"}:  # the URL does not say what it is: ask the server
-        suffix = GENERIC_NAMES.get(mime) or OFFICE_TYPES.get(mime) or ".html"
+    served = GENERIC_NAMES.get(mime) or OFFICE_TYPES.get(mime)
+    if served is None and mime.endswith("+xml"):
+        served = ".xml"
+    elif served is None and mime.endswith("+json"):
+        served = ".json"
+    if served in CONTAINER_SUFFIXES:  # /wiki/Node.js served as HTML is HTML, whatever the tail says
+        suffix = served
+    elif suffix not in KNOWN_SUFFIXES:  # no tail, ".php", or a version number such as /v1.2
+        suffix = served or ".html"
+    whole = "/".join(path.parts[1:])
+    keep_tail = suffix != tail and tail not in SERVER_SUFFIXES  # "Node.js" stays "Node.js.html"
+    stem = (whole if keep_tail else whole.removesuffix(path.suffix)) or "index"
     return f"{parts.hostname}/{stem}{suffix}"[:200]
+
+
+_CHARSET = re.compile(r"charset\s*=\s*[\"']?([A-Za-z0-9_.:-]+)", re.IGNORECASE)
+
+
+def _as_utf8(data: bytes, content_type: str) -> bytes:
+    """Text served with a charset in its Content-Type (windows-1251, Shift_JIS...) is recoded to
+    UTF-8: the extractor only guesses, and the server's header is the authority."""
+    found = _CHARSET.search(content_type)
+    if found is None or not content_type.lstrip().lower().startswith("text/"):
+        return data
+    try:
+        name = codecs.lookup(found.group(1)).name
+    except LookupError:
+        return data
+    if name.startswith(("utf-8", "utf-16", "utf-32")):
+        return data
+    return data.decode(name, errors="replace").encode("utf-8")
 
 
 def _acceptable(content_type: str) -> bool:
@@ -220,4 +265,5 @@ async def _read(response: httpx.Response, url: str, policy: FetchPolicy) -> Fetc
                 f"the document is larger than {policy.max_bytes // (1024 * 1024)} MB"
             )
         chunks.append(chunk)
-    return Fetched(_file_name(url, content_type), b"".join(chunks), url)
+    data = _as_utf8(b"".join(chunks), content_type)
+    return Fetched(_file_name(url, content_type), data, url)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import weakref
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from typing import TYPE_CHECKING
@@ -18,6 +20,7 @@ from hive_mcp.domain.entity import (
 )
 from hive_mcp.domain.errors import HiveError, NotFound, ValidationError
 from hive_mcp.domain.item import Cursor, ItemPatch, ItemQuery, ItemView, Kind
+from hive_mcp.domain.text import has_bad_text
 from hive_mcp.search.tokenize import tokenize
 from hive_mcp.services.models import RememberRequest
 
@@ -64,6 +67,11 @@ class EntityService:
         graph: GraphService,
     ) -> None:
         self._items, self._text, self._knowledge, self._graph = items, text, knowledge, graph
+        # Saving is look-up-then-create: two saves of one name at the same moment must not both
+        # create it. The lock lives only while someone holds or waits for it.
+        self._locks: weakref.WeakValueDictionary[tuple[str, str], asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
 
     async def _by_alias(
         self, principal: Principal, tag: str, entity_type: str | None, *, primary_only: bool
@@ -123,6 +131,22 @@ class EntityService:
         """Create the entity, or - if it is already known to you - add the new aliases to it."""
         if len(aliases or []) > MAX_ALIASES:
             raise ValidationError(f"at most {MAX_ALIASES} aliases")
+        key = (principal.org_id, entity_slug(name))
+        lock = self._locks.get(key)
+        if lock is None:
+            lock = self._locks[key] = asyncio.Lock()
+        async with lock:
+            return await self._save(principal, name, entity_type, description, aliases, scope)
+
+    async def _save(  # noqa: PLR0913, PLR0917 - the fields of an entity
+        self,
+        principal: Principal,
+        name: str,
+        entity_type: str,
+        description: str | None,
+        aliases: list[str] | None,
+        scope: Scope | None,
+    ) -> SaveResult:
         tags = list(dict.fromkeys(alias_tag(n) for n in [name, *(aliases or [])]))
         # Only the name decides "same entity". An alias that already belongs to another entity is a
         # conflict to report, never a reason to merge two things that may differ.
@@ -206,6 +230,8 @@ class EntityService:
         return out
 
     async def _resolve_ref(self, principal: Principal, ref: str) -> ItemView:
+        if has_bad_text(ref):
+            raise NotFound(ref)
         try:
             view = await self._items.get(principal, ref)
             if view.item.kind is Kind.ENTITY:

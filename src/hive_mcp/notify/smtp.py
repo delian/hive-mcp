@@ -44,7 +44,9 @@ class SmtpNotifier:
         message = EmailMessage()
         message["From"] = self._sender
         message["To"] = ", ".join(notification.recipients)
-        message["Subject"] = notification.subject.replace("\n", " ")[:200]  # no header injection
+        # One line, no header injection: split() also folds \r, \v, \f, U+0085, U+2028/9, which
+        # make EmailMessage raise (an item title may contain any of them).
+        message["Subject"] = " ".join(notification.subject.split())[:200]
         message.set_content(notification.text)
         try:
             await asyncio.to_thread(self._deliver, message)

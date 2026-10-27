@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from hive_mcp.bootstrap import Services
 
 BUCKETS = (0.005, 0.025, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30)
+METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
 CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 
 
@@ -63,7 +64,8 @@ class Metrics:
         Gauge("hive_build_info", "Version", ["version"], registry=reg).labels(__version__).set(1)
 
     def observe_request(self, group: str, method: str, status: int, seconds: float) -> None:
-        self.requests.labels(group, method, str(status)).inc()
+        # the method is chosen by the client: only the standard ones become label values
+        self.requests.labels(group, method if method in METHODS else "OTHER", str(status)).inc()
         self.request_seconds.labels(group).observe(seconds)
 
     def observe_tool(self, tool: str, outcome: str, seconds: float) -> None:
@@ -72,13 +74,21 @@ class Metrics:
 
     async def refresh(self, services: Services) -> None:
         """Gauges that need the database; computed when scraped, so an idle server does no work."""
+        # Ask first, then swap the gauges without awaiting: a scrape that arrives meanwhile (two
+        # Prometheus replicas scrape together) must not see the job gauges emptied half-way.
+        try:
+            stats = await services.backend.jobs.stats()
+            status = await services.vector_admin.status()
+        except BaseException:
+            self.jobs.clear()  # no series is better than numbers that are no longer true
+            self.job_age.clear()
+            raise
         self.jobs.clear()
         self.job_age.clear()
-        for stat in await services.backend.jobs.stats():
+        for stat in stats:
             self.jobs.labels(stat.kind, str(stat.state)).set(stat.count)
             if stat.oldest_due_age:
                 self.job_age.labels(stat.kind).set(stat.oldest_due_age)
-        status = await services.vector_admin.status()
         self.coverage.set(status.coverage)
         self.items_pending.set(max(status.indexable_items - status.current_items, 0))
 

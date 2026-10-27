@@ -97,7 +97,7 @@ class OpsPages:
             for field in SECRET_FIELDS[name]:
                 if form.get(f"clear_{field}"):
                     secrets[field] = ""
-                elif value := str(form.get(f"secret_{field}", "")):
+                elif value := str(form.get(f"secret_{field}", "")).strip():  # pasted newline/space
                     secrets[field] = value
             await store.update(gate[1], name, changes, secrets)
         except HiveError as exc:

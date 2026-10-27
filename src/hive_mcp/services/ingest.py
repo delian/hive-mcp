@@ -16,6 +16,7 @@ from hive_mcp.domain.tags import normalize_tags
 from hive_mcp.ingest.extract import extract_text
 from hive_mcp.ingest.fetch import fetch
 from hive_mcp.ingest.sections import MAX_SECTION_CHARS, split_sections
+from hive_mcp.security.injection import strip_invisible
 from hive_mcp.services.models import RememberRequest
 
 if TYPE_CHECKING:
@@ -39,6 +40,16 @@ class IngestResult:
     items: list[Item]
     created: int  # sections newly stored; the rest were already there
     redactions: dict[str, int] = field(default_factory=dict)
+
+
+_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]+")
+
+
+def clean_title(raw: str | None) -> str:
+    """One line of visible text: a multi-line <title>, control or zero-width characters must not
+    end up in a title (digests, emails and lists show titles on a single line)."""
+    text, _ = strip_invisible(raw or "")
+    return " ".join(_CONTROL.sub(" ", text).split())
 
 
 def file_slug(name: str) -> str:
@@ -85,7 +96,7 @@ class IngestService:
         sections = await asyncio.to_thread(split_sections, extracted.text, self._section_chars)
         if len(sections) > MAX_SECTIONS:
             raise ValidationError(f"document too long ({len(sections)} parts, max {MAX_SECTIONS})")
-        base = (extracted.title or name).strip()[: MAX_TITLE - 24]
+        base = (clean_title(extracted.title) or clean_title(name) or "file")[: MAX_TITLE - 24]
         file_tags = (*tags, f"file/{file_slug(name)}", f"format/{extracted.format}")
         fingerprint = hashlib.sha256(
             "\0".join([name, str(scope), *sorted(normalize_tags(file_tags)), str(kind)]).encode()

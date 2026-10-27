@@ -87,4 +87,10 @@ class SessionService:
         if not source or not source.startswith(BLOB_PREFIX):
             raise NotFound(f"{item_id} has no stored log")
         sha, _, size = source[len(BLOB_PREFIX) :].partition(":")
-        return (await self._blobs.get(BlobRef(view.item.org_id, sha, int(size or 0)))).decode()
+        if size and not (size.isascii() and size.isdigit()):
+            raise NotFound(f"{item_id} has no stored log")  # `source` is caller-supplied text
+        try:
+            data = await self._blobs.get(BlobRef(view.item.org_id, sha, int(size or 0)))
+        except ValidationError:
+            raise NotFound(f"{item_id} has no stored log") from None
+        return data.decode(errors="replace")

@@ -34,7 +34,14 @@ from hive_mcp.teams.extension_cards import (
     save_dialog,
     task_message,
 )
-from hive_mcp.teams.handlers import MAX_NOTE, MAX_TITLE, NOT_LINKED, clean_text
+from hive_mcp.teams.handlers import (
+    MAX_NOTE,
+    MAX_TITLE,
+    NOT_LINKED,
+    base_conversation,
+    clean_text,
+    obj,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -77,7 +84,7 @@ class TeamsExtension:
     async def _dispatch(
         self, name: str, reply: Callable[[str], dict[str, Any]], activity: dict[str, Any]
     ) -> dict[str, Any]:
-        if ((activity.get("channelData") or {}).get("tenant") or {}).get("id") != self._tenant:
+        if obj(obj(activity.get("channelData")).get("tenant")).get("id") != self._tenant:
             return reply("This app is not available to your organisation.")
         who = await self._bot.resolve(activity)
         if who is None:
@@ -88,7 +95,7 @@ class TeamsExtension:
         self, name: str, reply: Callable[[str], dict[str, Any]], who: Principal,
         activity: dict[str, Any],
     ) -> dict[str, Any]:  # fmt: skip
-        value = activity.get("value") or {}
+        value = obj(activity.get("value"))
         if name == QUERY:
             return await self._search(who, activity, value)
         if name == LINK:
@@ -96,13 +103,13 @@ class TeamsExtension:
         if value.get("commandId") != SAVE:
             return reply("Unknown command.")
         if name == FETCH:
-            return await self._open_save(who, value.get("messagePayload") or {})
-        return task_message(await self._submit_save(who, value.get("data") or {}))
+            return await self._open_save(who, obj(value.get("messagePayload")))
+        return task_message(await self._submit_save(who, obj(value.get("data"))))
 
     # ------------------------------------------------------------------ what may be quoted
     def _shared_project(self, who: Principal, activity: dict[str, Any]) -> str | None:
-        conversation = str((activity.get("conversation") or {}).get("id", ""))
-        project = self._projects.get(conversation)
+        conversation = str(obj(activity.get("conversation")).get("id", ""))
+        project = self._projects.get(base_conversation(conversation))
         return project if project and project in who.projects else None
 
     def _link(self, item_id: str) -> str | None:
@@ -114,7 +121,9 @@ class TeamsExtension:
         self, who: Principal, activity: dict[str, Any], value: dict[str, Any]
     ) -> dict[str, Any]:
         params = {
-            str(p.get("name")): str(p.get("value", "")) for p in value.get("parameters") or []
+            str(p.get("name")): str(p.get("value", ""))
+            for p in _items(value.get("parameters"))
+            if isinstance(p, dict)
         }
         text = clean_text(params.get("query", ""))[:MAX_QUERY]
         if params.get("initialRun") == "true" or not text:
@@ -179,7 +188,7 @@ class TeamsExtension:
     async def _save(self, who: Principal, payload: dict[str, Any], project: str | None) -> str:
         body = _message_text(payload)  # callers have checked it is not empty
         link = str(payload.get("linkToMessage", ""))
-        sender = str(((payload.get("from") or {}).get("user") or {}).get("displayName", ""))
+        sender = str(obj(obj(payload.get("from")).get("user")).get("displayName", ""))
         subject = clean_text(str(payload.get("subject") or "")) or body.splitlines()[0]
         if sender:
             body = f"{body}\n\n(from {sender} in Teams)"
@@ -200,16 +209,20 @@ class TeamsExtension:
         return f"{verb} {where}: {saved.item.title}"
 
 
+def _items(value: object) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
 def _message_text(payload: dict[str, Any]) -> str:
-    return clean_text(str((payload.get("body") or {}).get("content", "")))[:MAX_NOTE]
+    return clean_text(str(obj(payload.get("body")).get("content", "")))[:MAX_NOTE]
 
 
 def _slim(payload: dict[str, Any]) -> dict[str, Any]:
     """Only what a note is made from, so the held copy stays small."""
-    sender = ((payload.get("from") or {}).get("user") or {}).get("displayName", "")
+    sender = obj(obj(payload.get("from")).get("user")).get("displayName", "")
     return {
         "id": str(payload.get("id", "")), "subject": payload.get("subject"),
-        "body": {"content": str((payload.get("body") or {}).get("content", ""))[: MAX_NOTE * 2]},
+        "body": {"content": str(obj(payload.get("body")).get("content", ""))[: MAX_NOTE * 2]},
         "from": {"user": {"displayName": str(sender)}},
         "linkToMessage": str(payload.get("linkToMessage", "")),
     }  # fmt: skip

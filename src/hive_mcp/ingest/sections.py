@@ -6,7 +6,9 @@ import re
 from dataclasses import dataclass
 
 MAX_SECTION_CHARS = 40_000
-_HEADING = re.compile(r"^(#{1,3})\s+(.+?)\s*$", re.MULTILINE)
+_HEADING = re.compile(
+    r"^(#{1,3})[ \t]+(.+?)[ \t]*$", re.MULTILINE
+)  # same line: "#\nx" is no heading
 
 
 @dataclass(frozen=True, slots=True)

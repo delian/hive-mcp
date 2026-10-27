@@ -85,7 +85,7 @@ def to_postgres(
     reindex: bool = typer.Option(True, help="Build the search indexes now (--no-reindex: later)."),
 ) -> None:
     """Copy this SQLite deployment (HIVE_DATA_DIR) into PostgreSQL. Stop the server first."""
-    from hive_mcp.ops.migrate.pg_side import PgSide  # noqa: PLC0415 - postgres extra
+    from hive_mcp.ops.migrate.pg_side import PgSide, redact_dsn  # noqa: PLC0415 - postgres extra
 
     settings = Settings()
     try:
@@ -115,7 +115,8 @@ def to_postgres(
                         data_dir=settings.data_dir,
                     )
                 )  # fmt: skip
-                _report(source, target, database_url, target_settings if reindex else None)
+                shown = database_url if embedded else redact_dsn(database_url)
+                _report(source, target, shown, target_settings if reindex else None)
             finally:
                 source.close()
                 if target:

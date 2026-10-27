@@ -22,6 +22,8 @@ MAX_MEMBER_BYTES = 16 * 1024 * 1024  # an XML tree takes ~10x its text in memory
 MAX_TOTAL_BYTES = 64 * 1024 * 1024
 MAX_MEMBERS = 5000
 MAX_ROWS = 20_000
+MAX_COLUMNS = 16_384  # Excel's own limit (XFD)
+MAX_TEXT_CHARS = 10_000_000  # more than the 200 parts of 40 KB an ingest accepts
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 S = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
@@ -44,6 +46,14 @@ def _open(data: bytes) -> zipfile.ZipFile:
     return archive
 
 
+class _RefuseDoctype(ET.TreeBuilder):
+    """Office XML never has a DTD. The byte scan below misses encodings such as UTF-16, so the
+    parser itself refuses a document type declaration, whatever the encoding."""
+
+    def doctype(self, name: str, pubid: str | None, system: str | None) -> None:
+        raise ValidationError("Office file contains a forbidden XML declaration")
+
+
 def _xml(archive: zipfile.ZipFile, name: str) -> ET.Element | None:
     try:
         raw = archive.read(name)
@@ -52,7 +62,7 @@ def _xml(archive: zipfile.ZipFile, name: str) -> ET.Element | None:
     if b"<!DOCTYPE" in raw[:4096].upper() or b"<!ENTITY" in raw.upper():
         raise ValidationError("Office file contains a forbidden XML declaration")
     try:
-        return ET.fromstring(raw)  # noqa: S314 - DTDs were refused above
+        return ET.fromstring(raw, parser=ET.XMLParser(target=_RefuseDoctype()))  # noqa: S314
     except ET.ParseError as exc:
         raise ValidationError(f"damaged Office XML in {name}") from exc
 
@@ -79,24 +89,57 @@ def docx_text(data: bytes) -> str:
         level = _HEADING.match(style.get(f"{W}val", "")) if style is not None and text else None
         return f"{'#' * min(int(level.group(1)), 6)} {text}" if level else text
 
+    def blocks(parent: ET.Element) -> list[ET.Element]:
+        """Paragraphs and tables below `parent`, looking inside content controls (w:sdt)."""
+        found: list[ET.Element] = []
+        for child in parent:
+            if child.tag in {f"{W}p", f"{W}tbl"}:
+                found.append(child)
+            elif child.tag == f"{W}sdt":
+                content = child.find(f"{W}sdtContent")
+                found += blocks(content) if content is not None else []
+        return found
+
+    def table(tbl: ET.Element) -> list[str]:
+        rows: list[str] = []
+        for row in tbl.findall(f"{W}tr"):  # direct rows and cells: a nested table is read once
+            cells = []
+            for cell in row.findall(f"{W}tc"):
+                texts = []
+                for block in blocks(cell):
+                    if block.tag == f"{W}p":
+                        texts.append(paragraph(block))
+                    else:
+                        texts += table(block)
+                cells.append(" ".join(t for t in texts if t).strip())
+            rows.append(" | ".join(cells))
+        return rows
+
     body = root.find(f"{W}body")
-    for child in body if body is not None else []:
+    for child in blocks(body) if body is not None else []:
         if child.tag == f"{W}p":
             lines.append(paragraph(child))
-        elif child.tag == f"{W}tbl":
-            for row in child.iter(f"{W}tr"):
-                cells = [
-                    " ".join(paragraph(p) for p in c.iter(f"{W}p")).strip()
-                    for c in row.iter(f"{W}tc")
-                ]
-                lines.append(" | ".join(cells))
+        else:
+            lines += table(child)
             lines.append("")
     return "\n".join(lines)
 
 
 def _shared_strings(archive: zipfile.ZipFile) -> list[str]:
     root = _xml(archive, "xl/sharedStrings.xml")
-    return [] if root is None else [_text(si, f"{S}t") for si in root.iter(f"{S}si")]
+    return [] if root is None else [_si_text(si) for si in root.iter(f"{S}si")]
+
+
+def _si_text(si: ET.Element) -> str:
+    """The text of a shared string: plain `t` or rich-text runs `r/t`, without the phonetic
+    guide (`rPh`, furigana) Excel stores next to Japanese text."""
+    parts = []
+    for child in si:
+        if child.tag == f"{S}t":
+            parts.append(child.text or "")
+        elif child.tag == f"{S}r":
+            parts.extend(t.text or "" for t in child.findall(f"{S}t"))
+    return "".join(parts)
 
 
 def _sheets(archive: zipfile.ZipFile) -> list[tuple[str, str]]:
@@ -132,12 +175,36 @@ def _column(ref: str) -> int:
     return index - 1
 
 
+def _row_cells(row: ET.Element, strings: list[str]) -> dict[int, str]:
+    """Column -> text of the cells of one row that hold something."""
+    cells: dict[int, str] = {}
+    next_column = 0  # a cell without a reference follows the previous one
+    for c in row.iter(f"{S}c"):
+        column = _column(c.get("r", "")) if c.get("r") else next_column
+        if not 0 <= column < MAX_COLUMNS:
+            raise ValidationError("damaged Excel file (cell outside the sheet)")
+        next_column = column + 1
+        kind, value = c.get("t"), c.find(f"{S}v")
+        if kind == "inlineStr":
+            text = _text(c, f"{S}t")
+        elif value is None or value.text is None:
+            continue
+        elif kind == "s":
+            index = int(value.text)
+            text = strings[index] if 0 <= index < len(strings) else ""
+        else:
+            text = value.text
+        cells[column] = text.replace("\n", " ").strip()
+    return cells
+
+
 def xlsx_text(data: bytes) -> str:
     archive = _open(data)
     strings, sheets = _shared_strings(archive), _sheets(archive)
     if not sheets:
         raise ValidationError("not an Excel workbook (no worksheets)")
     out: list[str] = []
+    size = 0
     for name, part in sheets:
         root = _xml(archive, part)
         if root is None:
@@ -147,21 +214,13 @@ def xlsx_text(data: bytes) -> str:
             if count >= MAX_ROWS:
                 out.append(f"[... more than {MAX_ROWS} rows omitted]")
                 break
-            cells: dict[int, str] = {}
-            for c in row.iter(f"{S}c"):
-                kind, value = c.get("t"), c.find(f"{S}v")
-                if kind == "inlineStr":
-                    text = _text(c, f"{S}t")
-                elif value is None or value.text is None:
-                    continue
-                elif kind == "s":
-                    index = int(value.text)
-                    text = strings[index] if 0 <= index < len(strings) else ""
-                else:
-                    text = value.text
-                cells[_column(c.get("r", "A"))] = text.replace("\n", " ").strip()
+            cells = _row_cells(row, strings)
             if cells:
-                out.append(" | ".join(cells.get(i, "") for i in range(max(cells) + 1)))
+                line = " | ".join(cells.get(i, "") for i in range(max(cells) + 1))
+                size += len(line) + 1
+                if size > MAX_TEXT_CHARS:  # shared strings and sparse rows can multiply a tiny file
+                    raise ValidationError("the workbook holds too much text to ingest")
+                out.append(line)
         out.append("")
     return "\n".join(out)
 
@@ -180,13 +239,19 @@ def pptx_text(data: bytes) -> str:
         if root is None:
             continue
         out.append(f"## Slide {number}")
-        for shape in root.iter(f"{P}sp"):
-            title = shape.find(f"{P}nvSpPr/{P}nvPr/{P}ph")
-            is_title = title is not None and title.get("type") in {"title", "ctrTitle"}
-            for para in shape.iter(f"{A}p"):
-                text = _text(para, f"{A}t", (f"{A}br",)).strip()
-                if text:
-                    out.append(f"### {text}" if is_title else text)
+        for shape in root.iter():  # document order: text shapes and tables as they appear
+            if shape.tag == f"{A}tbl":
+                for row in shape.iter(f"{A}tr"):
+                    cells = [_text(c, f"{A}t", (f"{A}br",)).strip() for c in row.iter(f"{A}tc")]
+                    if any(cells):
+                        out.append(" | ".join(cells))
+            elif shape.tag == f"{P}sp":
+                title = shape.find(f"{P}nvSpPr/{P}nvPr/{P}ph")
+                is_title = title is not None and title.get("type") in {"title", "ctrTitle"}
+                for para in shape.iter(f"{A}p"):
+                    text = _text(para, f"{A}t", (f"{A}br",)).strip()
+                    if text:
+                        out.append(f"### {text}" if is_title else text)
         notes = _xml(archive, name.replace("slides/slide", "notesSlides/notesSlide"))
         if notes is not None:
             spoken = " ".join(

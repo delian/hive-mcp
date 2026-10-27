@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from hive_mcp.domain import access
 from hive_mcp.domain.errors import Conflict, NotFound, PermissionDenied, ValidationError
 from hive_mcp.domain.principal import Role
+from hive_mcp.domain.text import has_bad_text
 
 if TYPE_CHECKING:
     from hive_mcp.domain.item import Item
@@ -17,8 +18,10 @@ MAX_KEY_LEN = 200
 
 
 def check_idempotency_key(key: str | None) -> None:
-    if key is not None and (not key or len(key) > MAX_KEY_LEN or "\x00" in key):
-        raise ValidationError(f"idempotency key must be 1-{MAX_KEY_LEN} characters without NUL")
+    if key is not None and (not key or len(key) > MAX_KEY_LEN or has_bad_text(key)):
+        raise ValidationError(
+            f"idempotency key must be 1-{MAX_KEY_LEN} characters without NUL or lone surrogates"
+        )
 
 
 def authorize_create(principal: Principal, item: Item, idempotency_key: str | None = None) -> None:

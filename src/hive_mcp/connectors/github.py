@@ -10,6 +10,7 @@ from __future__ import annotations
 import fnmatch
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 
 import httpx
 
@@ -89,7 +90,7 @@ class GithubConnector:
         async def load() -> tuple[str, bytes]:
             try:
                 response = await self._http.get(
-                    f"{self._api}/repos/{self._repo}/contents/{path}",
+                    f"{self._api}/repos/{self._repo}/contents/{quote(path)}",
                     params={"ref": self._ref},
                     headers={"Accept": "application/vnd.github.raw+json"},
                 )

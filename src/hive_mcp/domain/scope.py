@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 
 from hive_mcp.domain.errors import ValidationError
+from hive_mcp.domain.text import check_text
 
 
 class ScopeLevel(IntEnum):
@@ -32,6 +33,7 @@ class Scope:
     def __post_init__(self) -> None:
         if not self.owner:
             raise ValidationError("scope owner must not be empty")
+        check_text(self.owner, what="scope owner")
 
 
 def check_visibility(scope: Scope, visibility: Visibility) -> None:

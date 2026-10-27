@@ -50,6 +50,13 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _is_blob(path: Path) -> bool:
+    """False for the temporary file of a blob write in progress (or one a crash left behind): the
+    blob store writes through `tempfile.mkstemp`, whose names start with "tmp" (a SHA-256 in hex
+    never does). Such a file is not data, and it changes while it is being hashed."""
+    return path.is_file() and not path.name.endswith(".tmp") and not path.name.startswith("tmp")
+
+
 def _state_paths(settings: Settings) -> dict[str, Path]:
     return {
         "tokens": settings.tokens_path,
@@ -118,13 +125,12 @@ def create_backup(settings: Settings, dest: Path) -> Summary:
             members["db/hive.pgdump"] = stage / "hive.pgdump"
         blobs = settings.data_dir / "blobs"
         if blobs.is_dir():
-            for f in sorted(
-                p for p in blobs.rglob("*") if p.is_file() and not p.name.endswith(".tmp")
-            ):
+            for f in sorted(p for p in blobs.rglob("*") if _is_blob(p)):
                 members[f"blobs/{f.relative_to(blobs).as_posix()}"] = f
         for name, path in _state_paths(settings).items():
-            if path.is_file():
-                members[f"state/{name}"] = path
+            if path.is_file():  # rewritten while the server runs: archive one fixed copy
+                shutil.copy2(path, stage / f"state-{name}")
+                members[f"state/{name}"] = stage / f"state-{name}"
         manifest = {
             "format": FORMAT,
             "created_at": datetime.now(UTC).isoformat(),
@@ -211,10 +217,15 @@ def restore_backup(settings: Settings, archive: Path, *, force: bool = False) ->
                 raise ValidationError(
                     f"{data / 'hive.db'} already exists; pass --force to replace it"
                 )
+            if not (stage / "db" / "hive.db").is_file():
+                raise ValidationError("the backup holds no database; nothing was changed")
             data.mkdir(parents=True, exist_ok=True)
-            for suffix in ("", "-wal", "-shm"):
+            # copy first, swap after: a full disk or a crash must not leave no database at all
+            partial = data / "hive.db.restoring"
+            shutil.copy2(stage / "db" / "hive.db", partial)
+            for suffix in ("-wal", "-shm"):
                 (data / f"hive.db{suffix}").unlink(missing_ok=True)
-            shutil.copy2(stage / "db" / "hive.db", data / "hive.db")
+            partial.replace(data / "hive.db")
         else:
             if not settings.database_url:
                 raise ValidationError("HIVE_DATABASE_URL is required for the external profile")

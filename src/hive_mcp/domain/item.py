@@ -7,13 +7,14 @@ import hashlib
 import json
 import unicodedata
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from hive_mcp.domain.access import Acl, Tier
 from hive_mcp.domain.errors import ValidationError
 from hive_mcp.domain.scope import Scope, Visibility, check_visibility
 from hive_mcp.domain.tags import normalize_tags
+from hive_mcp.domain.text import check_text, has_bad_text
 
 MAX_TITLE = 200
 MAX_BODY = 200_000
@@ -85,8 +86,8 @@ class Item:
             self.supersedes or "",
             self.source or "",
         )
-        if any("\x00" in t for t in texts):
-            raise ValidationError("text must not contain NUL characters")
+        if has_bad_text(*texts):
+            raise ValidationError("text must not contain NUL characters or lone surrogates")
         if self.tags != normalize_tags(self.tags):
             raise ValidationError("tags must be normalised with normalize_tags()")
         if self.revision < 1:
@@ -130,6 +131,7 @@ class ItemPatch:
     remove_tags: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
+        check_text(self.title or "", self.body or "")
         if self.add_tags & self.remove_tags:
             raise ValidationError("a tag cannot be both added and removed")
         if self.add_tags != normalize_tags(self.add_tags) or self.remove_tags != normalize_tags(
@@ -184,9 +186,12 @@ class Cursor:
         try:
             ts, ident = json.loads(base64.urlsafe_b64decode(token.encode()))
             when = datetime.fromisoformat(ts)
-        except (ValueError, TypeError) as exc:
+            if when.tzinfo is None:  # naive datetimes cannot be compared with stored UTC timestamps
+                raise ValueError("naive timestamp")
+            when = when.astimezone(UTC)  # out-of-range instants overflow here, not in a database
+        except (ValueError, TypeError, OverflowError, RecursionError) as exc:
             raise ValidationError("invalid cursor") from exc
-        if when.tzinfo is None:  # naive datetimes cannot be compared with stored UTC timestamps
+        if has_bad_text(str(ident)):
             raise ValidationError("invalid cursor")
         return Cursor(when, str(ident))
 

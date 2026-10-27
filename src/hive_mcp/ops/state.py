@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import threading
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 
 class Lifecycle:
@@ -11,6 +15,8 @@ class Lifecycle:
     def __init__(self) -> None:
         self._draining = threading.Event()
         self._ready = threading.Event()
+        # Asked by /readyz while serving: False when the storage the server depends on is gone.
+        self.probe: Callable[[], Awaitable[bool]] | None = None
 
     @property
     def ready(self) -> bool:

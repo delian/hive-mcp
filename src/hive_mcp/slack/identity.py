@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("hive.slack")
 CACHE_SECONDS = 3600
+MISS_SECONDS = 60  # a failed or empty lookup is retried soon: Slack may only have hiccuped
 USERS_INFO = "https://slack.com/api/users.info"
 EMAIL_NS = "slack:email"
 
@@ -64,7 +65,12 @@ class SlackIdentity:
         if cached:
             return str(cached["email"]) or None
         email = await self._lookup(user_id)
-        await self._get_kv().put(EMAIL_NS, key, {"email": email or ""}, ttl_seconds=CACHE_SECONDS)
+        await self._get_kv().put(
+            EMAIL_NS,
+            key,
+            {"email": email or ""},
+            ttl_seconds=CACHE_SECONDS if email else MISS_SECONDS,
+        )
         return email
 
     async def _lookup(self, user_id: str) -> str | None:

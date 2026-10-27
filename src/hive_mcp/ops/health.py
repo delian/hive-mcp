@@ -1,4 +1,4 @@
-"""Liveness and readiness routes. Readiness fails while draining so proxies stop routing."""
+"""Liveness and readiness routes. Readiness fails while draining, or while the database is gone."""
 
 from __future__ import annotations
 
@@ -24,6 +24,8 @@ def health_routes(lifecycle: Lifecycle) -> list[Route]:
             return JSONResponse({"status": "draining"}, status_code=503)
         if not lifecycle.ready:
             return JSONResponse({"status": "starting"}, status_code=503)
+        if lifecycle.probe is not None and not await lifecycle.probe():
+            return JSONResponse({"status": "storage unavailable"}, status_code=503)
         return JSONResponse({"status": "ready"})
 
     return [Route("/healthz", healthz), Route("/readyz", readyz)]

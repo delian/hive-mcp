@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime  # noqa: TC003 - runtime-evaluated dataclass field
 
 from hive_mcp.domain.errors import ValidationError
+from hive_mcp.domain.text import has_bad_text
 
 RELATION = re.compile(r"^[a-z][a-z0-9_-]{0,39}$")
 # Suggested vocabulary; any slug is accepted so teams can add their own.
@@ -41,7 +42,7 @@ class Edge:
     def __post_init__(self) -> None:
         if not self.src or not self.dst or self.src == self.dst:
             raise ValidationError("an edge needs two different items")
-        if "\x00" in self.src + self.dst or not RELATION.match(self.relation):
+        if has_bad_text(self.src, self.dst) or not RELATION.match(self.relation):
             raise ValidationError("invalid edge")
 
     @property

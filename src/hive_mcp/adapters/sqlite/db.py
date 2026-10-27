@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import threading
+import time
 from typing import TYPE_CHECKING, TypeVar
 
 from hive_mcp.adapters.sqlite.schema import migrate
@@ -31,10 +32,26 @@ class Database:
             str(path), isolation_level=None, check_same_thread=False, timeout=busy_seconds
         )
         self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA journal_mode = WAL")
+        self._enable_wal(busy_seconds)
         self._conn.execute("PRAGMA synchronous = NORMAL")
         self._conn.execute("PRAGMA foreign_keys = ON")
         migrate(self._conn)
+
+    def _enable_wal(self, busy_seconds: float) -> None:
+        """Switching the journal mode takes a lock that SQLite's busy handler does not wait for,
+        so processes opening a fresh database together would fail with "database is locked"."""
+        deadline = time.monotonic() + busy_seconds
+        while True:
+            try:
+                if str(self._conn.execute("PRAGMA journal_mode").fetchone()[0]).lower() != "wal":
+                    self._conn.execute("PRAGMA journal_mode = WAL")
+                return
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc) and "busy" not in str(exc):
+                    raise
+                if time.monotonic() >= deadline:
+                    raise StorageBusy("storage busy, retry") from exc
+                time.sleep(0.01)
 
     def call(self, fn: Callable[[sqlite3.Connection], T], *, write: bool = False) -> T:
         """Run `fn` in one transaction (blocking; use `run` from async code)."""

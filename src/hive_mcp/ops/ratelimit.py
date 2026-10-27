@@ -70,6 +70,10 @@ class Rule:
     methods: frozenset[str] = frozenset()  # empty = all
     # a different limiter for particular keys (e.g. a token with its own limit); None = this rule's
     per_key: Callable[[str], Limiter | None] | None = None
+    # By-token rules key on whatever bearer string arrives, before it is known to be valid, so
+    # rotating made-up tokens would give every request a fresh bucket. The backstop also counts
+    # every request of the same address (generously: many people may share one address).
+    backstop: Limiter | None = None
 
 
 def client_key(scope: Scope) -> str:
@@ -96,6 +100,8 @@ class RateLimitMiddleware:
                     key = (token_key(scope) if rule.by_token else None) or client_key(scope)
                     limiter = (rule.per_key and rule.per_key(key)) or rule.limiter
                     wait = await limiter.ahit(f"{rule.prefixes[0]}|{key}")
+                    if wait <= 0 and rule.backstop is not None and key.startswith("tok:"):
+                        wait = await rule.backstop.ahit(f"{rule.prefixes[0]}|{client_key(scope)}")
                     if wait > 0:
                         response = JSONResponse(
                             {"error": "rate_limited", "error_description": "slow down and retry"},

@@ -121,6 +121,10 @@ class LanceVectors:
     ) -> None:
         table = self._open(model_id)
         if table is None and mats:
+            if any(
+                m.shape[0] != mats[0].shape[0] for m in mats
+            ):  # before the table fixes a dimension
+                raise ValidationError(f"model {model_id} has dimension {mats[0].shape[0]}")
             table = self._db.create_table(
                 table_name(model_id), schema=self._schema(model_id, len(mats[0]))
             )

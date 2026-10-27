@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from hive_mcp.connectors.base import SyncReport
 from hive_mcp.domain.errors import HiveError
-from hive_mcp.domain.item import ItemPatch, Status
+from hive_mcp.domain.item import Item, ItemPatch, Status
 from hive_mcp.domain.principal import Principal, Role
 from hive_mcp.domain.scope import Scope, ScopeLevel
 from hive_mcp.ports.audit import AuditEvent
@@ -98,6 +98,7 @@ class ConnectorSync:
             report.failed[doc.label] = str(exc)[:200]
             return
         ids = [i.id for i in done.items]
+        await self._reactivate(who, done.items)
         if previous:
             await self._archive(who, [i for i in previous["items"] if i not in ids])
             report.updated += 1
@@ -125,6 +126,18 @@ class ConnectorSync:
         for k in gone:
             await self._archive(who, state.pop(k)["items"])
             report.retired += 1
+
+    async def _reactivate(self, who: Principal, items: list[Item]) -> None:
+        """Ingesting text this connector imported before replays the old items, which a later
+        change or removal archived: a document that is current again must be searchable again."""
+        for item in items:
+            if item.status is not Status.ARCHIVED:
+                continue
+            try:
+                patch = ItemPatch(status=Status.ACTIVE)
+                await self._knowledge.update(who, item.id, patch, item.revision)
+            except HiveError:
+                log.warning("could not reactivate %s", item.id)
 
     async def _archive(self, who: Principal, item_ids: list[str]) -> None:
         for item_id in item_ids:

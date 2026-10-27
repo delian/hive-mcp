@@ -79,14 +79,20 @@ def pg_activity(dsn: str) -> object | None:
         return None
 
 
+def _watched_dsn(settings: Settings) -> str | None:
+    """The Postgres whose activity counters stand in for "a file changed" (embedded or external)."""
+    external = settings.profile is Profile.EXTERNAL or settings.embedded_postgres
+    return settings.database_url if external else None
+
+
 def _changed_since(settings: Settings, since: float) -> bool:
     """Has the database (or its write-ahead log) been touched after the last backup began?"""
     names = ("hive.db", "hive.db-wal", "tokens.json", "users.json")
     if any((p := settings.data_dir / n).exists() and p.stat().st_mtime > since for n in names):
         return True
-    if settings.embedded_postgres and settings.database_url:  # no file to look at: ask it
-        activity = pg_activity(settings.database_url)
-        return activity is None or activity != _PG_SEEN.get(settings.database_url)
+    if dsn := _watched_dsn(settings):  # no file to look at: ask the database
+        activity = pg_activity(dsn)
+        return activity is None or activity != _PG_SEEN.get(dsn)
     return False
 
 
@@ -96,7 +102,7 @@ def backup_once(settings: Settings, last_start: float | None, now: float) -> flo
     if last_start is not None and not _changed_since(settings, last_start):
         return last_start
     settings.backup_dir.mkdir(parents=True, exist_ok=True)
-    dsn = settings.database_url if settings.embedded_postgres else None
+    dsn = _watched_dsn(settings)
     seen = pg_activity(dsn) if dsn else None
     name = f"{PREFIX}{datetime.now(UTC):%Y%m%d-%H%M%S}{SUFFIX}"
     summary = create_backup(settings, settings.backup_dir / name)
@@ -122,7 +128,10 @@ async def backup_loop(settings: Settings) -> None:
                 log.exception("backup failed; will try again")
             await asyncio.sleep(settings.backup_every_minutes * 60)
     finally:
-        try:  # the last words of a stopping server: planned restarts lose nothing
-            await asyncio.to_thread(backup_once, settings, last, time.time())
+        # The last words of a stopping server: planned restarts lose nothing. Postgres reports
+        # its activity counters up to ~10 s late: "nothing changed" cannot be trusted, so write.
+        final_since = None if _watched_dsn(settings) else last
+        try:
+            await asyncio.to_thread(backup_once, settings, final_since, time.time())
         except (HiveError, OSError):
             log.exception("final backup failed")

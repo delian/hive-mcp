@@ -63,7 +63,7 @@ class SlackRoutes:
         config = await self._get_config()
         if not config.enabled:
             return None
-        if self._bot is None or self._bot[0] is not config:
+        if self._bot is None or self._bot[0] != config:
             self._bot = (config, self._make_bot(config))
         return self._bot
 

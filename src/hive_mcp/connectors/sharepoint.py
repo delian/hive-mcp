@@ -75,7 +75,7 @@ class SharePointConnector:
         try:
             response = await self._http.get(
                 url,
-                params=params,
+                params=params or None,  # {} would drop the query of an @odata.nextLink
                 headers={"Authorization": f"Bearer {await self._access()}"},
                 follow_redirects=True,
             )

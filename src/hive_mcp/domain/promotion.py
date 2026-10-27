@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from hive_mcp.domain import access
 from hive_mcp.domain.errors import PermissionDenied, ValidationError
 from hive_mcp.domain.item import Item, Status
+from hive_mcp.domain.text import has_bad_text
 
 if TYPE_CHECKING:
     from hive_mcp.domain.principal import Principal
@@ -62,8 +63,10 @@ class Promotion:
 
 def clean_text(value: str | None, what: str) -> str:
     text = (value or "").strip()
-    if len(text) > MAX_TEXT or "\x00" in text:
-        raise ValidationError(f"{what} must be at most {MAX_TEXT} characters without NUL")
+    if len(text) > MAX_TEXT or has_bad_text(text):
+        raise ValidationError(
+            f"{what} must be at most {MAX_TEXT} characters without NUL or lone surrogates"
+        )
     return text
 
 

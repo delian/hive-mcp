@@ -33,6 +33,8 @@ def embed_min_level(settings: Settings) -> ScopeLevel:
 
 def make_embedder(settings: Settings) -> Embedder:
     embedder = _make_embedder(settings)
+    # Services that embed note text outside indexing (kb_similar) read the same policy from here.
+    embedder.embed_min_level = embed_min_level(settings)  # type: ignore[attr-defined]
     if settings.relevance_floor is not None:
         embedder.min_similarity = settings.relevance_floor
     return embedder

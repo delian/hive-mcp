@@ -77,6 +77,10 @@ class RetentionService:
 
     async def _apply(self, action: str, item: Item) -> bool:
         if action == "purge":
+            if self._items is not None:  # an edit since the page was read restarts the clock
+                current = await self._items.get_system(item.org_id, item.id)
+                if current is None or current.revision != item.revision:
+                    return False
             await self._purge.purge_item(item, SYSTEM)
             return True
         assert self._items and self._indexing and self._audit  # noqa: S101 - wired by bootstrap

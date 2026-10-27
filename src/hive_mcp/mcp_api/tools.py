@@ -30,6 +30,7 @@ from hive_mcp.services.models import (
     RememberResult,
     provenance,
 )
+from hive_mcp.services.session_sources import LABEL as SESSION_LABEL
 from hive_mcp.services.sessions import SessionReport
 
 if TYPE_CHECKING:
@@ -58,6 +59,13 @@ def current_principal() -> Principal:
 
 def scope_label(scope: Scope) -> str:
     return f"{scope.level.name.lower()}:{scope.owner}"
+
+
+def check_session_label(session: str | None) -> None:
+    """Refuse a bad `session` label BEFORE the tool does anything: a write must not happen and then
+    fail on its label, because the agent would retry and store it twice."""
+    if session and not SESSION_LABEL.fullmatch(session):
+        raise ValidationError("session labels are 4-80 letters, digits and . _ : -")
 
 
 def _kinds(values: list[str] | None) -> frozenset[Kind]:
@@ -178,6 +186,7 @@ def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None
         """
         if not 1 <= limit <= 25:  # noqa: PLR2004
             raise ValidationError("limit must be between 1 and 25")
+        check_session_label(session)
         result = await get_services().consult.consult(
             current_principal(),
             ConsultRequest(
@@ -208,6 +217,7 @@ def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None
         """Read one item in full (use after kb_consult, or before kb_update to get its revision).
 
         Pass the `session` label you gave kb_consult to record that this work relied on the note."""
+        check_session_label(session)
         view = await get_services().knowledge.get(current_principal(), id)
         if feedback := get_services().feedback:
             await feedback.opened(current_principal(), id)
@@ -323,6 +333,7 @@ def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None
         `session` label used in kb_consult/kb_get, the stored note is linked `derived_from` the notes
         the work opened, so reviewers can see what it was built on (kb_graph).
         """
+        check_session_label(session)
         out = await _report(
             "session",
             summary=summary,

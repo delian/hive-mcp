@@ -40,7 +40,7 @@ class TeamsRoutes:
         config = await self._get_config()
         if not config.enabled:
             return Response(status_code=404)
-        if self._built is None or self._built[0] is not config:
+        if self._built is None or self._built[0] != config:
             self._built = (config, *self._make(config))
         _, verifier, bot = self._built
         body = await request.body()

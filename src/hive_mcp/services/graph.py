@@ -13,6 +13,7 @@ from hive_mcp.domain import access
 from hive_mcp.domain.edge import Edge, normalize_relation
 from hive_mcp.domain.errors import NotFound, PermissionDenied, ValidationError
 from hive_mcp.domain.item import ItemView, Status
+from hive_mcp.domain.text import check_text
 from hive_mcp.ports.audit import AuditEvent
 
 if TYPE_CHECKING:
@@ -57,6 +58,7 @@ class GraphService:
         """Link an item you may edit to any item you can read (your own or another group's).
         True if the link is new; repeating it is harmless."""
         edge_relation = normalize_relation(relation)
+        check_text(src, dst, what="id")
         source = await self._items.get(principal, src)
         await self._items.get(principal, dst)  # NotFound when invisible
         if not access.can_write(principal, source.item.acl, source.item.author_id):
@@ -68,6 +70,7 @@ class GraphService:
         return created
 
     async def unlink(self, principal: Principal, src: str, dst: str, relation: str) -> None:
+        check_text(src, dst, what="id")
         edge = await self._edges.get(principal.org_id, src, dst, normalize_relation(relation))
         if edge is None:
             raise NotFound("no such link")
@@ -94,6 +97,7 @@ class GraphService:
     ) -> GraphResult:
         if not 1 <= depth <= MAX_DEPTH or not 1 <= max_nodes <= MAX_NODES:
             raise ValidationError(f"depth must be 1-{MAX_DEPTH} and max_nodes 1-{MAX_NODES}")
+        check_text(item_id, what="id")
         wanted = frozenset(normalize_relation(r) for r in relations)
         start = await self._items.get(principal, item_id)
         seen: dict[str, GraphNode] = {item_id: GraphNode(start, 0)}

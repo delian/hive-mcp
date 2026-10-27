@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,9 @@ log = logging.getLogger("hive.hook")
 MIN_PROMPT_WORDS = 6
 MAX_PROMPT_CHARS = 500
 MAX_CONTEXT_CHARS = 3000
+HOOK_BUDGET = 28.0  # seconds: the installed PreCompact/SessionEnd hooks are killed at 30
+UPLOAD_DEADLINE = 15.0
+MIN_UPLOAD = 3.0
 
 
 def project_name(cwd: str) -> str:
@@ -84,6 +88,7 @@ async def prompt_submit(payload: dict[str, Any]) -> str | None:
 
 
 async def _report(tool: str, payload: dict[str, Any], reason: str) -> None:
+    started = time.monotonic()
     path = str(payload.get("transcript_path", ""))
     turns = read_turns(path)
     if not turns:
@@ -99,7 +104,8 @@ async def _report(tool: str, payload: dict[str, Any], reason: str) -> None:
     }
     if tool == "kb_report_session" and (label := session_label(payload)):
         args["session"] = label  # the stored note links to the notes this session opened
-    await call_tool(tool, args, deadline=15.0)
+    left = HOOK_BUDGET - (time.monotonic() - started)  # a slow summarizer leaves less time
+    await call_tool(tool, args, deadline=min(UPLOAD_DEADLINE, max(MIN_UPLOAD, left)))
 
 
 async def pre_compact(payload: dict[str, Any]) -> str | None:

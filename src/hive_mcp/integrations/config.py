@@ -12,6 +12,8 @@ SLACK, TEAMS = "slack", "teams"
 NAMES = (SLACK, TEAMS)
 SECRET_FIELDS = {SLACK: ("signing_secret", "bot_token"), TEAMS: ("app_password",)}
 ID = re.compile(r"[A-Za-z0-9._:-]{1,80}")
+# Teams conversation ids look like 19:abc...@thread.tacv2 (Slack channel ids are plain letters)
+CHANNEL = re.compile(r"[A-Za-z0-9._:@-]{1,200}")
 PROJECT = re.compile(r"[A-Za-z0-9._-]{1,64}")
 MAX_MAP = 200
 
@@ -40,7 +42,7 @@ class IntegrationConfig:
         if len(self.channel_projects) > MAX_MAP or len(self.users) > MAX_MAP:
             raise ValidationError(f"at most {MAX_MAP} channel and user entries")
         for channel, project in self.channel_projects.items():
-            if not ID.fullmatch(channel) or not PROJECT.fullmatch(project):
+            if not CHANNEL.fullmatch(channel) or not PROJECT.fullmatch(project):
                 raise ValidationError(f"bad channel to project entry {channel!r}: {project!r}")
         for user, email in self.users.items():
             if not ID.fullmatch(user) or "@" not in email:

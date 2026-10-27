@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from hive_mcp.ports.audit import AuditLog
     from hive_mcp.ports.kv import KeyValueStore
 
+log = logging.getLogger(__name__)
 NS = "integration:config"
 CACHE_SECONDS = 5.0
 EDITABLE = ("enabled", "workspace", "app_id", "allow_mentions", "channel_projects", "users")
@@ -68,8 +70,15 @@ class IntegrationStore:
             config = self._defaults[name]
         else:
             sealed: dict[str, str] = record.get("sealed", {})
-            secrets = {k: self._box.open(k, v) for k, v in sealed.items() if v}
-            config = IntegrationConfig.from_record(name, record["config"], secrets)
+            try:
+                secrets = {k: self._box.open(k, v) for k, v in sealed.items() if v}
+                config = IntegrationConfig.from_record(name, record["config"], secrets)
+            except ValidationError:
+                # the secret key changed or the file is damaged: the integration is off until an
+                # admin enters the secrets again; a broken setting must not break every request
+                log.error("integration %s: stored secrets cannot be read; it is switched off", name)
+                config = IntegrationConfig.from_record(name, record["config"], {})
+                config = config.with_changes(enabled=False)
         self._cache[name] = (self._now(), config)
         return config
 

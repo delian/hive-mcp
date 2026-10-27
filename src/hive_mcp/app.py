@@ -79,7 +79,8 @@ def rate_limit_rules(
     if settings.rate_limit_auth:
         per_min = settings.rate_limit_auth
         auth_paths = (
-            "/authorize", "/token", "/revoke", "/oauth", "/admin/login", "/admin/google", "/slack",
+            "/authorize", "/token", "/revoke", "/oauth", "/admin/login", "/admin/google",
+            "/slack", "/teams",
         )  # fmt: skip
         rules.append(Rule(auth_paths, make(per_min, max(per_min // 2, 5))))
     if settings.rate_limit_mcp:

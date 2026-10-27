@@ -15,14 +15,20 @@ from hive_mcp.security.oauth.upstream import UpstreamError
 
 TOKEN_URL = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"  # noqa: S105 - public URL
 SCOPE = "https://api.botframework.com/.default"
-ALLOWED_SUFFIXES = (".botframework.com", ".botframework.us", ".trafficmanager.net")
+ALLOWED_SUFFIXES = (".botframework.com", ".botframework.us")
+# trafficmanager.net is a shared namespace anyone can register names in: only Teams' own host
+ALLOWED_HOSTS = ("smba.trafficmanager.net",)
 HTTP_TIMEOUT = 10.0
 
 
 def check_service_url(url: str) -> str:
     parsed = urlparse(url)
     host = parsed.hostname or ""
-    if parsed.scheme != "https" or parsed.username or not host.endswith(ALLOWED_SUFFIXES):
+    if (
+        parsed.scheme != "https"
+        or parsed.username
+        or not (host.endswith(ALLOWED_SUFFIXES) or host in ALLOWED_HOSTS)
+    ):
         raise UpstreamError("refusing a service url outside the Bot Framework")
     return url.rstrip("/")
 

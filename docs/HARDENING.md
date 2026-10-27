@@ -59,3 +59,32 @@ Shared memory is read by other people's agents, so a note is also an attack surf
   the content: editing the text clean removes it, editing it back restores it. Approvers see the tag
   on the item they are asked to promote. Matches are flags, not rejections: heuristics can be wrong,
   and a hard block would be easy to probe. Agents should treat flagged items as untrusted data.
+
+## Second review pass (chat front doors, connectors, integrations, model, leases)
+
+Reviewed by reading each new module against the same checklist (who can reach it, what is trusted, what leaves the
+server, what an attacker controls) and by fuzzing the parsers (`tests/fuzz`, Hypothesis plus adversarial inputs). Found
+and fixed:
+
+- **A ReDoS in the prompt-injection heuristic** (found by the fuzz test): `^\s*` at every line start is quadratic on a
+  long run of newlines (a 100 KB note took minutes). The pattern now uses `[ \t]`; adversarial inputs for every text check
+  are a regression test with a time limit.
+- **Teams service URL allow-list** accepted any `*.trafficmanager.net` host, a namespace anyone can register names in. Only
+  `smba.trafficmanager.net` and `*.botframework.com/.us` are allowed (replies carry the bot token).
+- **Undecryptable integration secrets** (after `HIVE_SECRET_KEY` changed) made every request to the chat routes fail with
+  an error. The integration is now switched off with a log line until an admin enters the secrets again.
+- `/teams/*` was missing from the login-route rate limit (Slack already was).
+- A corrupt or truncated backup archive raised a raw tar error instead of a validation error (found earlier).
+- `kb_admin_integration_set` silently ignored secret arguments; it now refuses them with an explanation.
+
+Checked and fine: Slack and Teams requests are authenticated before the body is trusted (signature or Bot Framework token,
+replay protection); chat replies escape markup (Slack mrkdwn) or are plain text (Teams); channel replies quote only what the
+whole channel may see; identities come from the user directory and are checked on every call; integration secrets are
+encrypted at rest, never returned, and not accepted through chat tools; connectors fetch with the URL safety rules or fixed
+API hosts, put everything through the write sanitiser, and never retire documents after a failed or suspicious listing;
+the model only sees notes at or above `HIVE_LLM_MIN_SCOPE` and its answers are only ever proposals; lease and retired-list
+files contain no user input in their paths. Office and PDF extractors survive random bytes, malformed containers, a zip
+bomb and 100,000-level nesting within the time limits (tests/fuzz).
+
+Not covered: a penetration test against a real deployment, dependency-level fuzzing of the PDF/Office libraries beyond
+what the tests above exercise, and anything that needs real Slack, Teams, Google or Azure to observe.

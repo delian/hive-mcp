@@ -110,3 +110,32 @@ def test_public_view_never_contains_secret_values():
     cfg = IntegrationConfig("slack", True, "T1", secrets={"signing_secret": "hunter2hunter2"})
     assert "hunter2" not in str(cfg.public()) and cfg.public()["secrets_set"] == ["signing_secret"]
     assert "secrets_set" not in cfg.to_record() and "secrets" not in cfg.to_record()
+
+
+async def test_secrets_that_cannot_be_read_switch_the_integration_off_instead_of_failing(
+    stack, caplog
+):
+    b = stack.backend
+    first = IntegrationStore(
+        lambda: b.kv, lambda: b.audit, SecretBox(b"k" * 32), env_defaults(Settings()), b.clock
+    )
+    await first.update(
+        ROOT,
+        "slack",
+        {"enabled": True, "workspace": "T1"},
+        {"signing_secret": "s" * 20, "bot_token": "xoxb-1"},
+    )
+    rotated = IntegrationStore(  # HIVE_SECRET_KEY was changed
+        lambda: b.kv,
+        lambda: b.audit,
+        SecretBox(b"other-key" * 4),
+        env_defaults(Settings()),
+        b.clock,
+    )
+    config = await rotated.get("slack")
+    assert not config.enabled and config.secrets == {} and config.workspace == "T1"
+    assert "cannot be read" in caplog.text
+    fixed = await rotated.update(
+        ROOT, "slack", {"enabled": True}, {"signing_secret": "n" * 20, "bot_token": "xoxb-2"}
+    )
+    assert fixed.enabled and fixed.secrets["bot_token"] == "xoxb-2"  # the admin enters them again

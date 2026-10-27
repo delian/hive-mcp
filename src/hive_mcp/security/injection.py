@@ -26,7 +26,8 @@ _RULES: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("role-markers", r"<\|(?:im_start|im_end|system|assistant)\|>|\[/?INST\]|<<SYS>>"),
         (
             "fake-system-turn",
-            r"(?m)^\s*(?:system|assistant)\s*(?:prompt|message)?\s*:\s*you (?:are|must|will|should)\b",
+            # [ \t] and not \s: `^\s*` at every line start is quadratic on a long run of newlines
+            r"(?m)^[ \t]*(?:system|assistant)[ \t]*(?:prompt|message)?[ \t]*:[ \t]*you (?:are|must|will|should)\b",
         ),
         (
             "exfiltration",

@@ -54,3 +54,25 @@ def test_the_mac_is_bound_to_the_transaction_so_a_cookie_cannot_be_relabelled():
 def test_a_key_file_can_be_created_in_a_directory_that_already_exists(tmp_path):
     key = load_secret_key(None, tmp_path / "secret.key")  # the parent exists: that is fine
     assert len(key) == 32
+
+
+def test_a_damaged_key_file_is_refused_with_its_path_and_never_replaced(tmp_path):
+    import pytest
+
+    from hive_mcp.domain.errors import ValidationError
+
+    for content in ("", "not hex at all", "ab" * 8):  # empty, unparsable, too short
+        path = tmp_path / "key"
+        path.write_text(content)
+        with pytest.raises(ValidationError) as caught:
+            load_secret_key(None, path)
+        assert str(caught.value) == f"{path} is empty or damaged; delete it to generate a new key"
+        assert path.read_text() == content
+
+
+def test_a_generated_key_has_the_full_length(tmp_path):
+    from hive_mcp.security.oauth.cookies import KEY_BYTES
+
+    path = tmp_path / "sub" / "key"
+    key = load_secret_key(None, path)
+    assert len(key) == KEY_BYTES and bytes.fromhex(path.read_text()) == key

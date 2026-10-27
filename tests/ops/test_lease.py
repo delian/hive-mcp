@@ -249,3 +249,48 @@ def test_the_same_owner_may_take_its_own_lease_again_at_once(tmp_path):
     finally:
         again.release()
         first.release()
+
+
+def test_a_revision_retired_while_waiting_stops_waiting_and_is_named(tmp_path, monkeypatch):
+    import threading
+
+    from hive_mcp.ops.lease import RETIRED_FILE
+
+    monkeypatch.setattr(lease_module, "POLL_SECONDS", 0.05)
+    holder = Lease(tmp_path, "holder")
+    holder.acquire(0)
+    try:
+        threading.Timer(
+            0.4, lambda: (tmp_path / RETIRED_FILE).write_text(json.dumps({"r1": time.time()}))
+        ).start()
+        with pytest.raises(ValidationError) as caught:
+            Lease(tmp_path, "waiter", revision="r1").acquire(10)
+        assert str(caught.value) == (
+            "revision r1 was handed over to a newer one and must not start again"
+        )
+    finally:
+        holder.release()
+
+
+def test_a_retired_revision_is_refused_before_waiting_and_is_named(tmp_path):
+    from hive_mcp.ops.lease import RETIRED_FILE
+
+    (tmp_path / RETIRED_FILE).write_text(json.dumps({"r9": time.time()}))
+    with pytest.raises(ValidationError) as caught:
+        Lease(tmp_path, "x", revision="r9").acquire(0)
+    assert "revision r9 was handed over" in str(caught.value)
+
+
+def test_the_hand_off_callback_runs_exactly_once(tmp_path, monkeypatch):
+    from hive_mcp.ops.lease import HANDOFF_FILE
+
+    monkeypatch.setattr(lease_module, "WATCH_SECONDS", 0.02)
+    calls: list[int] = []
+    lease = Lease(tmp_path, "old", revision="r1", on_handoff=lambda: calls.append(1))
+    lease.acquire(0)
+    try:
+        (tmp_path / HANDOFF_FILE).write_text(json.dumps({"revision": "r2", "owner": "new"}))
+        time.sleep(0.5)  # many watch ticks with the request still on disk
+        assert calls == [1]
+    finally:
+        lease.release()

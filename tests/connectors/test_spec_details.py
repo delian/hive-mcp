@@ -116,3 +116,23 @@ def test_urls_and_paths_must_be_lists_of_the_right_things():
 def test_a_bad_name_alone_does_not_mention_options():
     entry = {**BASE, "type": "urls", "urls": ["u"], "name": "Docs"}
     assert refused(entry) == "connector 'Docs': a lowercase name is required"
+
+
+def test_every_minutes_errors_name_the_connector():
+    for bad in ("abc", True, 1.5, None, [3]):
+        message = refused({**BASE, "type": "urls", "urls": ["u"], "every_minutes": bad})
+        assert message == "connector docs: every_minutes must be a whole number"
+
+
+def test_a_bool_is_not_a_number_of_minutes_and_a_numeric_string_is():
+    assert refused({**BASE, "type": "urls", "urls": ["u"], "every_minutes": False}).endswith(
+        "must be a whole number"
+    )
+    [spec] = parse_specs([{**BASE, "type": "urls", "urls": ["u"], "every_minutes": "45"}])
+    assert spec.every_minutes == 45
+
+
+def test_tags_must_be_a_list_of_strings_and_the_message_names_the_connector():
+    for bad in ("notalist", [1, 2], ["ok", 3], {"a": "b"}):
+        message = refused({**BASE, "type": "urls", "urls": ["u"], "tags": bad})
+        assert message == "connector docs: tags must be a list of tag names"

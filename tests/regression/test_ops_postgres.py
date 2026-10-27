@@ -105,13 +105,17 @@ def test_bug_ops_3_migrate_does_not_print_the_database_password(
     """BUG-OPS-3: `hive migrate` echoed the target URL as typed, and `describe()` (used in the
     messages of both directions) kept the password because `make_conninfo(password=None)` does not
     remove one: the secret reached the terminal and any CI log that captured it."""
+    import re
+
     from typer.testing import CliRunner
 
     from hive_mcp.adapters.sqlite.db import Database
     from hive_mcp.cli import cli
 
-    secret = "hunter2-s3cret"
-    url = f"{empty_pg_database} password={secret}"
+    # CI's server needs its real password; a local one trusts any, so use a made-up one there
+    found = re.search(r"password=(\S+)", empty_pg_database)
+    secret = found.group(1) if found else "hunter2-s3cret"
+    url = empty_pg_database if found else f"{empty_pg_database} password={secret}"
     source = tmp_path / "src"
     source.mkdir()
     Database(source / "hive.db").close()

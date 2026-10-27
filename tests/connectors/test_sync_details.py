@@ -179,3 +179,59 @@ async def test_an_item_that_cannot_be_archived_is_skipped_with_a_warning(stack, 
     with caplog.at_level("WARNING", logger="hive_mcp.connectors.sync"):
         await sync._archive(BOT, ["no-such-item"])
     assert [r.getMessage() for r in caplog.records] == ["could not archive no-such-item"]
+
+
+async def _archived_items(stack, sync, texts):
+    src = Fake()
+    src.docs = {k: (t, "v1") for k, t in texts.items()}
+    await sync.run(SPEC, src)
+    ids = [
+        i
+        for s in (await stack.backend.kv.get(STATE_NS, "wiki"))["docs"].values()
+        for i in s["items"]
+    ]
+    return src, ids
+
+
+async def test_reactivation_skips_active_items_and_revives_every_archived_one(stack, sync):
+    from hive_mcp.domain.item import Status
+
+    _, ids = await _archived_items(stack, sync, {"a": "alpha", "b": "beta", "c": "gamma"})
+    await sync._archive(BOT, ids[1:])  # the first stays active: it must not stop the loop
+    items = [(await stack.knowledge.get(BOT, i)).item for i in ids]
+    assert [i.status for i in items] == [Status.ACTIVE, Status.ARCHIVED, Status.ARCHIVED]
+    await sync._reactivate(BOT, items)
+    after = [(await stack.knowledge.get(BOT, i)).item for i in ids]
+    assert [i.status for i in after] == [Status.ACTIVE] * 3
+    assert after[0].revision == items[0].revision  # the active one was left alone
+
+
+async def test_a_reactivation_that_fails_is_logged_and_the_rest_continue(stack, sync, caplog):
+    import dataclasses
+
+    from hive_mcp.domain.item import Status
+
+    _, ids = await _archived_items(stack, sync, {"a": "alpha", "b": "beta"})
+    await sync._archive(BOT, ids)
+    items = [(await stack.knowledge.get(BOT, i)).item for i in ids]
+    stale = dataclasses.replace(items[0], revision=items[0].revision + 7)
+    with caplog.at_level("WARNING"):
+        await sync._reactivate(BOT, [stale, items[1]])
+    assert [r.getMessage() for r in caplog.records] == [f"could not reactivate {ids[0]}"]
+    assert (await stack.knowledge.get(BOT, ids[0])).item.status is Status.ARCHIVED
+    assert (await stack.knowledge.get(BOT, ids[1])).item.status is Status.ACTIVE
+
+
+async def test_a_document_that_returns_to_an_earlier_text_is_searchable_again(stack, sync):
+    from hive_mcp.domain.item import Status
+
+    src = Fake()
+    src.docs = {"a": ("alpha original text", "v1")}
+    await sync.run(SPEC, src)
+    first = (await stack.backend.kv.get(STATE_NS, "wiki"))["docs"][hkey("a")]["items"]
+    src.docs = {"a": ("completely different words", "v2")}
+    await sync.run(SPEC, src)
+    assert (await stack.knowledge.get(BOT, first[0])).item.status is Status.ARCHIVED
+    src.docs = {"a": ("alpha original text", "v3")}
+    await sync.run(SPEC, src)
+    assert (await stack.knowledge.get(BOT, first[0])).item.status is Status.ACTIVE

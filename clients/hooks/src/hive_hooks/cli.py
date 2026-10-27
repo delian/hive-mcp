@@ -8,12 +8,13 @@ from pathlib import Path  # noqa: TC003 - typer reads the annotation at runtime
 
 import typer
 
-from hive_hooks import hooks, install
+from hive_hooks import cli_init, hooks, install
 from hive_hooks.install import HooksError
 
 app = typer.Typer()
 hooks_app = typer.Typer(no_args_is_help=True, help="Connect coding agents to the knowledge base.")
 app.add_typer(hooks_app, name="hooks")
+app.command("init")(cli_init.init)
 
 
 @app.command("hook", hidden=True)

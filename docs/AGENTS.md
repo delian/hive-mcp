@@ -18,6 +18,23 @@ claude mcp add --transport http hive "$HIVE_URL" --header "Authorization: Bearer
 hive-hooks hooks install                         # --scope project to share via git, --no-prompt-hook to skip per-prompt search
 hive-hooks hooks status                          # shows where hooks are installed and whether the server answers
 ```
+### One command
+`hive-hooks init` does the whole setup and never writes the token into a project file:
+```bash
+export HIVE_TOKEN=hive_...
+hive-hooks init --url https://kb.example.com/mcp --editor claude,vscode,cursor --agents-file AGENTS.md --save-token
+```
+It installs the hooks (`--scope user|project|local`, or `--no-hooks`), merges a `hive` server into `.mcp.json`
+(Claude Code), `.vscode/mcp.json` (VS Code, which asks for the token once) and `.cursor/mcp.json` (Cursor) in the current
+project (`--root` to change), puts the instructions note between markers in `--agents-file`, optionally stores the token in
+`~/.config/hive/token` with owner-only permissions (`--save-token`), and finally tries the server. Other servers in those
+files stay; running it again changes nothing. On a fresh machine `scripts/install_client.sh --url ...` installs the client
+with `uv` first and then runs the same command. Tagged releases (`v*`) attach wheels for the server and the client to the
+GitHub release; publishing to PyPI is opt-in (see `.github/workflows/release.yml`).
+
+IDE extensions (a VS Code or JetBrains plugin with its own UI) are not built: those editors reach the knowledge base through
+their MCP support, which `init` configures.
+
 | Hook | What it does |
 |---|---|
 | `SessionStart` | tells the agent the knowledge base exists and lists what it holds about this project (top 5) |

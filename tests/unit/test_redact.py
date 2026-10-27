@@ -67,7 +67,7 @@ def test_never_raises_and_is_idempotent(text):
 
 
 def test_repeated_key_headers_are_masked_in_linear_time():
-    import time  # noqa: PLC0415
+    import time
 
     hostile = "-----BEGIN PRIVATE KEY-----" * 7000  # 190 KB; a lazy regex needs ~5 s for this
     started = time.perf_counter()

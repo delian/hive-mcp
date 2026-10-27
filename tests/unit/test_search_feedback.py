@@ -150,7 +150,7 @@ async def test_feedback_is_off_unless_enabled(tmp_path):
 async def populate(settings: Settings) -> str:
     services = await build_services(settings)
     try:
-        from hive_mcp.services.models import RememberRequest  # noqa: PLC0415
+        from hive_mcp.services.models import RememberRequest
 
         made = await services.knowledge.remember(
             ALICE, RememberRequest(title="Radar range", body="Range follows from pulse delay.")

@@ -612,9 +612,9 @@ async def test_history_tools_over_mcp(live: Live) -> None:
 
 
 async def test_office_and_url_ingestion_over_mcp(live: Live) -> None:
-    import io  # noqa: PLC0415
+    import io
 
-    from docx import Document  # noqa: PLC0415
+    from docx import Document
 
     doc = Document()
     doc.add_heading("Calibration log", level=1)

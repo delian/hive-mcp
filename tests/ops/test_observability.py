@@ -107,7 +107,7 @@ def test_route_groups():
 
 
 async def test_job_gauges_follow_the_queue():
-    from hive_mcp.adapters.memory import MemoryBackend  # noqa: PLC0415
+    from hive_mcp.adapters.memory import MemoryBackend
 
     backend = MemoryBackend()
     await backend.jobs.enqueue("o", "embed", {})
@@ -117,7 +117,7 @@ async def test_job_gauges_follow_the_queue():
         class vector_admin:
             @staticmethod
             async def status():
-                from hive_mcp.services.vector_admin import VectorStatus  # noqa: PLC0415
+                from hive_mcp.services.vector_admin import VectorStatus
 
                 return VectorStatus("m", 3, 4, {})
 
@@ -183,7 +183,7 @@ def test_json_lines_carry_the_request_id_extras_and_exceptions():
     try:
         raise ValueError("boom")
     except ValueError:
-        import sys  # noqa: PLC0415
+        import sys
 
         failing = logging.LogRecord("x", logging.ERROR, "f", 1, "bad", (), sys.exc_info())
     assert "ValueError: boom" in json.loads(JsonFormatter().format(failing))["exc"]
@@ -209,8 +209,8 @@ def test_configure_logging_replaces_its_own_handler_only(capsys):
 
 
 async def test_stale_job_gauges_disappear_when_the_queue_drains():
-    from hive_mcp.adapters.memory import MemoryBackend  # noqa: PLC0415
-    from hive_mcp.services.vector_admin import VectorStatus  # noqa: PLC0415
+    from hive_mcp.adapters.memory import MemoryBackend
+    from hive_mcp.services.vector_admin import VectorStatus
 
     backend = MemoryBackend()
     job = await backend.jobs.enqueue("o", "embed", {})
@@ -234,11 +234,11 @@ async def test_stale_job_gauges_disappear_when_the_queue_drains():
 
 
 async def test_tool_outcomes_distinguish_expected_and_unexpected_failures():
-    from mcp.server.mcpserver.exceptions import ToolError  # noqa: PLC0415
+    from mcp.server.mcpserver.exceptions import ToolError
 
-    from hive_mcp.domain.errors import NotFound  # noqa: PLC0415
-    from hive_mcp.mcp_api.errors import guarded  # noqa: PLC0415
-    from hive_mcp.ops.metrics import METRICS  # noqa: PLC0415
+    from hive_mcp.domain.errors import NotFound
+    from hive_mcp.mcp_api.errors import guarded
+    from hive_mcp.ops.metrics import METRICS
 
     @guarded
     async def probe_ok() -> int:

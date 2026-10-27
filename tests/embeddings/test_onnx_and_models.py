@@ -163,8 +163,8 @@ def test_model_ids_differ_when_vectors_would_differ():
 
 
 async def test_onnx_reranker_scores_pairs_in_order_and_batches(monkeypatch):
-    from hive_mcp.embeddings.models import MINILM_RERANKER  # noqa: PLC0415
-    from hive_mcp.embeddings.rerank import BATCH, OnnxReranker  # noqa: PLC0415
+    from hive_mcp.embeddings.models import MINILM_RERANKER
+    from hive_mcp.embeddings.rerank import BATCH, OnnxReranker
 
     class PairTokenizer:
         def __init__(self):

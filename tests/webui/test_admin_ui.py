@@ -380,7 +380,7 @@ async def test_history_is_limited_to_what_the_viewer_may_decide(ui: Live) -> Non
 
 
 async def test_history_pages_and_survives_deleted_items(ui: Live, monkeypatch) -> None:
-    from hive_mcp.webui import routes  # noqa: PLC0415
+    from hive_mcp.webui import routes
 
     monkeypatch.setattr(routes, "HISTORY_PAGE", 2)  # the server runs in this process
     for n in range(3):

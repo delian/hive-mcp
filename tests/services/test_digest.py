@@ -172,7 +172,7 @@ async def test_each_person_gets_their_own_digest_once_a_week(stack, mailing):
 async def test_two_replicas_do_not_double_send(stack, mailing):
     make, outbox, _ = mailing
     await add(stack, person(BOB), "Shared news", P1)
-    import asyncio  # noqa: PLC0415
+    import asyncio
 
     await asyncio.gather(make().send_all(), make().send_all())
     assert [n.recipients for n in outbox.sent].count(("alice@acme.com",)) <= 1
@@ -202,13 +202,13 @@ async def test_a_failed_send_is_retried_at_the_next_round(stack, mailing):
 
 # ---------------------------------------------------------------- items changed by others
 async def edit(stack, who, item, title):
-    from hive_mcp.domain.item import ItemPatch  # noqa: PLC0415
+    from hive_mcp.domain.item import ItemPatch
 
     return await stack.knowledge.update(who, item.id, ItemPatch(title=title), item.revision)
 
 
 async def test_old_items_edited_by_someone_else_are_listed_with_the_editor(stack, digests):
-    from hive_mcp.domain.principal import Role  # noqa: PLC0415
+    from hive_mcp.domain.principal import Role
 
     editor = Principal("eddie", "org1", Role.EDITOR, projects=frozenset({"p1"}))
     old = await add(stack, BOB, "Dwell plan", P1)

@@ -153,7 +153,7 @@ async def test_a_failing_channel_is_retried_alone(stack, wired):
 
 async def test_notification_problems_never_break_the_workflow(stack, wired, monkeypatch):
     promotions, _, _, _ = wired
-    from hive_mcp.domain.errors import StorageBusy  # noqa: PLC0415
+    from hive_mcp.domain.errors import StorageBusy
 
     async def boom(*a, **k):
         raise StorageBusy("queue down")

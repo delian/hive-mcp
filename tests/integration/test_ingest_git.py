@@ -85,13 +85,13 @@ def test_cli_ingests_a_repo_idempotently_with_repo_tag_and_source(repo, tmp_path
         and "docs/guide.md: 1 parts, 0 new" in again.output
     )
 
-    from hive_mcp.adapters.sqlite import SqliteBackend  # noqa: PLC0415
-    from hive_mcp.domain.item import ItemQuery  # noqa: PLC0415
-    from hive_mcp.domain.principal import Principal  # noqa: PLC0415
+    from hive_mcp.adapters.sqlite import SqliteBackend
+    from hive_mcp.domain.item import ItemQuery
+    from hive_mcp.domain.principal import Principal
 
     backend = SqliteBackend(tmp_path / "data")
     try:
-        import asyncio  # noqa: PLC0415
+        import asyncio
 
         page = asyncio.run(backend.items.list(Principal("u1", "o1"), ItemQuery(limit=10)))
     finally:

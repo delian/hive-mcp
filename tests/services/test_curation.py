@@ -189,7 +189,7 @@ async def test_similar_finds_near_duplicates_and_respects_visibility(stack):
 async def test_similar_ignores_archived_and_validates(stack):
     a = await note(stack, ALICE, "a", "unique pelican words")
     b = await note(stack, ALICE, "b", "unique pelican words")
-    from hive_mcp.domain.item import ItemPatch  # noqa: PLC0415
+    from hive_mcp.domain.item import ItemPatch
 
     await stack.knowledge.update(ALICE, b.id, ItemPatch(status=Status.ARCHIVED), 1)
     assert await stack.curation.similar(ALICE, a.id, min_score=0.1) == []

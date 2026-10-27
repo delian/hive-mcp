@@ -52,7 +52,7 @@ async def test_guarded_converts_expected_errors_and_masks_unexpected_ones():
 
 
 def test_building_the_server_registers_each_prompt_once(caplog):
-    from hive_mcp.mcp_api.server import build_mcp  # noqa: PLC0415
+    from hive_mcp.mcp_api.server import build_mcp
 
     with caplog.at_level("WARNING"):
         build_mcp(lambda: None)

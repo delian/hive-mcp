@@ -190,7 +190,7 @@ def test_registration_over_http_respects_the_allow_list(tmp_path, google):
 
 # ---------------------------------------------------------------- revoke endpoint input
 def test_revoke_rejects_odd_content_lengths_without_crashing(tmp_path, google):
-    import socket  # noqa: PLC0415
+    import socket
 
     live = _oauth_server(tmp_path, google)
     try:

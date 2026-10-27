@@ -238,7 +238,7 @@ def test_the_last_reply_and_later_work_count_more_and_the_score_never_goes_negat
 
 
 async def test_a_summarizer_that_is_too_slow_is_killed_not_left_running(tmp_path, monkeypatch):
-    import os  # noqa: PLC0415
+    import os
 
     pid_file = tmp_path / "pid"
     command = script(

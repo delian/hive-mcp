@@ -51,7 +51,7 @@ def test_vectors_status_and_prune_commands(tmp_path, monkeypatch):
     monkeypatch.setenv(
         "HIVE_EMBEDDER", "onnx"
     )  # pretend the embedder changed (no model files needed to inspect)
-    from hive_mcp.embeddings import factory  # noqa: PLC0415
+    from hive_mcp.embeddings import factory
 
     monkeypatch.setattr(factory, "make_embedder", lambda s: factory.HashingEmbedder(64))
     monkeypatch.setattr("hive_mcp.bootstrap.make_embedder", lambda s: factory.HashingEmbedder(64))

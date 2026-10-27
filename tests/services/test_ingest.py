@@ -92,10 +92,10 @@ async def test_documents_with_too_many_parts_are_refused_before_storing(stack):
 
 
 async def test_parsing_a_document_does_not_freeze_the_event_loop(stack, monkeypatch):
-    import asyncio  # noqa: PLC0415
-    import time  # noqa: PLC0415
+    import asyncio
+    import time
 
-    from hive_mcp.ingest.extract import extract_text as real  # noqa: PLC0415
+    from hive_mcp.ingest.extract import extract_text as real
 
     def slow(name, data, ocr=None):
         time.sleep(0.4)  # a hostile PDF that takes a while to parse
@@ -119,16 +119,16 @@ async def test_parsing_a_document_does_not_freeze_the_event_loop(stack, monkeypa
 
 
 async def test_scanned_documents_and_images_are_ingested_only_when_ocr_is_on(stack):
-    import io  # noqa: PLC0415
-    import shutil  # noqa: PLC0415
+    import io
+    import shutil
 
-    import pytest  # noqa: PLC0415
+    import pytest
 
     if not (shutil.which("tesseract") and shutil.which("pdftoppm")):
         pytest.skip("tesseract/poppler absent")
-    from PIL import Image, ImageDraw, ImageFont  # noqa: PLC0415
+    from PIL import Image, ImageDraw, ImageFont
 
-    from hive_mcp.ingest.ocr import OcrConfig  # noqa: PLC0415
+    from hive_mcp.ingest.ocr import OcrConfig
 
     image = Image.new("RGB", (1100, 200), "white")
     ImageDraw.Draw(image).text(

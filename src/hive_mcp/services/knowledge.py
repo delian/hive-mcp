@@ -13,7 +13,8 @@ from hive_mcp.domain.principal import Principal, Role
 from hive_mcp.domain.scope import Scope, ScopeLevel, Visibility
 from hive_mcp.domain.tags import normalize_tags
 from hive_mcp.ports.audit import AuditEvent
-from hive_mcp.security.redact import redact
+from hive_mcp.security.injection import FLAG_TAG
+from hive_mcp.security.sanitize import sanitize
 from hive_mcp.services.models import RememberRequest, RememberResult
 
 if TYPE_CHECKING:
@@ -70,27 +71,25 @@ class KnowledgeService:
     async def remember(self, principal: Principal, req: RememberRequest) -> RememberResult:
         scope = req.scope or Scope(ScopeLevel.PRIVATE, principal.id)
         _require_sharing_allowed(principal, scope, req.visibility)
-        title, body = redact(req.title), redact(req.body)
-        size = len(title.text) + len(body.text)
+        clean = sanitize(req.title, req.body)
+        size = len(clean.title) + len(clean.body)
         if self._quota:
             await self._quota.check(principal, size)
-        findings = {
-            k: title.findings.get(k, 0) + body.findings.get(k, 0)
-            for k in {*title.findings, *body.findings}
-        }
+        findings = clean.findings
+        tags = normalize_tags(req.tags) | ({FLAG_TAG} if clean.flagged else set())
         now = self._clock.now()
         item = Item(
             id=uuid.uuid4().hex,
             org_id=principal.org_id,
             kind=req.kind,
-            title=title.text,
-            body=body.text,
+            title=clean.title,
+            body=clean.body,
             scope=scope,
             author_id=principal.id,
             created_at=now,
             updated_at=now,
             visibility=req.visibility,
-            tags=normalize_tags(req.tags),
+            tags=frozenset(tags),
             source=req.source,
         )
         created = await self._items.create(principal, item, req.idempotency_key)
@@ -167,15 +166,27 @@ class KnowledgeService:
     async def update(
         self, principal: Principal, item_id: str, patch: ItemPatch, expected_revision: int
     ) -> Item:
-        title = redact(patch.title) if patch.title is not None else None
-        body = redact(patch.body) if patch.body is not None else None
+        add_tags, remove_tags = patch.add_tags, patch.remove_tags
+        title = body = None
+        if patch.title is not None or patch.body is not None:
+            current = (await self._items.get(principal, item_id)).item
+            checked = sanitize(
+                patch.title if patch.title is not None else current.title,
+                patch.body if patch.body is not None else current.body,
+            )
+            title = checked.title if patch.title is not None else None
+            body = checked.body if patch.body is not None else None
+            if checked.flagged:
+                add_tags, remove_tags = add_tags | {FLAG_TAG}, remove_tags - {FLAG_TAG}
+            elif FLAG_TAG in current.tags:
+                add_tags, remove_tags = add_tags - {FLAG_TAG}, remove_tags | {FLAG_TAG}
         clean = ItemPatch(
-            title=title.text if title else None,
-            body=body.text if body else None,
+            title=title,
+            body=body,
             kind=patch.kind,
             status=patch.status,
-            add_tags=patch.add_tags,
-            remove_tags=patch.remove_tags,
+            add_tags=add_tags,
+            remove_tags=remove_tags,
         )
         item = await self._items.update(principal, item_id, clean, expected_revision)
         await self._indexing.index_or_enqueue(item)

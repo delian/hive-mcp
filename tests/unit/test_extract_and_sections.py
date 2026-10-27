@@ -117,7 +117,7 @@ def test_merging_respects_the_limit_exactly():
 
 
 def test_pdfs_with_too_many_pages_are_refused(monkeypatch):
-    from hive_mcp.ingest import extract  # noqa: PLC0415
+    from hive_mcp.ingest import extract
 
     class Reader:
         def __init__(self, _):

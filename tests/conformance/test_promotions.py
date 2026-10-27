@@ -173,11 +173,11 @@ async def test_delete_for_item_removes_all_its_requests_only(backend):
 
 
 async def test_listing_can_be_newest_first_and_limited(backend):
-    from datetime import timedelta  # noqa: PLC0415
+    from datetime import timedelta
 
-    from hive_mcp.domain.promotion import Promotion  # noqa: PLC0415
-    from hive_mcp.domain.scope import Visibility  # noqa: PLC0415
-    from tests.conformance.factory import P1  # noqa: PLC0415
+    from hive_mcp.domain.promotion import Promotion
+    from hive_mcp.domain.scope import Visibility
+    from tests.conformance.factory import P1
 
     ids = []
     for n in range(5):

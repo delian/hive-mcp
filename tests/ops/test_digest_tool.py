@@ -43,10 +43,10 @@ def test_the_preview_command(tmp_path, monkeypatch):
     monkeypatch.setenv("HIVE_DATA_DIR", str(tmp_path / "data"))
     assert "give --user" in runner.invoke(cli, ["digest"]).output
     assert "no active user" in runner.invoke(cli, ["digest", "--user", "ghost@acme.com"]).output
-    from hive_mcp.config import Settings  # noqa: PLC0415
-    from hive_mcp.domain.principal import Role  # noqa: PLC0415
-    from hive_mcp.security.directory import UserDirectory  # noqa: PLC0415
-    from hive_mcp.security.jsonfile import AtomicJsonFile  # noqa: PLC0415
+    from hive_mcp.config import Settings
+    from hive_mcp.domain.principal import Role
+    from hive_mcp.security.directory import UserDirectory
+    from hive_mcp.security.jsonfile import AtomicJsonFile
 
     UserDirectory(AtomicJsonFile(Settings().users_path, default=[])).upsert(
         DirectoryUser("ann@acme.com", "acme", Role.MEMBER)
@@ -84,7 +84,7 @@ async def run_loop(sender, monkeypatch, now, rounds):
 
 
 async def test_the_loop_sends_in_the_chosen_hour_once_per_week(monkeypatch):
-    from datetime import UTC, datetime  # noqa: PLC0415
+    from datetime import UTC, datetime
 
     monday_9 = datetime(2026, 1, 5, 9, tzinfo=UTC)  # a Monday
     sender = FakeSender()
@@ -98,7 +98,7 @@ async def test_the_loop_sends_in_the_chosen_hour_once_per_week(monkeypatch):
 
 
 async def test_failures_are_retried_at_the_next_check(monkeypatch):
-    from datetime import UTC, datetime  # noqa: PLC0415
+    from datetime import UTC, datetime
 
     sender = FakeSender(failed=1)
     await run_loop(sender, monkeypatch, datetime(2026, 1, 5, 9, tzinfo=UTC), 6)

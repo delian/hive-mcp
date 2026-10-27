@@ -71,7 +71,7 @@ def test_restore_refuses_to_overwrite_without_force(tmp_path, monkeypatch):
 
 def test_backup_is_a_consistent_snapshot_even_with_a_live_wal(tmp_path, monkeypatch):
     seed(tmp_path, monkeypatch)
-    from hive_mcp.adapters.sqlite.backend import SqliteBackend  # noqa: PLC0415
+    from hive_mcp.adapters.sqlite.backend import SqliteBackend
 
     live = SqliteBackend(tmp_path / "data")  # a server holding the database open (WAL mode)
     try:
@@ -107,7 +107,7 @@ def test_corrupt_or_foreign_archives_are_refused(tmp_path, monkeypatch):
     with tarfile.open(evil, "w:gz") as tar:
         info = tarfile.TarInfo("../escape.txt")
         info.size = 0
-        import io  # noqa: PLC0415
+        import io
 
         tar.addfile(info, io.BytesIO(b""))
     out = runner.invoke(cli, ["restore", str(evil), "--force"])
@@ -141,7 +141,7 @@ PG = os.environ.get("HIVE_TEST_PG_DSN")
     reason="needs Postgres + client tools",
 )
 def test_postgres_backup_and_restore_roundtrip(tmp_path, monkeypatch):
-    import psycopg  # noqa: PLC0415
+    import psycopg
 
     admin = psycopg.connect(PG, autocommit=True)
     admin.execute("DROP DATABASE IF EXISTS hive_bk")
@@ -171,8 +171,8 @@ def test_postgres_backup_and_restore_roundtrip(tmp_path, monkeypatch):
 
 
 def test_a_damaged_database_inside_a_consistent_archive_is_caught(tmp_path, monkeypatch):
-    import hashlib  # noqa: PLC0415
-    import json  # noqa: PLC0415
+    import hashlib
+    import json
 
     seed(tmp_path, monkeypatch)
     archive = tmp_path / "b.tar.gz"

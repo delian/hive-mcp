@@ -94,7 +94,7 @@ def test_table_names_are_stable_and_distinct():
 
 
 async def test_concurrent_replaces_do_not_lose_or_duplicate_chunks(backend):
-    import asyncio  # noqa: PLC0415
+    import asyncio
 
     await asyncio.gather(
         *(
@@ -126,7 +126,7 @@ async def test_the_access_filter_applies_before_the_nearest_neighbours_are_picke
 
 # ---------------------------------------------------------------- the approximate index
 def wait_for(predicate, seconds=30.0):
-    import time  # noqa: PLC0415
+    import time
 
     end = time.monotonic() + seconds
     while time.monotonic() < end:
@@ -151,7 +151,7 @@ async def fill(store, n, start=0, dim=16, seed=0):
 async def test_a_big_enough_table_gets_an_index_in_the_background_and_still_answers_correctly(
     tmp_path, monkeypatch
 ):
-    from hive_mcp.adapters.lance import vectors as module  # noqa: PLC0415
+    from hive_mcp.adapters.lance import vectors as module
 
     monkeypatch.setattr(module, "OPTIMIZE_EVERY", 50)
     store = LanceVectors(tmp_path / "lance", index_min_rows=200)
@@ -177,7 +177,7 @@ async def test_a_big_enough_table_gets_an_index_in_the_background_and_still_answ
 
 
 async def test_small_tables_stay_exact_and_get_no_index(tmp_path, monkeypatch):
-    from hive_mcp.adapters.lance import vectors as module  # noqa: PLC0415
+    from hive_mcp.adapters.lance import vectors as module
 
     monkeypatch.setattr(module, "OPTIMIZE_EVERY", 20)
     store = LanceVectors(tmp_path / "lance", index_min_rows=10_000)
@@ -212,7 +212,7 @@ async def test_the_build_size_survives_a_restart(tmp_path):
 
 
 async def test_the_index_is_rebuilt_only_after_the_table_doubles(tmp_path, monkeypatch):
-    from hive_mcp.adapters.lance import vectors as module  # noqa: PLC0415
+    from hive_mcp.adapters.lance import vectors as module
 
     monkeypatch.setattr(module, "OPTIMIZE_EVERY", 50)
     store = LanceVectors(tmp_path / "lance", index_min_rows=100)
@@ -234,7 +234,7 @@ async def test_the_index_is_rebuilt_only_after_the_table_doubles(tmp_path, monke
 
 
 async def test_a_failing_index_build_leaves_searches_working_and_is_retried(tmp_path, monkeypatch):
-    from hive_mcp.adapters.lance import vectors as module  # noqa: PLC0415
+    from hive_mcp.adapters.lance import vectors as module
 
     monkeypatch.setattr(module, "OPTIMIZE_EVERY", 50)
     store = LanceVectors(tmp_path / "lance", index_min_rows=100)

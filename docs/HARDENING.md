@@ -44,3 +44,18 @@ Review shared and ingested content like any other document before trusting what 
 **Supply chain:** CI runs `pip-audit` on the locked dependencies (also weekly), scans the built image with Trivy
 (fixable high/critical findings fail the build), and Dependabot proposes updates for Python packages, the base image and
 GitHub Actions.
+
+## Text that attacks the agents reading it
+
+Shared memory is read by other people's agents, so a note is also an attack surface. Every write
+(`kb_remember`, `kb_update`, ingest, sessions) goes through `security/sanitize.py`:
+
+- **Hidden characters** (Unicode tag characters, bidi overrides, zero-width) are removed; they hide
+  text from the humans who review promotions and have no legitimate use in a note.
+- **Secrets** are masked (`security/redact.py`), as before.
+- **Prompt-injection heuristics** (`security/injection.py`: "ignore previous instructions", fake role
+  markers, "send the API keys to ...", image-URL exfiltration, "don't tell the user") add the tag
+  `flag/injection` and are reported in the write result as `injection:<heuristic>`. The tag follows
+  the content: editing the text clean removes it, editing it back restores it. Approvers see the tag
+  on the item they are asked to promote. Matches are flags, not rejections: heuristics can be wrong,
+  and a hard block would be easy to probe. Agents should treat flagged items as untrusted data.

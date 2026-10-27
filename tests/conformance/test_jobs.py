@@ -101,7 +101,7 @@ async def test_concurrent_dedupe_enqueue_creates_one_job(backend):
 
 
 async def test_stats_report_the_backlog_per_kind_and_state(backend):
-    from hive_mcp.ports.jobs import JobStat  # noqa: PLC0415
+    from hive_mcp.ports.jobs import JobStat
 
     assert await backend.jobs.stats() == []
     done = await backend.jobs.enqueue("org1", "ingest", {})

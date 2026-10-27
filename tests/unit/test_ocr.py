@@ -80,8 +80,8 @@ def test_a_scanned_pdf_is_read_page_by_page():
 
 @needs_ocr
 def test_pdfs_with_a_text_layer_are_not_ocred(monkeypatch):
-    from pypdf import PdfWriter  # noqa: PLC0415
-    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject  # noqa: PLC0415
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
     writer = PdfWriter()
     page = writer.add_blank_page(612, 792)
@@ -184,8 +184,8 @@ def test_each_call_gets_only_the_time_that_is_left(monkeypatch):
 async def test_the_server_refuses_to_start_with_ocr_on_but_the_programs_missing(
     tmp_path, monkeypatch
 ):
-    from hive_mcp.bootstrap import build_services  # noqa: PLC0415
-    from hive_mcp.config import Settings  # noqa: PLC0415
+    from hive_mcp.bootstrap import build_services
+    from hive_mcp.config import Settings
 
     monkeypatch.setattr(shutil, "which", lambda name: None)
     with pytest.raises(ValidationError, match="HIVE_OCR is on"):
@@ -194,8 +194,8 @@ async def test_the_server_refuses_to_start_with_ocr_on_but_the_programs_missing(
 
 @needs_ocr
 async def test_the_configured_languages_and_limits_reach_the_ingest_service(tmp_path):
-    from hive_mcp.bootstrap import build_services  # noqa: PLC0415
-    from hive_mcp.config import Settings  # noqa: PLC0415
+    from hive_mcp.bootstrap import build_services
+    from hive_mcp.config import Settings
 
     services = await build_services(
         Settings(data_dir=tmp_path, ocr=True, ocr_languages="eng+osd", ocr_max_pages=7)

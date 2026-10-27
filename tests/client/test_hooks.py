@@ -254,3 +254,42 @@ async def test_session_reports_carry_what_was_changed_and_committed(connected, t
         stored = (await client.call_tool("kb_get", {"id": row["id"]})).structured_content
     assert "root cause" in stored["body"] and "Fix dwell off-by-one" in stored["body"]
     assert "/work/radar/dwell.py" in stored["body"]
+
+
+# ---------------------------------------------------------------- session trail
+def test_the_session_label_is_safe_and_stable():
+    assert hooks.session_label({"session_id": "abc-123_x.y"}) == "cc-abc-123_x.y"
+    assert hooks.session_label({"session_id": "a b/c;d"}) == "cc-abcd"  # unsafe characters dropped
+    assert hooks.session_label({}) is None and hooks.session_label({"session_id": "///"}) is None
+    assert len(hooks.session_label({"session_id": "x" * 500}) or "") == 80
+
+
+async def test_the_hooks_tie_their_searches_and_the_session_report_to_one_label(
+    connected, tmp_path
+):
+    item = await remember(connected, "Calibration of the radar", "Calibrate the radar monthly.")
+    payload = {"cwd": "/work/radar", "session_id": "sess42"}
+    start = json.loads(await hooks.run("session-start", json.dumps(payload)))
+    assert 'session="cc-sess42"' in start["hookSpecificOutput"]["additionalContext"]
+    async with connected.client(connected.token_for(ALICE)) as alice:
+        await alice.call_tool("kb_get", {"id": item, "session": "cc-sess42"})
+        trail = (
+            await alice.call_tool("kb_session_sources", {"session": "cc-sess42"})
+        ).structured_content["result"]
+    assert trail and trail[0]["id"] == item and trail[0]["opened"] is True
+    transcript = tmp_path / "t.jsonl"
+    write_transcript(
+        transcript, [("user", "calibrate the radar please"), ("assistant", "done, calibrated")]
+    )
+    await hooks.run(
+        "session-end",
+        json.dumps({**payload, "transcript_path": str(transcript), "reason": "other"}),
+    )
+    async with connected.client(connected.token_for(ALICE)) as alice:
+        sessions = (await alice.call_tool("kb_list", {"kinds": ["session"]})).structured_content[
+            "items"
+        ]
+        graph = await alice.call_tool("kb_graph", {"id": sessions[0]["id"]})
+    assert item in str(
+        graph.structured_content
+    )  # the stored session note is derived_from the opened note

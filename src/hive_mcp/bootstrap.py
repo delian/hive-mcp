@@ -16,11 +16,15 @@ from hive_mcp.domain.retention import parse_rules
 from hive_mcp.embeddings.factory import embed_min_level, make_embedder, make_reranker
 from hive_mcp.ingest.fetch import FetchPolicy
 from hive_mcp.ingest.ocr import OcrConfig, check_available
+from hive_mcp.integrations.secrets import SecretBox
+from hive_mcp.integrations.store import IntegrationStore, env_defaults
 from hive_mcp.llm.factory import llm_min_level, make_llm
+from hive_mcp.notify.chat import SlackDmNotifier, TeamsDmNotifier
 from hive_mcp.notify.factory import make_channels
 from hive_mcp.ports.backend import Backend, close_backend
 from hive_mcp.security.directory import UserDirectory
 from hive_mcp.security.jsonfile import AtomicJsonFile
+from hive_mcp.security.oauth.cookies import load_secret_key
 from hive_mcp.services.activity import ActivityReport
 from hive_mcp.services.admin import AdminService
 from hive_mcp.services.assist import CurationAssist
@@ -40,6 +44,7 @@ from hive_mcp.services.purge import PURGE_JOB, PurgeService
 from hive_mcp.services.quota import CACHE_SECONDS, QuotaGuard
 from hive_mcp.services.retention import RetentionService
 from hive_mcp.services.runner import JobRunner
+from hive_mcp.services.session_sources import SessionSources
 from hive_mcp.services.sessions import SessionService
 from hive_mcp.services.signals import RankSignals
 from hive_mcp.services.staleness import StaleReview
@@ -48,7 +53,6 @@ from hive_mcp.services.vector_admin import VectorAdmin
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from hive_mcp.integrations.store import IntegrationStore
     from hive_mcp.ports.indexes import VectorIndex
 
 
@@ -78,7 +82,8 @@ class Services:
     connectors: ConnectorSync | None = None
     assist: CurationAssist | None = None
     signals: RankSignals | None = None
-    integrations: IntegrationStore | None = None  # set by the app: it needs the services lazily
+    integrations: IntegrationStore | None = None
+    session_sources: SessionSources | None = None
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -90,6 +95,11 @@ def _vector_store(settings: Settings) -> VectorIndex | None:
     from hive_mcp.adapters.lance.vectors import LanceVectors  # noqa: PLC0415 - optional extra
 
     return LanceVectors(settings.data_dir / "lance")
+
+
+def _master_key(settings: Settings) -> bytes:
+    key = settings.secret_key.get_secret_value() if settings.secret_key else None
+    return load_secret_key(key, settings.data_dir / "secret.key")
 
 
 def _teams_of(settings: Settings) -> Callable[[str], frozenset[str]]:
@@ -154,17 +164,24 @@ async def build_services(settings: Settings) -> Services:
         signals=signals,
     )
     sessions = SessionService(knowledge, backend.blobs)
+    integrations = IntegrationStore(
+        lambda: backend.kv,
+        lambda: backend.audit,
+        SecretBox(lambda: _master_key(settings)),
+        env_defaults(settings),
+        clock,
+    )
     channels = make_channels(settings)
-    notifications = (
-        NotificationService(
-            channels=channels,
-            promotions=backend.promotions,
-            items=backend.items,
-            directory=UserDirectory(AtomicJsonFile(settings.users_path, default=[])),
-            jobs=backend.jobs,
-        )
-        if channels
-        else None
+    # Chat DMs exist always and check the stored settings when they send (an admin can switch
+    # them on at run time); an integration that is off just skips.
+    channels["slack_dm"] = SlackDmNotifier(lambda: integrations.get("slack"), lambda: backend.kv)
+    channels["teams_dm"] = TeamsDmNotifier(lambda: integrations.get("teams"), lambda: backend.kv)
+    notifications = NotificationService(
+        channels=channels,
+        promotions=backend.promotions,
+        items=backend.items,
+        directory=UserDirectory(AtomicJsonFile(settings.users_path, default=[])),
+        jobs=backend.jobs,
     )
     promotions = PromotionService(
         items=backend.items,
@@ -265,4 +282,6 @@ async def build_services(settings: Settings) -> Services:
         ConnectorSync(ingest, knowledge, backend.kv, backend.audit, clock),
         CurationAssist(backend.items, curation, make_llm(settings), llm_min_level(settings)),
         signals,
+        integrations,
+        SessionSources(backend.items, backend.kv, graph),
     )

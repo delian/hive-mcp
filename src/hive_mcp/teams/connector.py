@@ -78,6 +78,20 @@ class BotConnector:
         except httpx.HTTPError:
             raise UpstreamError("could not send the Teams reply") from None
 
+    async def send(self, service_url: str, conversation: str, text: str, now: float) -> None:
+        """A message into an existing conversation that nobody just wrote to (a notification)."""
+        base = check_service_url(service_url)
+        url = f"{base}/v3/conversations/{quote(conversation, safe='')}/activities"
+        try:
+            response = await self._http.post(
+                url,
+                headers={"Authorization": f"Bearer {await self._access_token(now)}"},
+                json={"type": "message", "text": text, "textFormat": "plain"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            raise UpstreamError("could not send the Teams message") from None
+
     async def member_email(
         self, service_url: str, conversation: str, user_id: str, now: float
     ) -> str | None:

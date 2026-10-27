@@ -164,6 +164,7 @@ def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None
         tags: list[str] | None = None,
         other_groups: Literal["auto", "always", "never"] = "auto",
         include_links: bool = True,
+        session: str | None = None,
     ) -> ConsultOut:
         """Search the shared knowledge base. Call this BEFORE starting a task, in plain words.
 
@@ -171,7 +172,9 @@ def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None
         `kinds`: note, research, formula, measurement, decision, best_practice, doc, howto, session, compaction.
         `tags`: results must carry all of them (e.g. domain/rf). `other_groups`: auto, always or never.
         Results carry `links` (sources, newer versions, conflicts); read the notes: they flag results that
-        another item supersedes or contradicts.
+        another item supersedes or contradicts. Pass the same `session` label (any 4-80 character id of
+        your choosing) to kb_consult, kb_get and kb_report_session to keep a reviewable trail of the
+        notes this work relied on (see kb_session_sources).
         """
         if not 1 <= limit <= 25:  # noqa: PLR2004
             raise ValidationError("limit must be between 1 and 25")
@@ -190,6 +193,9 @@ def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None
         if feedback:
             ids = [m.item_id for m in (*result.primary, *result.referenced)]
             await feedback.queried(current_principal(), query, ids)
+        if session and (trail := get_services().session_sources):
+            shown = [m.item_id for m in (*result.primary, *result.referenced)]
+            await trail.record(current_principal(), session, shown=shown)
         return ConsultOut(
             results=[_match_out(m) for m in result.primary],
             from_other_groups=[_match_out(m) for m in result.referenced],
@@ -198,11 +204,15 @@ def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None
 
     @mcp.tool(annotations=READ)
     @guarded
-    async def kb_get(id: str) -> ItemOut:
-        """Read one item in full (use after kb_consult, or before kb_update to get its revision)."""
+    async def kb_get(id: str, session: str | None = None) -> ItemOut:
+        """Read one item in full (use after kb_consult, or before kb_update to get its revision).
+
+        Pass the `session` label you gave kb_consult to record that this work relied on the note."""
         view = await get_services().knowledge.get(current_principal(), id)
         if feedback := get_services().feedback:
             await feedback.opened(current_principal(), id)
+        if session and (trail := get_services().session_sources):
+            await trail.record(current_principal(), session, opened=[id])
         return _item_out(view.item, view.tier)
 
     @mcp.tool(annotations=WRITE)
@@ -305,12 +315,15 @@ def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None
         outcomes: list[str] | None = None,
         project: str | None = None,
         idempotency_key: str | None = None,
+        session: str | None = None,
     ) -> RememberOut:
         """Record what happened in this work session: a short summary (searchable) and optionally the full log.
 
-        Call at the end of a session. Stored privately. Secrets in the log are masked.
+        Call at the end of a session. Stored privately. Secrets in the log are masked. With the
+        `session` label used in kb_consult/kb_get, the stored note is linked `derived_from` the notes
+        the work opened, so reviewers can see what it was built on (kb_graph).
         """
-        return await _report(
+        out = await _report(
             "session",
             summary=summary,
             log=log,
@@ -318,6 +331,9 @@ def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None
             project=project,
             idempotency_key=idempotency_key,
         )
+        if session and (trail := get_services().session_sources):
+            await trail.link(current_principal(), session, out.id)
+        return out
 
     @mcp.tool(annotations=WRITE)
     @guarded

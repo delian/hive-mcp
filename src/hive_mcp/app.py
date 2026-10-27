@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from starlette.routing import Route
 
     from hive_mcp.adapters.postgres.db import PgDatabase
-    from hive_mcp.integrations.store import IntegrationStore
+    from hive_mcp.app_front import ServiceIntegrations
     from hive_mcp.security.oauth.provider import HiveOAuthProvider
 
 
@@ -118,7 +118,7 @@ def front_doors(  # noqa: PLR0913, PLR0917 - everything the routes are built fro
     tokens: TokenStore,
     directory: UserDirectory,
     static: StaticTokenVerifier,
-    integrations: IntegrationStore,
+    integrations: ServiceIntegrations,
     get_services: Callable[[], Services],
     verifier: TokenVerifier | None,
 ) -> tuple[HiveOAuthProvider | None, list[Route]]:
@@ -156,7 +156,6 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_: MCPServer) -> AsyncIterator[None]:
         services = await services_factory(settings)
-        services.integrations = integrations
         holder["services"] = services
         runner = asyncio.create_task(services.runner.run_forever()) if settings.run_jobs else None
         background = start_loops(services, settings)
@@ -181,7 +180,7 @@ def create_app(
     tokens = TokenStore(settings.tokens_path)
     directory = UserDirectory(AtomicJsonFile(settings.users_path, default=[]))
     static = StaticTokenVerifier(tokens, resource=settings.resource_url, directory=directory)
-    integrations = build_integrations(settings, get_services)
+    integrations = build_integrations(get_services)
     provider, extra_routes = front_doors(
         settings, tokens, directory, static, integrations, get_services, verifier
     )

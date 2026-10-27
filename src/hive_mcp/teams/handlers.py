@@ -39,6 +39,7 @@ RESULTS = 5
 MAX_NOTE = 20_000
 MAX_TITLE = 80
 EMAIL_NS = "teams:email"
+REF_NS = "teams:ref"  # where to reach a person for notifications (their personal chat)
 CACHE_SECONDS = 3600
 HELP = (
     "Hive: the team's shared memory.\n\n"
@@ -81,6 +82,12 @@ class TeamsBot:
         if not personal and not self._cfg.allow_mentions:
             return
         who = await self._resolve(activity)
+        if who is not None and personal:  # remember where to reach them for notifications
+            reference = {
+                "serviceUrl": str(activity.get("serviceUrl", "")),
+                "conversation": str(conversation.get("id", "")),
+            }
+            await self._get_kv().put(REF_NS, who.id, reference)
         text = clean_text(str(activity["text"]))
         answer = await self._answer(who, text, str(conversation.get("id", "")), personal)
         await self._send(activity, answer)

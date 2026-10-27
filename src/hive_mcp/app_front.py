@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from hive_mcp.domain.clock import SystemClock
-from hive_mcp.integrations.secrets import SecretBox
-from hive_mcp.integrations.store import IntegrationStore, env_defaults
 from hive_mcp.security.directory import UserDirectory
 from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.security.oauth.cookies import CookieSigner, load_secret_key
@@ -80,24 +78,26 @@ def build_oauth(
     return provider, oauth_routes(provider, upstream, signer, settings.google_allowed_domains)
 
 
-def build_integrations(
-    settings: Settings, get_services: Callable[[], Services]
-) -> IntegrationStore:
-    """Run-time settings of the chat integrations, starting from the environment."""
-    key = settings.secret_key.get_secret_value() if settings.secret_key else None
-    box = SecretBox(load_secret_key(key, settings.data_dir / "secret.key"))
-    return IntegrationStore(
-        lambda: get_services().backend.kv,
-        lambda: get_services().backend.audit,
-        box,
-        env_defaults(settings),
-        SystemClock(),
-    )
+class ServiceIntegrations:
+    """The routes are built before the services exist; this reaches the store once they do."""
+
+    def __init__(self, get_services: Callable[[], Services]) -> None:
+        self._get_services = get_services
+
+    async def get(self, name: str) -> IntegrationConfig:
+        store = self._get_services().integrations
+        assert store is not None  # noqa: S101 - built with the services
+        return await store.get(name)
+
+
+def build_integrations(get_services: Callable[[], Services]) -> ServiceIntegrations:
+    """Run-time settings of the chat integrations (the store itself lives in the services)."""
+    return ServiceIntegrations(get_services)
 
 
 def build_slack(
     directory: UserDirectory,
-    store: IntegrationStore,
+    store: ServiceIntegrations,
     get_services: Callable[[], Services],
 ) -> list[Route]:
     """The Slack routes; the stored integration settings decide whether and how they answer."""
@@ -125,7 +125,7 @@ def build_slack(
 
 def build_teams(
     directory: UserDirectory,
-    store: IntegrationStore,
+    store: ServiceIntegrations,
     get_services: Callable[[], Services],
 ) -> list[Route]:
     """The Teams route; the stored integration settings decide whether and how it answers."""

@@ -38,3 +38,14 @@ blocks the others or the workflow):
   id is an email address (OAuth sign-in users).
 Messages contain the item title, who asked, where to, the reason and the outcome, never the item body.
 Delivery is at-least-once.
+
+
+## Notification channels
+
+Promotion requests and decisions go out through every channel that is configured: the chat webhook, email, and (new)
+**direct messages in Slack and Microsoft Teams**. The two chat channels always exist and look at the stored integration
+settings when they send, so switching Slack or Teams on or off on `/admin/integrations` changes delivery within seconds.
+Slack needs the bot token (scopes `users:read.email`, `chat:write`); a person is found by email. Teams messages go to the
+personal chat the person already has with the bot (remembered the last time they wrote to it); people who never did are
+skipped, and email still reaches them. Only titles and who asked are sent, never item content. A chat service that is
+down raises an error so the job runner retries; an integration that is off, or a person it cannot find, is skipped quietly.

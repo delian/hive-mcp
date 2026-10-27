@@ -23,6 +23,12 @@ def project_name(cwd: str) -> str:
     return Path(cwd or os.getcwd()).name or "project"
 
 
+def session_label(payload: dict[str, Any]) -> str | None:
+    """The label that ties one Claude Code session's searches and reads together on the server."""
+    raw = "".join(c for c in str(payload.get("session_id", "")) if c.isalnum() or c in "-_.")
+    return f"cc-{raw}"[:80] if raw else None
+
+
 def _context(event: str, text: str) -> str:
     """Claude Code's JSON form for adding context; the event name is required."""
     return json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}})
@@ -41,12 +47,21 @@ def format_results(results: list[dict[str, Any]], heading: str) -> str:
 async def session_start(payload: dict[str, Any]) -> str | None:
     """Tell the agent the team knowledge exists and surface what it holds about this project."""
     project = project_name(str(payload.get("cwd", "")))
-    found = await call_tool("kb_consult", {"query": f"{project} project", "limit": 5})
+    label = session_label(payload)
+    args: dict[str, Any] = {"query": f"{project} project", "limit": 5}
+    if label:
+        args["session"] = label
+    found = await call_tool("kb_consult", args)
     results = found.get("results") or []
     intro = (
         "A shared team knowledge base is connected (tools kb_consult, kb_remember, "
         "kb_report_session). Consult it before starting a task and remember reusable findings."
     )
+    if label:
+        intro += (
+            f' Pass session="{label}" to kb_consult and kb_get so reviewers can see which notes '
+            "your work relied on."
+        )
     body = format_results(results, f"{intro}\nWhat it holds about {project}:") if results else intro
     return _context("SessionStart", body)
 
@@ -56,7 +71,10 @@ async def prompt_submit(payload: dict[str, Any]) -> str | None:
     prompt = str(payload.get("prompt", "")).strip()
     if prompt.startswith("/") or len(prompt.split()) < MIN_PROMPT_WORDS:
         return None
-    found = await call_tool("kb_consult", {"query": prompt[:MAX_PROMPT_CHARS], "limit": 3})
+    args: dict[str, Any] = {"query": prompt[:MAX_PROMPT_CHARS], "limit": 3}
+    if label := session_label(payload):
+        args["session"] = label
+    found = await call_tool("kb_consult", args)
     results = found.get("results") or []
     if not results:
         return None
@@ -73,16 +91,15 @@ async def _report(tool: str, payload: dict[str, Any], reason: str) -> None:
     project = project_name(str(payload.get("cwd", "")))
     session = str(payload.get("session_id", "")) or "unknown"
     activity = read_activity(path)
-    await call_tool(
-        tool,
-        {
-            "summary": await summarize(turns, activity, project, reason),
-            "log": render_log(turns),
-            "outcomes": outcomes(activity),
-            "idempotency_key": f"hook-{tool}-{session}-{len(turns)}"[:120],
-        },
-        deadline=15.0,
-    )
+    args: dict[str, Any] = {
+        "summary": await summarize(turns, activity, project, reason),
+        "log": render_log(turns),
+        "outcomes": outcomes(activity),
+        "idempotency_key": f"hook-{tool}-{session}-{len(turns)}"[:120],
+    }
+    if tool == "kb_report_session" and (label := session_label(payload)):
+        args["session"] = label  # the stored note links to the notes this session opened
+    await call_tool(tool, args, deadline=15.0)
 
 
 async def pre_compact(payload: dict[str, Any]) -> str | None:

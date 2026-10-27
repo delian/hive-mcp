@@ -56,6 +56,16 @@ class RateOut(BaseModel):
     recorded: bool = Field(description="False when this server does not collect search feedback.")
 
 
+class SourceOut(BaseModel):
+    id: str
+    title: str
+    opened: bool = Field(description="False: only shown in search results, never opened.")
+    origin: str
+    author: str
+    updated_at: str
+    external: bool
+
+
 class MergeProposalOut(BaseModel):
     title: str
     body: str
@@ -153,6 +163,26 @@ def register_hygiene_tools(mcp: MCPServer, get_services: Callable[[], Services])
         if svc.feedback is not None:
             await svc.feedback.rated(principal, id, useful, query)
         return RateOut(recorded=svc.signals is not None or svc.feedback is not None)
+
+    @mcp.tool(annotations=READ)
+    @guarded
+    async def kb_session_sources(session: str) -> list[SourceOut]:
+        """List the notes a work session relied on: opened ones first, then ones only shown in results.
+
+        Uses the `session` label passed to kb_consult / kb_get (kept for a day; the stored session
+        note keeps `derived_from` links to the opened notes). Review them before trusting a result:
+        each carries where it came from and when it was last touched.
+        """
+        trail = get_services().session_sources
+        assert trail is not None  # noqa: S101 - always built by bootstrap
+        return [
+            SourceOut(
+                id=s.view.item.id, title=s.view.item.title, opened=s.opened, origin=s.origin,
+                author=s.view.item.author_id, updated_at=s.view.item.updated_at.isoformat(),
+                external=s.view.tier.value == "referenced",
+            )
+            for s in await trail.sources(current_principal(), session)
+        ]  # fmt: skip
 
     @mcp.tool(annotations=READ)
     @guarded

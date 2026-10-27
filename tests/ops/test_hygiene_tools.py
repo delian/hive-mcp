@@ -115,3 +115,56 @@ async def test_votes_are_recorded_when_rank_signals_are_on(tmp_path):
         assert ok.structured_content["recorded"] is True
     finally:
         srv.stop()
+
+
+async def test_a_session_trail_lists_what_the_work_relied_on_and_links_the_session_note(live: Live):
+    async with live.client(live.token_for(ALICE)) as alice:
+        used = (
+            await alice.call_tool(
+                "kb_remember",
+                {"title": "Deploy runbook", "body": "run make deploy then check healthz"},
+            )
+        ).structured_content
+        other = (
+            await alice.call_tool(
+                "kb_remember", {"title": "Deploy history", "body": "deploys happened on mondays"}
+            )
+        ).structured_content
+        found = (
+            await alice.call_tool("kb_consult", {"query": "deploy", "session": "sess-0001"})
+        ).structured_content
+        await alice.call_tool("kb_get", {"id": used["id"], "session": "sess-0001"})
+        trail = (
+            await alice.call_tool("kb_session_sources", {"session": "sess-0001"})
+        ).structured_content["result"]
+        report = (
+            await alice.call_tool(
+                "kb_report_session", {"summary": "deployed it", "session": "sess-0001"}
+            )
+        ).structured_content
+        graph = await alice.call_tool("kb_graph", {"id": report["id"]})
+        bad = await alice.call_tool("kb_session_sources", {"session": "x"})
+        empty = (
+            await alice.call_tool("kb_session_sources", {"session": "never-used"})
+        ).structured_content["result"]
+    assert {r["id"] for r in found["results"]} == {used["id"], other["id"]}
+    assert (trail[0]["id"], trail[0]["opened"]) == (used["id"], True)  # opened first
+    assert {s["id"]: s["opened"] for s in trail} == {used["id"]: True, other["id"]: False}
+    assert used["id"] in str(graph.structured_content) and other["id"] not in str(
+        graph.structured_content
+    )
+    assert bad.is_error and "session labels" in bad.content[0].text and empty == []
+
+
+async def test_another_persons_session_label_shows_nothing(live: Live):
+    from tests.conformance.factory import BOB
+
+    async with live.client(live.token_for(ALICE)) as alice:
+        made = (
+            await alice.call_tool("kb_remember", {"title": "Mine", "body": "x"})
+        ).structured_content
+        await alice.call_tool("kb_get", {"id": made["id"], "session": "shared-label"})
+    async with live.client(live.token_for(BOB)) as bob:
+        assert (
+            await bob.call_tool("kb_session_sources", {"session": "shared-label"})
+        ).structured_content["result"] == []

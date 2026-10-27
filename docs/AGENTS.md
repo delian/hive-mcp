@@ -58,3 +58,13 @@ hive-hooks hooks snippet --file AGENTS.md      # or CLAUDE.md / GEMINI.md; --rem
 ```
 The note sits between `<!-- hive-mcp:begin -->` and `<!-- hive-mcp:end -->`; running the command again updates it in place.
 Add the server as an MCP server in the agent's own configuration.
+
+## What did the agent rely on? (`session` labels)
+
+Pass one label (4-80 characters, your choice) to `kb_consult`, `kb_get` and `kb_report_session` for a piece of work. The
+server remembers, for a day and per person, which notes were **shown** and which were **opened** (ids only), and
+`kb_session_sources(session)` lists them, opened first, with their origin, author and last change, so a reviewer can see
+what a result was built on. `kb_report_session` also links the stored session note `derived_from` each opened note (up
+to 20), which keeps the trail in the knowledge graph (`kb_graph`) after the label expires. A label belongs to the person
+who used it; nobody else can read it. The Claude Code hooks do this automatically with the label `cc-<session id>` and
+tell the agent to pass it.

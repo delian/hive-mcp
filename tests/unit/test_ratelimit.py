@@ -90,3 +90,18 @@ async def test_concurrent_requests_cannot_exceed_the_burst():
     app = app_with(Rule(("/a",), RateLimiter(60, 5, now=Clock())))
     codes = await asyncio.gather(*(get(app, "/a") for _ in range(20)))
     assert sum(r.status_code == 200 for r in codes) == 5
+
+
+async def test_a_token_with_its_own_limit_gets_its_own_bucket():
+    import hashlib
+
+    generous = RateLimiter(60, 5, now=Clock())
+
+    def per_key(key):  # the key of "Bearer vip"
+        digest = hashlib.sha256(b"vip").hexdigest()[:32]
+        return generous if key == f"tok:{digest}" else None
+
+    app = app_with(Rule(("/a",), RateLimiter(60, 1, now=Clock()), by_token=True, per_key=per_key))
+    vip, plain = {"Authorization": "Bearer vip"}, {"Authorization": "Bearer plain"}
+    assert [(await get(app, "/a", vip)).status_code for _ in range(6)] == [200] * 5 + [429]
+    assert [(await get(app, "/a", plain)).status_code for _ in range(2)] == [200, 429]

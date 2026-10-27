@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from hive_mcp.domain.principal import Principal
     from hive_mcp.security.directory import UserDirectory
 
+MAX_RATE_PER_MIN = 100_000
 TOKEN_PREFIX = "hive_"  # noqa: S105 - prefix, not a secret; lets secret scanners recognise leaked tokens
 
 
@@ -39,6 +40,7 @@ class TokenRecord:
     claims: dict[str, object]
     expires_at: int | None = None  # unix seconds
     label: str = ""
+    rate_per_min: int | None = None  # this token's own MCP request limit (None: the server default)
 
 
 class TokenStore:
@@ -55,16 +57,24 @@ class TokenStore:
         self._file.write([asdict(r) for r in records])
 
     def create(
-        self, principal: Principal, *, label: str = "", expires_in_days: float | None = None
+        self,
+        principal: Principal,
+        *,
+        label: str = "",
+        expires_in_days: float | None = None,
+        rate_per_min: int | None = None,
     ) -> str:
         """Returns the plaintext token: show it once; it cannot be recovered later."""
         if not label or any(r.label == label for r in self._read()):
             raise ValidationError("a unique label is required (it is how tokens are revoked)")
         token = TOKEN_PREFIX + secrets.token_urlsafe(32)
         expires = int(time.time() + expires_in_days * 86_400) if expires_in_days else None
+        if rate_per_min is not None and not 1 <= rate_per_min <= MAX_RATE_PER_MIN:
+            raise ValidationError(f"rate per minute must be 1-{MAX_RATE_PER_MIN}")
         record = TokenRecord(
-            hash_token(token), principal.id, claims_for(principal, label), expires, label
-        )
+            hash_token(token), principal.id, claims_for(principal, label), expires, label,
+            rate_per_min,
+        )  # fmt: skip
         self._write([*self._read(), record])
         return token
 
@@ -78,6 +88,14 @@ class TokenStore:
 
     def list(self) -> list[TokenRecord]:
         return list(self._read())
+
+    def rate_for_key(self, key: str) -> int | None:
+        """The own limit of the token behind a rate-limit key ('tok:' + first 32 hash digits)."""
+        prefix = key.removeprefix("tok:")
+        for record in self._read():
+            if record.rate_per_min and record.token_hash.startswith(prefix):
+                return record.rate_per_min
+        return None
 
     def find(self, token: str) -> TokenRecord | None:
         digest = hash_token(token)

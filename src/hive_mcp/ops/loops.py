@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from hive_mcp.domain.clock import SystemClock
 from hive_mcp.domain.errors import HiveError, StorageBusy
+from hive_mcp.ops.usage import FLUSH_SECONDS, METER
 from hive_mcp.security.groups.factory import run_group_sync
 
 if TYPE_CHECKING:
@@ -57,3 +58,15 @@ async def purge_loop(services: Services, retention_days: int = 0) -> None:
             await services.purge.sweep(retention_days)
             if services.retention and services.retention.rules:
                 await services.retention.run()
+
+
+async def usage_loop(services: Services) -> None:
+    """Save the per-person tool-call counts every few minutes (and once more at shutdown)."""
+    clock = SystemClock()
+    try:
+        while True:
+            await asyncio.sleep(FLUSH_SECONDS)
+            await METER.flush(services.backend.audit, clock)
+    finally:
+        with contextlib.suppress(Exception):
+            await METER.flush(services.backend.audit, clock)

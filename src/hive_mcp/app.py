@@ -18,7 +18,7 @@ from hive_mcp.domain.clock import SystemClock
 from hive_mcp.domain.errors import StorageBusy
 from hive_mcp.mcp_api.server import build_mcp
 from hive_mcp.ops.health import health_routes
-from hive_mcp.ops.loops import digest_loop, group_sync_loop, purge_loop
+from hive_mcp.ops.loops import digest_loop, group_sync_loop, purge_loop, usage_loop
 from hive_mcp.ops.metrics import METRICS, metrics_routes
 from hive_mcp.ops.observe import ObserveMiddleware
 from hive_mcp.ops.ratelimit import Limiter, RateLimiter, RateLimitMiddleware, Rule
@@ -68,7 +68,9 @@ BURST_SECONDS = 10  # a client may use this many seconds of its allowance at onc
 
 
 def rate_limit_rules(
-    settings: Settings, make: Callable[[float, int], Limiter] | None = None
+    settings: Settings,
+    make: Callable[[float, int], Limiter] | None = None,
+    tokens: TokenStore | None = None,
 ) -> list[Rule]:
     """Registration is the only anonymous write, so it is the tightest; 0 turns a limit off."""
     make = make or (RateLimiter)
@@ -85,7 +87,17 @@ def rate_limit_rules(
     if settings.rate_limit_mcp:
         per_min = settings.rate_limit_mcp
         burst = max(per_min * BURST_SECONDS // 60, 10)
-        rules.append(Rule((settings.mcp_path,), make(per_min, burst), by_token=True))
+        own: dict[int, Limiter] = {}
+
+        def per_key(key: str) -> Limiter | None:  # a token created with its own limit
+            rate = tokens.rate_for_key(key) if tokens and key.startswith("tok:") else None
+            if rate is None:
+                return None
+            return own.setdefault(rate, make(rate, max(rate * BURST_SECONDS // 60, 10)))
+
+        rules.append(
+            Rule((settings.mcp_path,), make(per_min, burst), by_token=True, per_key=per_key)
+        )
     return rules
 
 
@@ -190,6 +202,7 @@ def create_app(
         holder["services"] = services
         runner = asyncio.create_task(services.runner.run_forever()) if settings.run_jobs else None
         maintenance = asyncio.create_task(purge_loop(services, settings.retention_session_days))
+        metering = asyncio.create_task(usage_loop(services))
         digesting = (
             asyncio.create_task(
                 digest_loop(services, settings.digest_weekday, settings.digest_hour_utc)
@@ -211,7 +224,7 @@ def create_app(
                 runner.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await runner
-            for task in (maintenance, syncing, digesting):
+            for task in (maintenance, syncing, digesting, metering):
                 if task:
                     task.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
@@ -260,7 +273,7 @@ def create_app(
     app.router.routes[0:0] = extra_routes  # ours first: /revoke must shadow the SDK's version
     app.add_middleware(
         RateLimitMiddleware,
-        rules=rate_limit_rules(settings, shared_limiter(settings, get_services)),
+        rules=rate_limit_rules(settings, shared_limiter(settings, get_services), tokens),
     )
     app.add_middleware(ObserveMiddleware, metrics=METRICS, mcp_path=settings.mcp_path)  # outermost
     app.state.lifecycle = lifecycle

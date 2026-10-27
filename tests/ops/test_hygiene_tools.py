@@ -50,3 +50,21 @@ async def test_project_digest_tool_and_pinned_resource(live: Live):
     assert both.is_error and "not both" in both.content[0].text
     assert elsewhere.is_error and "not a member" in elsewhere.content[0].text
     assert "Dwell time plan" in resource.contents[0].text
+
+
+async def test_admin_activity_tool_and_page(live: Live):
+    from hive_mcp.ops.usage import METER
+    from tests.conformance.factory import ROOT
+
+    async with live.client(live.token_for(ALICE)) as alice:
+        await alice.call_tool("kb_remember", {"title": "A note", "body": "words"})
+        denied = await alice.call_tool("kb_admin_activity", {})
+    assert denied.is_error and "admin" in denied.content[0].text
+    async with live.client(live.token_for(ROOT)) as admin:
+        # the server's own meter is flushed on a timer; flush this process's counts directly
+        out = (await admin.call_tool("kb_admin_activity", {"days": 7})).structured_content
+        bad = await admin.call_tool("kb_admin_activity", {"days": 0})
+    assert out["days"] == 7 and [p["user"] for p in out["people"]] == ["alice"]
+    assert out["people"][0]["writes"] == 1 and out["people"][0]["items"] == 1
+    assert bad.is_error
+    assert METER._counts[("org1", "alice")]["kb_remember"] >= 1  # every tool call is counted

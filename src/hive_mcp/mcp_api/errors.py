@@ -11,6 +11,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from hive_mcp.domain.errors import Conflict, HiveError, NotFound, StorageBusy
 from hive_mcp.ops.metrics import METRICS
+from hive_mcp.ops.usage import METER
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -49,5 +50,6 @@ def guarded[T](fn: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
             raise ToolError("internal error; the operation was not completed") from None
         finally:
             METRICS.observe_tool(fn.__name__, outcome, time.perf_counter() - started)
+            METER.record_current(fn.__name__)
 
     return wrapper

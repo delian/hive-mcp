@@ -397,3 +397,13 @@ async def test_history_pages_and_survives_deleted_items(ui: Live, monkeypatch) -
     assert "Request 0" in second and "Newer" in second and "Older" not in second
     assert client.get("/admin/promotions/history", params={"page": "junk"}).status_code == 200
     assert "Request 2" in client.get("/admin/promotions/history", params={"page": "-4"}).text
+
+
+def test_the_activity_page_is_for_admins_and_clamps_the_window(ui: Live) -> None:
+    admin = sign_in(ui, ROOT)
+    page = admin.get("/admin/activity")
+    assert page.status_code == 200 and "Last 30 days" in page.text and "Activity" in page.text
+    assert "Last 365 days" in admin.get("/admin/activity?days=9999").text
+    assert "Last 30 days" in admin.get("/admin/activity?days=abc").text
+    member = sign_in(ui, ALICE)
+    assert member.get("/admin/activity").status_code == 403

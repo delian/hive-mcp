@@ -45,3 +45,16 @@ a matching `Origin` header. Sessions are kept on the server, so signing out (or 
 Sign-in attempts share the login rate limit. Each sign-in is written to the audit log (`admin.login`).
 
 The page is as exposed as the MCP endpoint; with Tailscale Serve or a private network, keep it off the public funnel.
+
+## Activity and per-token limits
+
+**Activity** (`/admin/activity`, tool `kb_admin_activity(days=30)`; admins only): per person the tool calls, writes,
+stored items and last seen, plus per-team totals and the busiest tools. Tool calls are counted in memory and saved
+every 5 minutes (and at shutdown) as one `usage.tools` audit event per person, with counts only; so the report covers
+every replica and survives restarts, and the newest few minutes are missing. Teams come from the user directory.
+Prometheus metrics stay per tool, never per person (`docs/OBSERVABILITY.md`). Quotas on stored items/characters are
+unchanged (`HIVE_QUOTA_*`).
+
+**A token's own request limit.** `hive token create ... --rate-per-min 600` gives one token a limit different from the
+server default (`HIVE_RATE_LIMIT_MCP`, per token): lower for a noisy pipeline, higher for a trusted bulk importer.
+`hive token list` shows it. The limit is enforced per token on `/mcp` (shared across replicas with Postgres).

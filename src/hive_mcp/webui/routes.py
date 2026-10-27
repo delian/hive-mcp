@@ -83,6 +83,7 @@ class AdminUi:
             links += [
                 ("/admin/users", "People"), ("/admin/tokens", "Tokens"),
                 ("/admin/audit", "Audit"), ("/admin/usage", "Usage"),
+                ("/admin/activity", "Activity"),
             ]  # fmt: skip
         return render(title, body, nav=nav_bar(links, principal.id, session.csrf), status=status)
 
@@ -180,6 +181,18 @@ class AdminUi:
         rows = await self.get_services().admin.usage(gate[1])
         return self.page("Usage", views.usage(rows, *self.quota), gate)
 
+    async def activity(self, request: Request) -> Response:
+        gate = await self.gate(request, Role.ADMIN)
+        if isinstance(gate, Response):
+            return gate
+        try:
+            days = min(max(int(request.query_params.get("days", "30")), 1), 365)
+        except ValueError:
+            days = 30
+        report = self.get_services().activity
+        assert report is not None  # noqa: S101
+        return self.page("Activity", views.activity(await report.build(gate[1], days)), gate)
+
     def routes(self) -> list[Route]:
         return [
             Route("/admin", self.home),
@@ -189,5 +202,6 @@ class AdminUi:
             Route("/admin/promotions/decide", self.decide, methods=["POST"]),
             Route("/admin/audit", self.audit),
             Route("/admin/usage", self.usage),
+            Route("/admin/activity", self.activity),
             *(self.accounts.routes() if self.accounts else []),
         ]

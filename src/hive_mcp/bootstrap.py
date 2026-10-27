@@ -19,6 +19,7 @@ from hive_mcp.notify.factory import make_channels
 from hive_mcp.ports.backend import Backend, close_backend
 from hive_mcp.security.directory import UserDirectory
 from hive_mcp.security.jsonfile import AtomicJsonFile
+from hive_mcp.services.activity import ActivityReport
 from hive_mcp.services.admin import AdminService
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.curation import CurationService
@@ -41,6 +42,8 @@ from hive_mcp.services.staleness import StaleReview
 from hive_mcp.services.vector_admin import VectorAdmin
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from hive_mcp.ports.indexes import VectorIndex
 
 
@@ -66,6 +69,7 @@ class Services:
     duplicates: DuplicateFinder | None = None
     stale: StaleReview | None = None
     retention: RetentionService | None = None
+    activity: ActivityReport | None = None
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -77,6 +81,16 @@ def _vector_store(settings: Settings) -> VectorIndex | None:
     from hive_mcp.adapters.lance.vectors import LanceVectors  # noqa: PLC0415 - optional extra
 
     return LanceVectors(settings.data_dir / "lance")
+
+
+def _teams_of(settings: Settings) -> Callable[[str], frozenset[str]]:
+    directory = UserDirectory(AtomicJsonFile(settings.users_path, default=[]))
+
+    def teams(user: str) -> frozenset[str]:
+        found = next((u for u in directory.list() if u.email == user), None)
+        return found.teams if found else frozenset()
+
+    return teams
 
 
 async def build_services(settings: Settings) -> Services:
@@ -228,4 +242,5 @@ async def build_services(settings: Settings) -> Services:
         DuplicateFinder(backend.items, curation),
         stale,
         RetentionService(backend.maintenance, purge, parse_rules(settings.retention_rules), clock),
+        ActivityReport(backend.audit, backend.maintenance, clock, _teams_of(settings)),
     )

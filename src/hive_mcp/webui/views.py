@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from hive_mcp.domain.promotion import Promotion
     from hive_mcp.ports.audit import AuditRecord
     from hive_mcp.ports.maintenance import AuthorUsage
+    from hive_mcp.services.activity import Activity
     from hive_mcp.services.promotions import PromotionView
 
 PREVIEW_CHARS = 1500
@@ -113,6 +114,32 @@ def usage(rows: list[AuthorUsage], max_items: int, max_chars: int) -> str:
         for u in rows
     ]
     return limits + table(["author", "items", "characters", "last write"], body)
+
+
+def activity(a: Activity) -> str:
+    """Per-person and per-team counts for the window; the people table is the busy end first."""
+    people = [
+        [
+            esc(p.user), str(p.calls), str(p.writes), str(p.items),
+            esc(p.last_seen.isoformat(timespec="minutes") if p.last_seen else "-"),
+            esc(", ".join(f"{t} {n}" for t, n in p.tools.most_common(3))),
+        ]
+        for p in a.people
+    ]  # fmt: skip
+    head = f"<p class=muted>Last {a.days} days. Tool calls are saved every few minutes.</p>"
+    if a.truncated:
+        head += "<p class=muted>Very busy: only the newest events were read.</p>"
+    out = head + table(
+        ["person", "tool calls", "writes", "items", "last seen", "top tools"], people
+    )
+    if a.teams:
+        rows = [[esc(t), str(c), str(w)] for t, (c, w) in sorted(a.teams.items())]
+        out += "<h2>Teams</h2>" + table(["team", "tool calls", "writes"], rows)
+    if a.tools:
+        out += "<h2>Busiest tools</h2>" + table(
+            ["tool", "calls"], [[esc(t), str(n)] for t, n in a.tools]
+        )
+    return out
 
 
 def promotion_history(

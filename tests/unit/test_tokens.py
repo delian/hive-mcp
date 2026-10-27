@@ -96,3 +96,21 @@ def test_revocation_is_never_missed_by_a_reader_even_in_a_tight_loop(tmp_path):
         assert reader.find(token) is not None
         assert writer.revoke(f"t{i}")
         assert reader.find(token) is None, f"revoked token still valid at iteration {i}"
+
+
+def test_a_token_can_carry_its_own_rate_limit(tmp_path):
+    import pytest
+
+    from hive_mcp.domain.errors import ValidationError
+    from hive_mcp.security.tokens import TokenStore, hash_token
+    from tests.conformance.factory import ALICE
+
+    store = TokenStore(tmp_path / "tokens.json")
+    fast = store.create(ALICE, label="fast", rate_per_min=600)
+    plain = store.create(ALICE, label="plain")
+    key = lambda t: "tok:" + hash_token(t)[:32]  # noqa: E731
+    assert store.rate_for_key(key(fast)) == 600
+    assert store.rate_for_key(key(plain)) is None and store.rate_for_key("tok:" + "0" * 32) is None
+    for bad in (0, -1, 1_000_000):
+        with pytest.raises(ValidationError):
+            store.create(ALICE, label=f"bad{bad}", rate_per_min=bad)

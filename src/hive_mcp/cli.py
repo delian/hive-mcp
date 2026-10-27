@@ -86,6 +86,9 @@ def token_create(  # noqa: PLR0913, PLR0917 - one option per claim
     expires_days: float | None = typer.Option(
         None, help="Token lifetime in days (default: never)."
     ),
+    rate_per_min: int | None = typer.Option(
+        None, help="This token's own request limit per minute (default: the server's)."
+    ),
 ) -> None:
     """Create a token. The plaintext is printed once and cannot be recovered."""
     try:
@@ -98,7 +101,7 @@ def token_create(  # noqa: PLR0913, PLR0917 - one option per claim
             frozenset(parse_scope(a) for a in approves),
         )
         token = TokenStore(Settings().tokens_path).create(
-            principal, label=label, expires_in_days=expires_days
+            principal, label=label, expires_in_days=expires_days, rate_per_min=rate_per_min
         )
     except (KeyError, HiveError) as exc:
         typer.echo(f"error: {exc}", err=True)
@@ -117,7 +120,8 @@ def token_list() -> None:
             else time.strftime("%Y-%m-%d", time.gmtime(r.expires_at))
         )
         org, role = r.claims.get("hive_org"), r.claims.get("hive_role")
-        typer.echo(f"{r.label}\t{r.subject}\t{org}\t{role}\texpires {expiry}")
+        rate = f"\t{r.rate_per_min}/min" if r.rate_per_min else ""
+        typer.echo(f"{r.label}\t{r.subject}\t{org}\t{role}\texpires {expiry}{rate}")
 
 
 @tokens.command("revoke")

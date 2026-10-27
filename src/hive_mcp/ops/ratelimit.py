@@ -68,6 +68,8 @@ class Rule:
     limiter: Limiter
     by_token: bool = False  # key on the bearer token (hashed) when present, else on the address
     methods: frozenset[str] = frozenset()  # empty = all
+    # a different limiter for particular keys (e.g. a token with its own limit); None = this rule's
+    per_key: Callable[[str], Limiter | None] | None = None
 
 
 def client_key(scope: Scope) -> str:
@@ -92,7 +94,8 @@ class RateLimitMiddleware:
             for rule in self.rules:
                 if path.startswith(rule.prefixes) and (not rule.methods or method in rule.methods):
                     key = (token_key(scope) if rule.by_token else None) or client_key(scope)
-                    wait = await rule.limiter.ahit(f"{rule.prefixes[0]}|{key}")
+                    limiter = (rule.per_key and rule.per_key(key)) or rule.limiter
+                    wait = await limiter.ahit(f"{rule.prefixes[0]}|{key}")
                     if wait > 0:
                         response = JSONResponse(
                             {"error": "rate_limited", "error_description": "slow down and retry"},

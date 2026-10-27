@@ -24,6 +24,24 @@ class UsageOut(BaseModel):
     last_activity: str
 
 
+class PersonActivityOut(BaseModel):
+    user: str
+    tool_calls: int
+    writes: int
+    items: int
+    characters: int
+    last_seen: str | None
+    top_tools: dict[str, int]
+
+
+class ActivityOut(BaseModel):
+    days: int
+    people: list[PersonActivityOut]
+    teams: dict[str, dict[str, int]] = Field(description="team -> {tool_calls, writes}")
+    busiest_tools: dict[str, int]
+    truncated: bool = Field(description="True when the window held too many events to read all.")
+
+
 class AuditOut(BaseModel):
     seq: int = Field(
         description="Next page: pass the last seq as after_seq (oldest first) or before_seq (newest first)."
@@ -50,6 +68,32 @@ def register_admin_tools(mcp: MCPServer, get_services: Callable[[], Services]) -
             )
             for u in rows
         ]
+
+    @mcp.tool(annotations=READ)
+    @guarded
+    async def kb_admin_activity(days: int = 30) -> ActivityOut:
+        """Admins only: tool calls, writes and storage per person and per team over the last `days` days.
+
+        Counts only (no content). Tool calls are saved every few minutes, so the newest are missing.
+        """
+        report = get_services().activity
+        assert report is not None  # noqa: S101 - always built by bootstrap
+        a = await report.build(current_principal(), days)
+        return ActivityOut(
+            days=a.days,
+            people=[
+                PersonActivityOut(
+                    user=p.user, tool_calls=p.calls, writes=p.writes, items=p.items,
+                    characters=p.characters,
+                    last_seen=p.last_seen.isoformat() if p.last_seen else None,
+                    top_tools=dict(p.tools.most_common(5)),
+                )
+                for p in a.people
+            ],
+            teams={t: {"tool_calls": c, "writes": w} for t, (c, w) in a.teams.items()},
+            busiest_tools=dict(a.tools),
+            truncated=a.truncated,
+        )  # fmt: skip
 
     @mcp.tool(annotations=READ)
     @guarded

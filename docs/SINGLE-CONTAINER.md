@@ -89,7 +89,8 @@ docker run -d -p 8080:8080 -v hive:/data -e HIVE_EMBEDDED_POSTGRES=true hive-mcp
   and stopped (fast, clean) after the server, so after the final backup.
 - With `HIVE_BACKUP_DIR` the archives, the final backup, the restore on a new disk and the one-writer lease work exactly as
   above; the database part of an archive is a `pg_dump` instead of a SQLite snapshot. An archive is written only if rows
-  changed (or tokens, users or files did). Archives of the two profiles are not interchangeable.
+  changed (or tokens, users or files did). Archives of the two profiles are not interchangeable; to move an existing
+  SQLite deployment into it, use `hive migrate to-postgres --embedded` (docs/MIGRATE.md).
 - Without a backup directory the data is only as durable as the `/data` volume.
 - It is one more process to babysit: if Postgres dies while the server runs, requests fail until the container is
   restarted (the readiness check fails, so a platform restarts it). Tuning is Postgres' defaults.

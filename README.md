@@ -19,7 +19,7 @@ against real Google, real assistants or a real Azure deployment** - see the open
 |---|---|
 | Agent setup (Claude Code hooks, AGENTS.md) | [AGENTS](docs/AGENTS.md) |
 | Tools, auth, configuration | [MCP](docs/MCP.md), [OAuth / Google sign-in](docs/OAUTH.md) |
-| Deploy (Docker, Azure, Tailscale), backup and restore | [DEPLOY](docs/DEPLOY.md), [BACKUP](docs/BACKUP.md), [HARDENING](docs/HARDENING.md) |
+| Deploy (Docker, Azure, Tailscale), backup and restore, SQLite/Postgres migration | [DEPLOY](docs/DEPLOY.md), [BACKUP](docs/BACKUP.md), [MIGRATE](docs/MIGRATE.md), [HARDENING](docs/HARDENING.md) |
 | Search quality, embedders, reranker | [EVALUATION](docs/EVALUATION.md), [EMBEDDINGS](docs/EMBEDDINGS.md) |
 | Sharing and approvals | [PROMOTION](docs/PROMOTION.md) |
 | One container (local, Azure, any cloud) | [SINGLE-CONTAINER](docs/SINGLE-CONTAINER.md) (self-backup, restore, one-command demo) |

@@ -154,8 +154,8 @@ def test_stored_text_cannot_inject_mentions_or_links_into_replies(slack: Live):
     assert "&lt;!channel&gt;" in reply
 
 
-def interaction(live: Live, payload: dict):
-    return post(live, "/slack/interactions", {"payload": json.dumps(payload)})
+def interaction(live: Live, payload: dict, *, ts: int | None = None):
+    return post(live, "/slack/interactions", {"payload": json.dumps(payload)}, ts=ts)
 
 
 def test_the_message_shortcut_saves_the_message_privately_and_is_idempotent(
@@ -172,8 +172,11 @@ def test_the_message_shortcut_saves_the_message_privately_and_is_idempotent(
         "user": {"id": "UANN"}, "team": {"id": TEAM}, "channel": {"id": "C1", "name": "ops"},
         "message": {"text": "Rotate the API keys every 90 days &amp; log it", "ts": "1700000000.000100"},
     }  # fmt: skip
-    assert interaction(slack, payload).status_code == 200
-    assert interaction(slack, payload).status_code == 401  # identical request: replayed
+    now = int(
+        time.time()
+    )  # one timestamp: a second boundary between the two would change the signature
+    assert interaction(slack, payload, ts=now).status_code == 200
+    assert interaction(slack, payload, ts=now).status_code == 401  # identical request: replayed
     other = {**payload, "message": {**payload["message"], "ts": "1700000000.000200"}}
     assert interaction(slack, other).status_code == 200
     ignored = interaction(slack, {**payload, "callback_id": "something_else"})

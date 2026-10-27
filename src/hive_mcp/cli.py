@@ -15,6 +15,7 @@ from hive_mcp.cli_eval import app as eval_app
 from hive_mcp.cli_groups import app as groups_app
 from hive_mcp.cli_ingest import app as ingest_app
 from hive_mcp.cli_maint import app as maint_app
+from hive_mcp.cli_migrate import app as migrate_app
 from hive_mcp.cli_ops import app as ops_app
 from hive_mcp.cli_teams import app as teams_app
 from hive_mcp.config import Settings
@@ -39,6 +40,7 @@ cli.add_typer(users, name="user")
 models = typer.Typer(no_args_is_help=True, help="Manage local embedding models.")
 cli.add_typer(models, name="models")
 cli.add_typer(connectors_app, name="connectors")
+cli.add_typer(migrate_app, name="migrate")
 cli.add_typer(demo_app)  # demo
 cli.add_typer(ops_app)  # reindex, forget, purge, eval
 cli.add_typer(ingest_app)  # ingest, ingest-git

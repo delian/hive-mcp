@@ -13,6 +13,7 @@ from starlette.routing import Route
 from hive_mcp.domain.errors import HiveError, NotFound, PermissionDenied
 from hive_mcp.domain.principal import Role
 from hive_mcp.domain.promotion import PromotionStatus
+from hive_mcp.services.models import provenance
 from hive_mcp.webui import views
 from hive_mcp.webui.layout import nav_bar, redirect, render
 
@@ -159,6 +160,21 @@ class AdminUi:
             return self.page("Could not decide", f"<p>{escape(str(exc))}</p>", gate, status)
         return redirect(f"/admin/promotions?done={decision}")
 
+    async def note(self, request: Request) -> Response:
+        """A note, read-only, for anyone who may read it (links from chat apps open here). Not
+        signed in: sign in first, then come straight back (see SignIn.remember_next)."""
+        note_id = request.path_params["note_id"]
+        current = await self.signin.current(request)
+        if current is None:
+            return self.signin.remember_next(redirect("/admin/login"), f"/admin/n/{note_id}")
+        try:
+            view = await self.get_services().knowledge.get(current[1], note_id)
+        except HiveError:  # not found and not visible look the same
+            body = "<p>This note does not exist, or you may not read it.</p>"
+            return self.page("Note", body, current, 404)
+        where = provenance(view.item.scope, view.tier, view.item.author_id)
+        return self.page(view.item.title, views.note(view, where), current)
+
     async def audit(self, request: Request) -> Response:
         gate = await self.gate(request, Role.ADMIN)
         if isinstance(gate, Response):
@@ -205,6 +221,7 @@ class AdminUi:
             Route("/admin/promotions/history", self.history),
             Route("/admin/promotions/decide", self.decide, methods=["POST"]),
             Route("/admin/audit", self.audit),
+            Route("/admin/n/{note_id:str}", self.note),
             Route("/admin/usage", self.usage),
             Route("/admin/activity", self.activity),
             *(self.accounts.routes() if self.accounts else []),

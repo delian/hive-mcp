@@ -22,6 +22,7 @@ from hive_mcp.app_front import (
 from hive_mcp.bootstrap import Services, build_services
 from hive_mcp.config import Settings
 from hive_mcp.domain.errors import StorageBusy
+from hive_mcp.legal import legal_routes
 from hive_mcp.mcp_api.server import build_mcp
 from hive_mcp.ops.health import health_routes
 from hive_mcp.ops.loops import start_loops
@@ -130,8 +131,10 @@ def front_doors(  # noqa: PLR0913, PLR0917 - everything the routes are built fro
         provider, routes = build_oauth(settings, static, lambda: get_services().backend.kv)
     if settings.admin_ui:
         routes += build_admin_ui(settings, tokens, get_services)
+    routes += legal_routes(settings)
     routes += build_slack(directory, integrations, get_services)
-    routes += build_teams(directory, integrations, get_services)
+    note_base = settings.public_url.rstrip("/") + "/admin/n/" if settings.admin_ui else None
+    routes += build_teams(directory, integrations, get_services, note_base)
     return provider, routes
 
 

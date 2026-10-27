@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 from hive_mcp.webui.layout import hidden, table
 
 if TYPE_CHECKING:
+    from hive_mcp.domain.item import ItemView
     from hive_mcp.domain.promotion import Promotion
     from hive_mcp.ports.audit import AuditRecord
     from hive_mcp.ports.maintenance import AuthorUsage
@@ -184,4 +185,21 @@ def promotion_history(
         + table(cols, body)
         + nav
         + "<p class=muted>Newest first. Notes are the decider's; the reason is the requester's.</p>"
+    )
+
+
+def note(view: ItemView, where: str) -> str:
+    """One note, read-only. `where` says where it came from (as search results do)."""
+    item = view.item
+    tags = ", ".join(esc(t) for t in sorted(item.tags)) or "none"
+    facts = [
+        ("Kind", esc(str(item.kind))), ("Status", esc(str(item.status))), ("From", esc(where)),
+        ("Tags", tags), ("Revision", str(item.revision)),
+        ("Updated", esc(item.updated_at.strftime("%Y-%m-%d %H:%M UTC"))),
+        ("Author", esc(item.author_id)),
+    ]  # fmt: skip
+    source = f"<p class=muted>Source: {esc(item.source)}</p>" if item.source else ""
+    return (
+        table(["", ""], [[f"<b>{k}</b>", v] for k, v in facts])
+        + f"<pre>{esc(item.body)}</pre>{source}"
     )

@@ -96,6 +96,8 @@ select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC", "S", "PL", "RUF", "TCH", "AN
 # Tool signatures are the public API: many optional arguments are intended.
 "src/hive_mcp/mcp_api/*.py" = ["E501"]  # agent-facing text is clearer unwrapped
 "src/hive_mcp/cli_demo.py" = ["E501"]  # sample note text
+"src/hive_mcp/legal.py" = ["E501"]  # the pages are prose
+"tests/teams/test_unfurl.py" = ["F811"]  # a shared fixture is imported by name
 "src/hive_mcp/security/injection.py" = ["E501"]  # the heuristics are regex tables
 "src/hive_mcp/security/oauth/*.py" = ["E501"]  # long RFC references and log formats read better unwrapped
 "src/hive_mcp/webui/*.py" = ["E501"]  # inline HTML and CSS read better unwrapped
@@ -134,6 +136,7 @@ source_paths = [
     "src/hive_mcp/teams/verify.py",
     "src/hive_mcp/teams/connector.py",
     "src/hive_mcp/teams/extension.py",
+    "src/hive_mcp/teams/extension_cards.py",
     "src/hive_mcp/security/tokens.py",
     "src/hive_mcp/security/oauth/cookies.py",
     "src/hive_mcp/security/oauth/tokens.py",

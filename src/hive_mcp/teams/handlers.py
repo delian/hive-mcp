@@ -67,12 +67,18 @@ class TeamsBot:
         get_services: Callable[[], Services],
         get_kv: Callable[[], KeyValueStore],
         clock: Callable[[], float] = time.monotonic,
+        *,
+        note_base: str | None = None,
     ) -> None:
+        self.note_base = note_base  # where notes can be opened (None: no links to offer)
         self._cfg, self._connector, self._directory = config, connector, directory
         self._services, self._get_kv, self._clock = get_services, get_kv, clock
 
     def services(self) -> Services:
         return self._services()
+
+    def kv(self) -> KeyValueStore:
+        return self._get_kv()
 
     async def invoke(self, activity: dict[str, Any]) -> dict[str, Any]:
         """Message extension commands (search, save a message); see extension.py."""

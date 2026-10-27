@@ -98,10 +98,10 @@ It covers the code where a silent change would matter most:
 - sign-in and tokens: static bearer tokens, the OAuth token service (issue, rotation, reuse detection, family
   revocation), the login cookie and its key, token revocation;
 - chat front doors: Slack signature checks, Teams token verification, the Teams connector's service-URL guard and
-  token cache, the Teams message extension;
+  token cache, the Teams message extension (search, save dialog, link unfurling);
 - other: the prompt-injection heuristics, retention rules, the backup lease and hand-off, the ranking nudge,
   connector settings and the connector sync loop (what is retired, when it refuses to).
-All 1,712 mutants are killed at the time of writing. CI runs it weekly (and on demand through *Run workflow*), not on
+All 2,114 mutants are killed at the time of writing. CI runs it weekly (and on demand through *Run workflow*), not on
 every push, because it takes a few minutes.
 
 Some mutants cannot be killed because they change nothing observable: a header name's case, the default size of

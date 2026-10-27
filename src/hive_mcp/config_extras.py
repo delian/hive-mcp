@@ -30,6 +30,12 @@ class ExtrasSettings(BaseSettings):
     # revision id (HIVE_REVISION; Azure Container Apps supplies CONTAINER_APP_REVISION).
     backup_handoff: bool = False
     revision: str | None = None
+    # The operator named on the built-in /legal/privacy and /legal/terms pages (and so in the Teams
+    # app package). privacy_url / terms_url replace those pages with your own documents.
+    legal_org: str = "the operator of this Hive server"
+    legal_contact: str | None = None  # an email address people can write to about their data
+    privacy_url: str | None = None
+    terms_url: str | None = None
     # Run PostgreSQL + pgvector inside this container too (image built with WITH_POSTGRES=true):
     # the external profile without a second service. Data in <data_dir>/pg; with HIVE_BACKUP_DIR
     # the usual archives (pg_dump) protect it. docs/SINGLE-CONTAINER.md

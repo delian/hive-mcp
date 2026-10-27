@@ -27,17 +27,36 @@ the admin page (tool arguments appear in chat transcripts, so they are refused f
    hour), or pin `aad-object-id=email` lines in the page for people the lookup cannot find.
 
 ## Message extension
-Two commands, declared in the package:
-- **Search Hive** (compose box and the Teams search bar): type a query, get result cards to insert into the message.
-  The card goes into a conversation in front of everyone there, so, as for channel answers, only organisation-wide
-  knowledge and the notes of the project the conversation is mapped to are offered; private and project notes stay with
-  the bot in your personal chat. Card text is escaped (no links, mentions or formatting from stored text).
-- **Save to Hive** (the `...` menu of any message): saves the message as a note **private to you**, with the author's name
-  and a link to the message as its source, and tells you in a small dialog. There is no form: saving happens as the dialog
-  opens (the note is keyed to the message, so a retry or second click saves nothing twice). Move it to a project later
-  with `kb_request_promotion`.
-These arrive as `invoke` activities, are verified like every other activity, answered in the HTTP response (Teams allows
-five seconds), and are not de-duplicated (a retry is simply answered again). The same tenant and directory checks apply.
+Three things, declared in the package:
+- **Search Hive** (compose box and the Teams search bar): type a query, get result cards to insert into the message. The card
+  goes into a conversation in front of everyone there, so, as for channel answers, only organisation-wide knowledge and the
+  notes of the project the conversation is mapped to are offered. Card text is escaped (no links, mentions or formatting from
+  stored text). With the admin UI on, each card has an **Open in Hive** button.
+- **Save to Hive** (the `...` menu of any message): someone who belongs to no project gets a one-click save of a note
+  **private to them**. Someone in projects gets a small dialog with a dropdown, *Private to me* (the default) or one of their
+  projects, and a **Save** button. The message is held for ten minutes between opening the dialog and pressing Save, only for
+  that person; saving twice does nothing twice; the same message can be kept in another place as another note. The note
+  carries the author's name and a link to the message as its source. Move a note later with `kb_request_promotion`.
+- **Link unfurling**: paste a link to a note (`https://<your server>/admin/n/<id>`, the "Open in Hive" address) and Teams turns it
+  into a card. As in search, the text of a note is quoted only if everyone in the conversation may see it (organisation-wide, or
+  the conversation's mapped project, and active); for any other note, a missing one, or one you cannot read, the card is the
+  same bare "Hive note, open it in Hive" card, so it reveals nothing. The card is marked not to be cached, because Teams would
+  otherwise show it to others for 30 minutes.
+These arrive as `invoke` activities, are verified like every other activity, answered in the HTTP response (Teams allows five
+seconds), and are not de-duplicated (a retry is simply answered again). The same tenant and directory checks apply.
+
+### Note pages
+Links open `/admin/n/<id>`, a read-only page of the admin UI (so it exists only with `HIVE_ADMIN_UI=true`; the package
+adds link unfurling only then, or when you pass `--link-unfurling`). **Any person in the directory** may sign in there, by
+Google/Entra/OIDC sign-in or a pasted token, and read the notes they could read through the tools; someone who is not signed
+in is sent to the sign-in page and brought back to the note. Everything else in the admin UI still needs its own role.
+
+### Privacy and terms pages
+Teams wants a privacy and a terms link in the package. The server serves plain pages at `/legal/privacy` and `/legal/terms`
+(what is stored, chat apps, where data goes, how to ask for deletion; use, availability) naming the operator:
+`HIVE_LEGAL_ORG`, `HIVE_LEGAL_CONTACT`. They are a starting point and **not legal advice**: read them, and where your
+organisation has its own documents set `HIVE_PRIVACY_URL` / `HIVE_TERMS_URL` and the pages redirect there (and the package
+uses them).
 
 ## Security properties
 - Every request must carry a Bot Framework JWT: signature checked against the published keys (RS256 only; refetched on an
@@ -50,7 +69,7 @@ five seconds), and are not de-duplicated (a retry is simply answered again). The
 
 ## Not built
 - Multi-tenant bots (Microsoft no longer allows creating them) and the Bot Framework Emulator's tokens.
-- A form for choosing a project when saving a message, link unfurling, and Outlook support for the extension.
+- Zero-install unfurling (`supportsAnonymizedPayloads`): the app has to be installed for links to unfurl. Outlook support.
 - Verified only against locally signed tokens and mocked HTTP, plus Microsoft's documented request and response shapes
-  (manifest 1.17, `composeExtension/query`, `composeExtension/fetchTask`), not a real tenant. Teams is strict about
-  manifests: if the upload is refused, the message names the field.
+  (manifest 1.17, `composeExtension/query`, `fetchTask`, `submitAction`, `queryLink`), not a real tenant. Teams is strict about
+  manifests and cards: if the upload is refused or a dialog does not open, the message names the field.

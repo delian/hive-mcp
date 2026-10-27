@@ -5,12 +5,15 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+from hive_mcp.adapters.memory.kv import MemoryKv
+from hive_mcp.domain.clock import FixedClock
 from hive_mcp.domain.errors import ValidationError
 from hive_mcp.domain.item import Kind, Status
 from hive_mcp.domain.principal import Principal, Role
 from hive_mcp.domain.scope import Scope, ScopeLevel
 from hive_mcp.services.models import Match
-from hive_mcp.teams.extension import SAVE, TeamsExtension, card, message, plain, task_message
+from hive_mcp.teams.extension import SAVE, TeamsExtension
+from hive_mcp.teams.extension_cards import card, message, plain, task_message
 from tests.teams.test_extension import ANN, invoke, query, save, world  # noqa: F401
 
 WHO = Principal("ann@acme.com", "org1", Role.MEMBER, projects=frozenset({"p1"}))
@@ -25,9 +28,16 @@ def match(title, scope, tier="primary", snippet="a snippet", provenance="your no
     )  # fmt: skip
 
 
+LONER = Principal("lone@acme.com", "org1", Role.MEMBER)  # in no project: saving is one click
+
+
 class FakeBot:
-    def __init__(self, who=WHO, matches=(), error: Exception | None = None) -> None:
+    def __init__(
+        self, who=WHO, matches=(), error: Exception | None = None, note_base: str | None = None
+    ) -> None:
         self.who, self.matches, self.error = who, list(matches), error
+        self.note_base = note_base
+        self._kv = MemoryKv(FixedClock())
         self.requests: list = []
         self.saved: list = []
         bot = self
@@ -51,6 +61,9 @@ class FakeBot:
 
     async def resolve(self, _activity):
         return self.who
+
+    def kv(self):
+        return self._kv
 
     def services(self):
         return self._services
@@ -83,7 +96,7 @@ def test_the_small_builders_have_the_exact_shapes_teams_expects():
 async def test_other_activity_names_get_an_empty_answer_and_a_missing_name_too():
     bot = ext(FakeBot())
     assert await bot.invoke({"type": "invoke"}) == {}
-    assert await bot.invoke(act("composeExtension/submitAction")) == {}
+    assert await bot.invoke(act("composeExtension/selectItem")) == {}
 
 
 async def test_the_tenant_and_the_user_checks_answer_in_each_commands_own_form():
@@ -106,7 +119,7 @@ async def test_the_tenant_and_the_user_checks_answer_in_each_commands_own_form()
 
 
 async def test_domain_errors_become_a_sorry_in_the_right_form_and_other_errors_propagate():
-    failing = FakeBot(error=ValidationError("boom"))
+    failing = FakeBot(who=LONER, error=ValidationError("boom"))
     query_value = {"parameters": [{"name": "query", "value": "deploy"}]}
     assert await ext(failing).invoke(act("composeExtension/query", query_value)) == (
         message("Sorry: boom")
@@ -204,7 +217,7 @@ def saved(bot):
 
 
 async def test_saving_defaults_every_missing_part_and_keys_the_note_to_the_message():
-    bot = FakeBot()
+    bot = FakeBot(who=LONER)
     e = ext(bot)
 
     def fetch(payload):
@@ -225,7 +238,7 @@ async def test_saving_defaults_every_missing_part_and_keys_the_note_to_the_messa
     assert request.source == "teams:message:m7" and request.tags == ("source/teams",)
     assert request.scope is None  # private to the sender
     key_a = request.idempotency_key
-    assert key_a.startswith("teams-msg:") and key_a.endswith(f":{WHO.id}")
+    assert key_a.startswith("teams-msg:") and key_a.endswith(f":{LONER.id}")
     await e.invoke(fetch({"body": {"content": "First line\nsecond"}, "id": "m8"}))
     assert saved(bot).idempotency_key == key_a  # no link: the text decides
     await e.invoke(fetch({"body": {"content": "other"}, "linkToMessage": "https://t/1"}))
@@ -236,7 +249,7 @@ async def test_saving_defaults_every_missing_part_and_keys_the_note_to_the_messa
 
 
 async def test_the_title_the_sender_and_the_limits():
-    bot = FakeBot()
+    bot = FakeBot(who=LONER)
     e = ext(bot)
 
     def fetch(payload):
@@ -272,7 +285,7 @@ async def test_a_missing_conversation_id_is_not_looked_up_as_text_and_ids_defaul
 
 
 async def test_saving_a_message_without_an_id_or_link_and_the_digest_shape():
-    bot = FakeBot()
+    bot = FakeBot(who=LONER)
     e = ext(bot)
     fetch = act(
         "composeExtension/fetchTask",
@@ -283,4 +296,76 @@ async def test_saving_a_message_without_an_id_or_link_and_the_digest_shape():
     assert request.source == "teams:message:"
     import re
 
-    assert re.fullmatch(r"teams-msg:[0-9a-f]{32}:ann@acme\.com", request.idempotency_key)
+    assert re.fullmatch(r"teams-msg:[0-9a-f]{32}:lone@acme\.com", request.idempotency_key)
+
+
+def test_the_save_dialog_is_an_adaptive_card_in_a_continue_task_with_every_choice():
+    from hive_mcp.teams.extension_cards import save_dialog
+
+    dialog = save_dialog("tok123", "<b>Hello</b> *there*", ["alpha", "beta"])
+    task = dialog["task"]
+    assert task["type"] == "continue"
+    info = task["value"]
+    assert (info["title"], info["height"], info["width"]) == ("Save to Hive", "small", "medium")
+    assert info["card"]["contentType"] == "application/vnd.microsoft.card.adaptive"
+    content = info["card"]["content"]
+    assert content["type"] == "AdaptiveCard" and content["version"] == "1.4"
+    preview, chooser = content["body"]
+    assert preview == {
+        "type": "TextBlock",
+        "text": "\\<b\\>Hello\\</b\\> \\*there\\*",
+        "wrap": True,
+        "isSubtle": True,
+    }
+    assert chooser["type"] == "Input.ChoiceSet" and chooser["id"] == "project"
+    assert (
+        chooser["style"] == "compact"
+        and chooser["label"] == "Keep it"
+        and chooser["value"] == "private"
+    )
+    assert chooser["choices"] == [
+        {"title": "Private to me", "value": "private"},
+        {"title": "Project alpha", "value": "alpha"},
+        {"title": "Project beta", "value": "beta"},
+    ]
+    assert content["actions"] == [
+        {"type": "Action.Submit", "title": "Save", "data": {"token": "tok123"}}
+    ]
+    assert (
+        len(save_dialog("t", "x" * 400, [])["task"]["value"]["card"]["content"]["body"][0]["text"])
+        == 160
+    )
+
+
+def test_cards_carry_a_button_only_in_the_card_not_in_its_preview():
+    plain_card = card("T", "S", "text")
+    assert (
+        "buttons" not in plain_card["content"]
+        and plain_card["preview"]["content"] == plain_card["content"]
+    )
+    linked = card("T", "S", "text", "https://h/x")
+    assert linked["content"]["buttons"] == [
+        {"type": "openUrl", "title": "Open in Hive", "value": "https://h/x"}
+    ]
+    assert linked["preview"]["content"] == {"title": "T", "subtitle": "S", "text": "text"}
+
+
+def test_the_held_copy_of_a_message_keeps_exactly_what_a_note_is_made_from():
+    from hive_mcp.teams.extension import _slim
+
+    full = {
+        "id": 1699, "subject": "S", "body": {"content": "<p>hi</p>", "contentType": "html"},
+        "from": {"user": {"displayName": "Bob", "id": "x"}, "application": None},
+        "linkToMessage": "https://t/1", "reactions": [1, 2, 3], "mentions": [{"id": 0}],
+    }  # fmt: skip
+    assert _slim(full) == {
+        "id": "1699", "subject": "S", "body": {"content": "<p>hi</p>"},
+        "from": {"user": {"displayName": "Bob"}}, "linkToMessage": "https://t/1",
+    }  # fmt: skip
+    assert _slim({}) == {
+        "id": "", "subject": None, "body": {"content": ""},
+        "from": {"user": {"displayName": ""}}, "linkToMessage": "",
+    }  # fmt: skip
+    assert _slim({"from": None, "body": None})["from"] == {"user": {"displayName": ""}}
+    assert _slim({"from": {"user": None}})["from"] == {"user": {"displayName": ""}}
+    assert len(_slim({"body": {"content": "x" * 100_000}})["body"]["content"]) == 40_000

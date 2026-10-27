@@ -127,15 +127,17 @@ def build_teams(
     directory: UserDirectory,
     store: ServiceIntegrations,
     get_services: Callable[[], Services],
+    note_base: str | None = None,
 ) -> list[Route]:
-    """The Teams route; the stored integration settings decide whether and how it answers."""
+    """The Teams route; the stored integration settings decide whether and how it answers.
+    `note_base` is the address notes are viewable at (None: the admin UI is off, so no links)."""
 
     def kv() -> KeyValueStore:
         return get_services().backend.kv
 
     def make(config: IntegrationConfig) -> tuple[BotFrameworkVerifier, TeamsBot]:
         connector = BotConnector(config.app_id, config.secrets["app_password"], config.workspace)
-        bot = TeamsBot(config, connector, directory, get_services, kv)
+        bot = TeamsBot(config, connector, directory, get_services, kv, note_base=note_base)
         return BotFrameworkVerifier(config.app_id), bot
 
     return TeamsRoutes(lambda: store.get("teams"), make, kv).routes()

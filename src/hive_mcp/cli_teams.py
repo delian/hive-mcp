@@ -19,10 +19,20 @@ def teams_package(
     out: Path = typer.Option(Path("hive-teams.zip"), help="Where to write the package."),  # noqa: B008
     name: str = typer.Option("Hive", help="The app's name in Teams."),
     version: str = typer.Option("1.0.0", help="Raise it when you upload a changed package."),
+    link_unfurling: bool | None = typer.Option(
+        None,
+        "--link-unfurling/--no-link-unfurling",
+        help="Unfurl pasted note links (default: on when HIVE_ADMIN_UI is on, which serves them).",
+    ),
 ) -> None:
     """Write the Teams app package (manifest, icons) for HIVE_PUBLIC_URL; upload it in Teams."""
     try:
-        data = package(app_id, Settings().public_url, name=name, version=version)
+        settings = Settings()
+        data = package(
+            app_id, settings.public_url, name=name, version=version,
+            privacy_url=settings.privacy_url, terms_url=settings.terms_url,
+            link_unfurling=settings.admin_ui if link_unfurling is None else link_unfurling,
+        )  # fmt: skip
     except HiveError as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(1) from exc

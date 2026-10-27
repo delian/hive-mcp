@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import logging
+import re
 import secrets
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -35,6 +36,8 @@ if TYPE_CHECKING:
 log = logging.getLogger("hive.security")
 NS_TXN = "admin:txn"
 TXN_COOKIE = "hive_admin_txn"
+NEXT_COOKIE = "hive_admin_next"
+NEXT_PATH = re.compile(r"/admin/n/[0-9a-f]{32}")  # the only place sign-in may send you back to
 TXN_SECONDS = 600
 
 
@@ -75,12 +78,27 @@ class SignIn:
             samesite="lax",  # strict would drop it on the redirect that follows Google's callback
         )  # fmt: skip
 
-    async def start_session(self, kind: str, subject: str, principal: Principal) -> Response:
+    def remember_next(self, response: Response, path: str) -> Response:
+        """Keep where the person was going, so sign-in can take them there (a note link)."""
+        if NEXT_PATH.fullmatch(path):
+            self.set_cookie(response, NEXT_COOKIE, path, TXN_SECONDS)
+        return response
+
+    def _after_login(self, request: Request | None) -> str:
+        target = request.cookies.get(NEXT_COOKIE, "") if request else ""
+        return target if NEXT_PATH.fullmatch(target) else "/admin"
+
+    async def start_session(
+        self, kind: str, subject: str, principal: Principal, request: Request | None = None
+    ) -> Response:
         services = self.get_services()
         event = AuditEvent(principal.org_id, principal.id, "admin.login", SystemClock().now())
         await services.backend.audit.append(event)
         log.info("admin.login kind=%s subject=%s", kind, subject)
-        response = redirect("/admin")
+        target = self._after_login(request)
+        response = redirect(target)
+        if target != "/admin":
+            response.delete_cookie(NEXT_COOKIE, path="/admin")
         cookie = await self.sessions.create(kind, subject)
         self.set_cookie(response, COOKIE_NAME, cookie, SESSION_SECONDS)
         return response
@@ -108,7 +126,7 @@ class SignIn:
         if label is None or principal is None:
             log.warning("admin.login_denied kind=token")
             return self.login_page("That token is not valid.", 401)
-        return await self.start_session("token", label, principal)
+        return await self.start_session("token", label, principal, request)
 
     async def logout(self, request: Request) -> Response:
         current = await self.current(request)
@@ -162,7 +180,7 @@ class SignIn:
             log.warning("admin.login_denied reason=%s", outcome.reason)
             return self.login_page("This account may not sign in.", 403)
         pin_identity(self.directory, outcome, identity)
-        response = await self.start_session("user", outcome.email, outcome.principal())
+        response = await self.start_session("user", outcome.email, outcome.principal(), request)
         response.delete_cookie(TXN_COOKIE, path="/admin")
         return response
 

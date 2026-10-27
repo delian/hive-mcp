@@ -27,8 +27,15 @@ ACCENT = "#F5A524"
 Pixel = tuple[int, int, int, int]
 
 
-def manifest(
-    app_id: str, public_url: str, *, name: str = "Hive", version: str = "1.0.0"
+def manifest(  # noqa: PLR0913 - the package's few knobs
+    app_id: str,
+    public_url: str,
+    *,
+    name: str = "Hive",
+    version: str = "1.0.0",
+    privacy_url: str | None = None,
+    terms_url: str | None = None,
+    link_unfurling: bool = False,
 ) -> dict[str, object]:
     parsed = urlparse(public_url)
     if parsed.scheme != "https" or not parsed.hostname:
@@ -44,8 +51,8 @@ def manifest(
         "developer": {
             "name": name,
             "websiteUrl": site,
-            "privacyUrl": site,
-            "termsOfUseUrl": site,
+            "privacyUrl": privacy_url or f"{site}/legal/privacy",
+            "termsOfUseUrl": terms_url or f"{site}/legal/terms",
         },
         "name": {"short": name, "full": f"{name}: the team's shared memory"},
         "description": {
@@ -66,6 +73,7 @@ def manifest(
         "composeExtensions": [
             {
                 "botId": app_id,
+                **_handlers(parsed.hostname, link_unfurling),
                 "commands": [
                     {
                         "id": "searchHive",
@@ -96,6 +104,13 @@ def manifest(
         "permissions": ["identity", "messageTeamMembers"],
         "validDomains": [parsed.netloc],
     }
+
+
+def _handlers(host: str | None, enabled: bool) -> dict[str, object]:
+    """Pasted links to notes on this server unfurl into a card (needs the admin UI's note pages)."""
+    if not enabled or not host:
+        return {}
+    return {"messageHandlers": [{"type": "link", "value": {"domains": [host]}}]}
 
 
 def _png(size: int, pixel: Callable[[int, int], Pixel]) -> bytes:
@@ -140,11 +155,22 @@ def icons() -> dict[str, bytes]:
     }
 
 
-def package(app_id: str, public_url: str, *, name: str = "Hive", version: str = "1.0.0") -> bytes:
+def package(  # noqa: PLR0913 - the package's few knobs
+    app_id: str,
+    public_url: str,
+    *,
+    name: str = "Hive",
+    version: str = "1.0.0",
+    privacy_url: str | None = None,
+    terms_url: str | None = None,
+    link_unfurling: bool = False,
+) -> bytes:
+    built = manifest(
+        app_id, public_url, name=name, version=version, privacy_url=privacy_url,
+        terms_url=terms_url, link_unfurling=link_unfurling,
+    )  # fmt: skip
     files = {
-        "manifest.json": json.dumps(
-            manifest(app_id, public_url, name=name, version=version), indent=2
-        ).encode(),
+        "manifest.json": json.dumps(built, indent=2).encode(),
         **icons(),
     }
     buffer = io.BytesIO()

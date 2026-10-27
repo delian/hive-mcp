@@ -153,7 +153,11 @@ class Outbox:
         self.sent.append(text)
 
     async def member_email(self, service_url, conversation, user_id, now):
-        return {"29:ann": "ann@acme.com", "29:ghost": "ghost@acme.com"}.get(user_id)
+        return {
+            "29:ann": "ann@acme.com",
+            "29:ghost": "ghost@acme.com",
+            "29:bob": "bob@acme.com",
+        }.get(user_id)
 
 
 @pytest.fixture

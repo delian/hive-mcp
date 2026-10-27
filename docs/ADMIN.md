@@ -24,6 +24,7 @@ JavaScript and uses the same data and rules as the tools; nothing here is a seco
 |---|---|---|
 | `/admin/promotions` | approvers and admins | pending requests with the item text; **Approve** / **Reject** with an optional note |
 | `/admin/promotions/history` | approvers (their scopes) and admins (all) | every request, newest first: status, who decided, when, note; filter by status, 50 per page, most recent 1,000 considered |
+| `/admin/n/<id>` | any person in the directory | one note, read-only, if they may read it (links from Teams open here; not signed in: sign in, then straight to the note) |
 | `/admin/audit` | admins | audit trail, newest first, filters for who / what / target, 100 per page |
 | `/admin/usage` | admins | items and characters per person, plus the quota limits in force |
 | `/admin/users` | admins | add or change a person (role, teams, projects, approver scopes), disable / enable, remove, **sign out everywhere**, forget a pinned Google account |

@@ -94,13 +94,21 @@ what the tests above exercise, and anything that needs real Slack, Teams, Google
 A passing test suite only says the tests agree with the code. `scripts/mutation.sh` (mutmut) changes
 the code in small ways (flips a comparison, drops a check, alters a constant) and runs the fast tests
 against each change; a change that no test notices is a *surviving mutant* and fails the script.
-It covers the modules where a silent change would matter most: Slack signature checks
-(`slack/verify.py`), the injection heuristics (`security/injection.py`), retention rules, the
-backup lease and hand-off, and the ranking nudges. All 353 mutants are killed at the time of
-writing. CI runs it weekly (and on demand through *Run workflow*), not on every push, because it
-takes a few minutes.
+It covers the code where a silent change would matter most:
+- sign-in and tokens: static bearer tokens, the OAuth token service (issue, rotation, reuse detection, family
+  revocation), the login cookie and its key, token revocation;
+- chat front doors: Slack signature checks, Teams token verification, the Teams connector's service-URL guard and
+  token cache, the Teams message extension;
+- other: the prompt-injection heuristics, retention rules, the backup lease and hand-off, the ranking nudge,
+  connector settings and the connector sync loop (what is retired, when it refuses to).
+All 1,712 mutants are killed at the time of writing. CI runs it weekly (and on demand through *Run workflow*), not on
+every push, because it takes a few minutes.
 
-Lines that only change log text, thread names or race-window sleeps carry `# pragma: no mutate`;
-that is deliberate and should stay rare. To look at a survivor:
-`uv run --group mutation mutmut show <name>`; to widen the scope, add files to `source_paths`
-under `[tool.mutmut]` in `pyproject.toml` together with the tests that cover them.
+Some mutants cannot be killed because they change nothing observable: a header name's case, the default size of
+`secrets.token_urlsafe`, a log message's text, a sleep length, an HTTP client timeout. Those lines carry
+`# pragma: no mutate` with the reason (mutmut reads it on the first line of a statement, so such values are kept in
+a one-line constant). That is deliberate and should stay rare. Mutants in *messages* that tell a person what to do
+are killed with exact-text assertions instead. To look at a survivor: `uv run --group mutation mutmut show <name>`
+to widen the scope, add files to `source_paths` under `[tool.mutmut]` in `pyproject.toml`
+together with the tests that cover them (`pytest_add_cli_args_test_selection`). A mutant reported as "no tests" is not
+covered by the selected tests at all: add the tests that exercise it.

@@ -79,10 +79,8 @@ class TokenService:
     async def issue(
         self, user: str, client_id: str, scopes: list[str], resource: str | None, family: str
     ) -> OAuthToken:
-        access, refresh = (
-            ACCESS_PREFIX + secrets.token_urlsafe(32),
-            REFRESH_PREFIX + secrets.token_urlsafe(32),
-        )
+        access = ACCESS_PREFIX + secrets.token_urlsafe(32)  # pragma: no mutate - the default size
+        refresh = REFRESH_PREFIX + secrets.token_urlsafe(32)  # pragma: no mutate - the default size
         now, ttl = self.now(), self._config.access_ttl
         base = {
             "client_id": client_id,
@@ -102,7 +100,6 @@ class TokenService:
         )
         return OAuthToken(
             access_token=access,
-            token_type="Bearer",  # noqa: S106 - token type, not a secret
             expires_in=ttl,
             scope=" ".join(scopes),
             refresh_token=refresh,

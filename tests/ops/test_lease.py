@@ -237,3 +237,15 @@ def test_releasing_from_the_watcher_thread_itself_does_not_wait_for_itself(tmp_p
     (tmp_path / lease_module.HANDOFF_FILE).write_text(json.dumps({"revision": "r2"}))
     assert done.wait(5) and errors == []
     assert not (tmp_path / FILE).exists()
+
+
+def test_the_same_owner_may_take_its_own_lease_again_at_once(tmp_path):
+    first = Lease(tmp_path, "me")
+    first.acquire(0)
+    again = Lease(tmp_path, "me")  # a restarted process with the same identity
+    try:
+        again.acquire(0)
+        assert json.loads((tmp_path / FILE).read_text())["owner"] == "me"
+    finally:
+        again.release()
+        first.release()

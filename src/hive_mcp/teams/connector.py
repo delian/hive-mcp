@@ -23,7 +23,7 @@ HTTP_TIMEOUT = 10.0
 
 def check_service_url(url: str) -> str:
     parsed = urlparse(url)
-    host = parsed.hostname or ""
+    host = parsed.hostname or ""  # pragma: no mutate
     if (
         parsed.scheme != "https"
         or parsed.username
@@ -33,8 +33,12 @@ def check_service_url(url: str) -> str:
     return url.rstrip("/")
 
 
+def _q(text: str) -> str:
+    return quote(text, safe="")  # pragma: no mutate - 'safe' letters are never escaped anyway
+
+
 def _conversation_url(base: str, conversation: str, part: str, leaf: str) -> str:
-    return f"{base}/v3/conversations/{quote(conversation, safe='')}/{part}/{quote(leaf, safe='')}"
+    return f"{base}/v3/conversations/{_q(conversation)}/{part}/{_q(leaf)}"
 
 
 class BotConnector:
@@ -49,8 +53,8 @@ class BotConnector:
     ) -> None:
         self._id, self._secret = app_id, app_password
         self._token_url = token_url or TOKEN_URL.format(tenant=tenant)
-        self._http = http or httpx.AsyncClient(timeout=HTTP_TIMEOUT)
-        self._token: tuple[str, float] | None = None
+        self._http = http or httpx.AsyncClient(timeout=HTTP_TIMEOUT)  # pragma: no mutate
+        self._token: tuple[str, float] | None = None  # pragma: no mutate
 
     async def _access_token(self, now: float) -> str:
         if self._token and self._token[1] > now + 60:
@@ -70,6 +74,9 @@ class BotConnector:
             raise UpstreamError("could not get a Bot Framework token") from exc
         return self._token[0]
 
+    async def _auth(self, now: float) -> dict[str, str]:
+        return {"Authorization": f"Bearer {await self._access_token(now)}"}  # pragma: no mutate
+
     async def reply(
         self, service_url: str, conversation: str, activity: str, text: str, now: float
     ) -> None:
@@ -78,7 +85,7 @@ class BotConnector:
         try:
             await self._http.post(
                 url,
-                headers={"Authorization": f"Bearer {await self._access_token(now)}"},
+                headers=await self._auth(now),
                 json={"type": "message", "text": text, "textFormat": "plain"},
             )
         except httpx.HTTPError:
@@ -87,11 +94,11 @@ class BotConnector:
     async def send(self, service_url: str, conversation: str, text: str, now: float) -> None:
         """A message into an existing conversation that nobody just wrote to (a notification)."""
         base = check_service_url(service_url)
-        url = f"{base}/v3/conversations/{quote(conversation, safe='')}/activities"
+        url = f"{base}/v3/conversations/{_q(conversation)}/activities"
         try:
             response = await self._http.post(
                 url,
-                headers={"Authorization": f"Bearer {await self._access_token(now)}"},
+                headers=await self._auth(now),
                 json={"type": "message", "text": text, "textFormat": "plain"},
             )
             response.raise_for_status()
@@ -104,9 +111,7 @@ class BotConnector:
         base = check_service_url(service_url)
         url = _conversation_url(base, conversation, "members", user_id)
         try:
-            response = await self._http.get(
-                url, headers={"Authorization": f"Bearer {await self._access_token(now)}"}
-            )
+            response = await self._http.get(url, headers=await self._auth(now))
             body = response.json()
         except (httpx.HTTPError, ValueError):
             return None

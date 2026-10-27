@@ -121,7 +121,7 @@ addopts = "--cov=hive_mcp --cov-report=term-missing"
 timeout = 60  # a hung test fails after a minute instead of stalling CI
 
 [tool.mutmut]
-# Mutation testing (scripts/mutation.sh, weekly in CI): small, security-critical modules, tested by
+# Mutation testing (scripts/mutation.sh, weekly in CI): security-critical modules, tested by
 # fast tests that need no server.
 debug = false
 also_copy = ["src/", "clients/", "scripts/", "evals/"]
@@ -131,9 +131,19 @@ source_paths = [
     "src/hive_mcp/domain/retention.py",
     "src/hive_mcp/ops/lease.py",
     "src/hive_mcp/services/signals.py",
+    "src/hive_mcp/teams/verify.py",
+    "src/hive_mcp/teams/connector.py",
+    "src/hive_mcp/teams/extension.py",
+    "src/hive_mcp/security/tokens.py",
+    "src/hive_mcp/security/oauth/cookies.py",
+    "src/hive_mcp/security/oauth/tokens.py",
+    "src/hive_mcp/security/oauth/revoke.py",
+    "src/hive_mcp/connectors/spec.py",
+    "src/hive_mcp/connectors/sync.py",
 ]
 pytest_add_cli_args = ["-o", "addopts=", "-p", "no:cacheprovider"]
 pytest_add_cli_args_test_selection = [
     "tests/unit/", "tests/fuzz/", "tests/ops/test_lease.py",
-    "tests/unit/test_retention_rule.py", "tests/unit/test_rank_signals.py",
+    "tests/teams/", "tests/security/", "tests/connectors/",
+    "tests/integration/test_oauth_flow.py", "tests/hardening/test_review_fixes.py",
 ]

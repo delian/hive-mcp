@@ -34,6 +34,7 @@ STATE_NS = "connector:state"
 STATUS_NS = "connector:status"
 MASS_RETIRE_FRACTION = 0.5
 MASS_RETIRE_MIN = 5
+SEPARATOR = b"\0"  # pragma: no mutate - any fixed separator hashes consistently
 
 
 def hkey(key: str) -> str:
@@ -85,7 +86,7 @@ class ConnectorSync:
             return
         try:
             name, data = await doc.load()
-            fingerprint = hashlib.sha256(name.encode() + b"\0" + data).hexdigest()
+            fingerprint = hashlib.sha256(name.encode() + SEPARATOR + data).hexdigest()
             if previous and previous.get("fp") == fingerprint:
                 state[key] = {**previous, "ver": doc.version}
                 report.unchanged += 1

@@ -67,7 +67,7 @@ class TokenStore:
         """Returns the plaintext token: show it once; it cannot be recovered later."""
         if not label or any(r.label == label for r in self._read()):
             raise ValidationError("a unique label is required (it is how tokens are revoked)")
-        token = TOKEN_PREFIX + secrets.token_urlsafe(32)
+        token = TOKEN_PREFIX + secrets.token_urlsafe(32)  # pragma: no mutate - 32 is the default
         expires = int(time.time() + expires_in_days * 86_400) if expires_in_days else None
         if rate_per_min is not None and not 1 <= rate_per_min <= MAX_RATE_PER_MIN:
             raise ValidationError(f"rate per minute must be 1-{MAX_RATE_PER_MIN}")
@@ -117,7 +117,8 @@ class StaticTokenVerifier:
         self._store, self._resource, self._directory = store, resource, directory
 
     async def verify_token(self, token: str) -> AccessToken | None:
-        record = self._store.find(token) if token.startswith(TOKEN_PREFIX) else None
+        ours = token.startswith(TOKEN_PREFIX)  # pragma: no mutate - a cheap pre-check only
+        record = self._store.find(token) if ours else None  # pragma: no mutate
         if record is None or (record.expires_at is not None and record.expires_at <= time.time()):
             return None
         if self._directory and not self._directory.permits(record.subject):

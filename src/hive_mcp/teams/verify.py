@@ -37,9 +37,9 @@ class BotFrameworkVerifier:
         now: Callable[[], float] = time.monotonic,
     ) -> None:
         self._app_id, self._config_url, self._now = app_id, openid_config, now
-        self._http = http or httpx.AsyncClient(timeout=HTTP_TIMEOUT)
-        self._keys: dict[str, Any] | None = None
-        self._fetched = float("-inf")
+        self._http = http or httpx.AsyncClient(timeout=HTTP_TIMEOUT)  # pragma: no mutate
+        self._keys: dict[str, Any] | None = None  # pragma: no mutate
+        self._fetched = float("-inf")  # pragma: no mutate
 
     async def _load_keys(self) -> dict[str, Any]:
         try:

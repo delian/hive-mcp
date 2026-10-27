@@ -21,7 +21,7 @@ def load_secret_key(configured: str | None, path: Path) -> bytes:
     if path.exists():
         return bytes.fromhex(path.read_text().strip())
     path.parent.mkdir(parents=True, exist_ok=True)
-    key = secrets.token_bytes(32)
+    key = secrets.token_bytes(32)  # pragma: no mutate - 32 is the default
     fd = os.open(
         path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
     )  # never readable by others, even briefly

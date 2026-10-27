@@ -20,11 +20,14 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("hive.security")
 MAX_FORM_BYTES = 64 * 1024
+LENGTH_HEADER = "content-length"  # pragma: no mutate - header names are case-insensitive
+NO_STORE = {"Cache-Control": "no-store"}  # pragma: no mutate - likewise
+METHODS = ["POST"]  # pragma: no mutate - Starlette upper-cases them
 
 
 def revoke_route(provider: HiveOAuthProvider) -> Route:
     async def revoke(request: Request) -> Response:
-        declared = request.headers.get("content-length") or "0"
+        declared = request.headers.get(LENGTH_HEADER) or "0"
         if not (declared.isascii() and declared.isdigit()) or int(declared) > MAX_FORM_BYTES:
             return JSONResponse({"error": "invalid_request"}, status_code=413)
         try:
@@ -39,7 +42,7 @@ def revoke_route(provider: HiveOAuthProvider) -> Route:
                 {"error": "invalid_request", "error_description": "token is required"},
                 status_code=400,
             )
-        found: AccessToken | RefreshToken | None = None
+        found: AccessToken | RefreshToken | None = None  # pragma: no mutate - falsy either way
         if token.startswith(ACCESS_PREFIX):
             found = await provider.load_access_token(token)
         found = found or await provider.load_refresh_token(client, token)
@@ -48,8 +51,6 @@ def revoke_route(provider: HiveOAuthProvider) -> Route:
         ):  # clients revoke only their own tokens
             await provider.revoke_token(found)
             log.info("oauth.revoked client=%s", client.client_id)
-        return Response(
-            status_code=200, headers={"Cache-Control": "no-store"}
-        )  # unknown tokens: still 200
+        return Response(headers=NO_STORE)  # unknown tokens: still 200
 
-    return Route("/revoke", revoke, methods=["POST"])
+    return Route("/revoke", revoke, methods=METHODS)

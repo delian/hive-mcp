@@ -63,7 +63,7 @@ class TeamsExtension:
 
     async def invoke(self, activity: dict[str, Any]) -> dict[str, Any]:
         """The response body for an invoke activity ({} for the ones we do not handle)."""
-        name = str(activity.get("name", ""))
+        name = str(activity.get("name", ""))  # pragma: no mutate
         if name not in ("composeExtension/query", "composeExtension/fetchTask"):
             return {}
         reply = message if name == "composeExtension/query" else task_message

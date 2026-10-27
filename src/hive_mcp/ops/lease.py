@@ -41,6 +41,12 @@ WATCH_SECONDS = 1.0
 STALE_SECONDS = 45.0
 POLL_SECONDS = 2.0
 RETIRED_KEEP_SECONDS = 86_400.0
+WAITING = "waiting for the running instance to release the lease"  # pragma: no mutate
+ASKED = "asked the running instance to hand over (revision %s)"  # pragma: no mutate
+
+
+def _recent(stamp: float, now: float) -> bool:
+    return now - stamp < RETIRED_KEEP_SECONDS  # pragma: no mutate - a time-of-day boundary
 
 
 class Lease:
@@ -78,9 +84,7 @@ class Lease:
         try:
             data = json.loads((self._dir / RETIRED_FILE).read_text())
             now = time.time()
-            return {
-                k: float(v) for k, v in data.items() if now - float(v) < RETIRED_KEEP_SECONDS
-            }  # pragma: no mutate
+            return {k: float(v) for k, v in data.items() if _recent(float(v), now)}
         except (OSError, ValueError, TypeError, AttributeError):
             return {}
 
@@ -125,9 +129,7 @@ class Lease:
                     "must not run at once. Stop it first, or wait for it to finish shutting down"
                 )
             if not announced:  # pragma: no mutate
-                log.warning(
-                    "waiting for the running instance to release the lease"
-                )  # pragma: no mutate
+                log.warning(WAITING)  # pragma: no mutate
                 announced = True  # pragma: no mutate
             time.sleep(POLL_SECONDS)
 
@@ -135,9 +137,7 @@ class Lease:
         request = self._dir / HANDOFF_FILE
         if self._handoff_request() != self.revision:
             request.write_text(json.dumps({"revision": self.revision, "owner": self.owner}))
-            log.warning(
-                "asked the running instance to hand over (revision %s)", self.revision
-            )  # pragma: no mutate
+            log.warning(ASKED, self.revision)  # pragma: no mutate
 
     # ------------------------------------------------------------------ holding it
     def _start_watching(self) -> None:

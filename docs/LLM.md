@@ -43,8 +43,13 @@ What the shipped sets say (written by the developers; they check the machinery, 
   numbers and added "not"/"never", misses contradictions with neither (Tuesday vs Thursday, enabled vs disabled, another
   owner), and cries wolf on unrelated numbers or a "do not" about something else. That is why a model, when configured,
   gets the last word, and why the heuristic only reorders candidates and never blocks anything.
-- **Model scores were not measured**: no model key was available when this was built. Run the command with yours; the
-  pipeline as shipped (model, else heuristic) is the row to read.
+- **A model, measured once**: no API key was available, so the exact prompts of the 24 pairs and 3 merge groups were
+  answered by a Claude model (Sonnet, through a subagent, not through the server's HTTP provider) and scored by the same
+  code. Contradictions: precision 1.00, recall 1.00 (12/12 found, 0 false alarms), against 0.57/0.67 for the heuristic.
+  Merges: every required fact kept in all 3 drafts, and the group with two different cache TTLs was reported as a
+  disagreement instead of picking one. The set is small and easy, so read this as "the prompts and the scoring work",
+  not as an accuracy figure; subtler contradictions and long notes need your own set. Run the command with your provider
+  to measure the provider itself; the row to read is the pipeline as shipped (model, else heuristic).
 - **Ranking nudges, simulated** (the retrieval set, hashing embedder, 5 voters per top-3 result): no gain at any voter
   accuracy; MRR 0.700 without nudges, 0.68 with votes. A vote is per note, not per question, so a note that is right for
   one question and noise for another collects both kinds and the nudge mostly adds noise on a set like this one. Forty

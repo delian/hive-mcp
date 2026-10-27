@@ -133,3 +133,46 @@ def feedback_report(
                     typer.echo(f"  {n:>3}  {text}")
 
     run_cli(run)
+
+
+@app.command("eval-assist")
+def eval_assist(
+    what: str = typer.Argument(..., help="conflicts, merges or ranking."),
+    file: Path = typer.Argument(  # noqa: B008
+        ..., help="evals/conflicts.json, evals/merges.json or a retrieval set."
+    ),
+) -> None:
+    """Score contradiction checks, merge proposals or ranking nudges (a model: HIVE_LLM_*)."""
+    from hive_mcp.evaluation import assist_eval  # noqa: PLC0415
+    from hive_mcp.llm.factory import make_llm  # noqa: PLC0415
+
+    if what not in {"conflicts", "merges", "ranking"}:
+        raise typer.BadParameter("what must be conflicts, merges or ranking")
+    settings = Settings()
+    llm = make_llm(settings)
+    raw = json.loads(file.read_text())
+
+    async def run() -> None:
+        if what == "conflicts":
+            for r in await assist_eval.evaluate_conflicts(raw, llm):
+                typer.echo(
+                    f"{r.name:<24} precision {r.precision:.2f} recall {r.recall:.2f} F1 {r.f1:.2f} "
+                    f"(tp {r.tp} fp {r.fp} fn {r.fn} tn {r.tn})"
+                )
+            if llm is None:
+                typer.echo("(no model configured: set HIVE_LLM_PROVIDER to score it too)")
+        elif what == "merges":
+            if llm is None:
+                raise typer.BadParameter("merges need a model: set HIVE_LLM_PROVIDER")
+            for m in await assist_eval.evaluate_merges(raw, llm):
+                note = f", missing {m.missing}" if m.missing else ""
+                typer.echo(
+                    f"group {m.group}: {m.kept}/{m.total} facts kept{note} {m.error}".rstrip()
+                )
+        else:
+            from hive_mcp.embeddings.factory import make_embedder  # noqa: PLC0415
+
+            for p in await assist_eval.replay_votes(dataset.parse(raw), make_embedder(settings)):
+                typer.echo(f"{p.label:<30} MRR {p.mrr:.3f}  R@1 {p.recall_at_1:.3f}")
+
+    run_cli(run)

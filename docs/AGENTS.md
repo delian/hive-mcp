@@ -30,7 +30,15 @@ project (`--root` to change), puts the instructions note between markers in `--a
 `~/.config/hive/token` with owner-only permissions (`--save-token`), and finally tries the server. Other servers in those
 files stay; running it again changes nothing. On a fresh machine `scripts/install_client.sh --url ...` installs the client
 with `uv` first and then runs the same command. Tagged releases (`v*`) attach wheels for the server and the client to the
-GitHub release; publishing to PyPI is opt-in (see `.github/workflows/release.yml`).
+GitHub release; publishing to PyPI is opt-in (see `.github/workflows/release.yml`):
+1. On pypi.org create the projects `hive-mcp` and `hive-hooks` as *pending publishers* (Account, Publishing): owner
+   `delian`, repository `hive-mcp`, workflow `release.yml`, environment `pypi`. No token is stored anywhere.
+2. In the GitHub repository create an environment named `pypi` (optionally with required reviewers) and the repository
+   variable `PUBLISH_TO_PYPI=true`.
+3. Raise `version` in `pyproject.toml` and `clients/hooks/pyproject.toml` to the same number, then
+   `git tag v0.1.0 && git push origin v0.1.0`. The workflow refuses a tag that differs from the files.
+After the first release, `uv tool install hive-hooks` works and `scripts/install_client.sh` can use
+`HIVE_CLIENT_SOURCE=hive-hooks`.
 
 IDE extensions (a VS Code or JetBrains plugin with its own UI) are not built: those editors reach the knowledge base through
 their MCP support, which `init` configures.

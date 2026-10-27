@@ -30,5 +30,27 @@ HIVE_LLM_MIN_SCOPE=project           # notes narrower than this are never sent (
 ## Ranking nudges (`HIVE_RANK_SIGNALS=true`, off by default)
 `kb_rate` votes (one per person and note, changeable) and recent `kb_confirm` confirmations nudge ranking by at most
 +/-6% (votes) and +2% (a confirmation in the last 90 days). Relevance decides; the nudges break near-ties. The factors
-are counts only, no query text. **They have not been evaluated on real data**: switch them on, then compare
-`hive eval` on a set built from your own searches (`hive eval-build`) before keeping them.
+are counts only, no query text. **They have not been evaluated on real data** (see below for what was measured).
+
+## Measuring them: `hive eval-assist`
+```bash
+hive eval-assist conflicts evals/conflicts.json   # heuristic; with HIVE_LLM_* also the model, and the pipeline as shipped
+hive eval-assist merges evals/merges.json         # needs a model: how many required facts survive in the draft
+hive eval-assist ranking evals/core.json          # replays simulated votes through the real ranking
+```
+What the shipped sets say (written by the developers; they check the machinery, not your notes):
+- **Contradictions, heuristic only** (24 pairs, 12 real contradictions): precision 0.57, recall 0.67. It finds changed
+  numbers and added "not"/"never", misses contradictions with neither (Tuesday vs Thursday, enabled vs disabled, another
+  owner), and cries wolf on unrelated numbers or a "do not" about something else. That is why a model, when configured,
+  gets the last word, and why the heuristic only reorders candidates and never blocks anything.
+- **Model scores were not measured**: no model key was available when this was built. Run the command with yours; the
+  pipeline as shipped (model, else heuristic) is the row to read.
+- **Ranking nudges, simulated** (the retrieval set, hashing embedder, 5 voters per top-3 result): no gain at any voter
+  accuracy; MRR 0.700 without nudges, 0.68 with votes. A vote is per note, not per question, so a note that is right for
+  one question and noise for another collects both kinds and the nudge mostly adds noise on a set like this one. Forty
+  votes for one wrong note changed nothing (the 6% bound holds). Up-votes alone changed nothing, down-votes alone gained 0.005
+  MRR. So: leave `HIVE_RANK_SIGNALS` off unless a replay on your own votes shows a gain; the conclusion may differ
+  with a stronger embedder or real, consistent voting.
+
+Write your own `conflicts.json` (`{"pairs": [{"a": {title, body}, "b": {...}, "contradict": true}]}`) and
+`merges.json` (`{"groups": [{"notes": [{title, body}], "facts": ["must appear"]}]}`) from real notes.

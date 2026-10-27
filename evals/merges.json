@@ -1,0 +1,64 @@
+{
+ "groups": [
+  {
+   "notes": [
+    {
+     "title": "Deploy steps",
+     "body": "Deploy with make deploy. It needs approval from a maintainer."
+    },
+    {
+     "title": "Deploy days",
+     "body": "We deploy on Tuesdays. Hotfixes may go out any day."
+    },
+    {
+     "title": "Deploy rollback",
+     "body": "Roll back with make rollback; it restores the previous image tag."
+    }
+   ],
+   "facts": [
+    "make deploy",
+    "approval",
+    "tuesday",
+    "hotfix",
+    "make rollback",
+    "previous image"
+   ]
+  },
+  {
+   "notes": [
+    {
+     "title": "Alerts",
+     "body": "Pager alerts fire when error rate exceeds 2 percent for 5 minutes."
+    },
+    {
+     "title": "Alert routing",
+     "body": "Alerts go to the platform on-call first, then to the team lead after 15 minutes."
+    }
+   ],
+   "facts": [
+    "2 percent",
+    "5 minutes",
+    "platform on-call",
+    "team lead",
+    "15 minutes"
+   ]
+  },
+  {
+   "notes": [
+    {
+     "title": "Cache TTL",
+     "body": "The cache TTL is 60 seconds."
+    },
+    {
+     "title": "Cache TTL",
+     "body": "The cache TTL is 300 seconds."
+    }
+   ],
+   "facts": [
+    "60 seconds",
+    "300 seconds"
+   ],
+   "must_flag_disagreement": true
+  }
+ ]
+}

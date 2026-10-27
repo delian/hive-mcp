@@ -119,16 +119,10 @@ class CurationAssist:
                 f"{withheld[0]} is narrower than HIVE_LLM_MIN_SCOPE and is not sent to the model; "
                 "share it first or write the merge yourself"
             )
-        prompt = "\n\n".join(_note(i) for i in items)
-        if len(prompt) > MAX_CHARS:
+        if sum(len(_note(i)) for i in items) + 2 * len(items) > MAX_CHARS:
             raise ValidationError("the notes are too long to merge in one go")
-        data = _json(await self._llm.complete(MERGE_SYSTEM, prompt))
-        clean = sanitize(
-            str(data.get("title", "")).strip()[:200], str(data.get("body", "")).strip()
-        )
-        if not clean.title or not clean.body:
-            raise LlmError("the model proposed an empty note; try again")
-        return MergeProposal(clean.title, clean.body, unique, clean.flagged)
+        title, body, flagged = await merge_notes(self._llm, items)
+        return MergeProposal(title, body, unique, flagged)
 
     async def conflicts(self, principal: Principal, item_id: str, limit: int = 5) -> list[Conflict]:
         if not 1 <= limit <= 20:  # noqa: PLR2004
@@ -152,9 +146,23 @@ class CurationAssist:
     async def _judge(self, a: Item, b: Item) -> tuple[bool | None, str]:
         if self._llm is None or not (self._may_send(a) and self._may_send(b)):
             return None, ""
-        try:
-            data = _json(await self._llm.complete(JUDGE_SYSTEM, f"{_note(a)}\n\n{_note(b)}", 200))
-        except LlmError:
-            return None, ""  # a failed model call degrades to the heuristic, not to an error
-        verdict = data.get("contradict")
-        return (verdict if isinstance(verdict, bool) else None), str(data.get("why", ""))[:300]
+        return await judge_pair(self._llm, a, b)
+
+
+async def judge_pair(llm: LlmProvider, a: Item, b: Item) -> tuple[bool | None, str]:
+    """The model's verdict on whether two notes contradict (None when it failed or was unclear)."""
+    try:
+        data = _json(await llm.complete(JUDGE_SYSTEM, f"{_note(a)}\n\n{_note(b)}", 200))
+    except LlmError:
+        return None, ""  # a failed model call degrades to the heuristic, not to an error
+    verdict = data.get("contradict")
+    return (verdict if isinstance(verdict, bool) else None), str(data.get("why", ""))[:300]
+
+
+async def merge_notes(llm: LlmProvider, items: list[Item]) -> tuple[str, str, bool]:
+    """(title, body, flagged) the model proposes for these notes, sanitised like any note."""
+    data = _json(await llm.complete(MERGE_SYSTEM, "\n\n".join(_note(i) for i in items)))
+    clean = sanitize(str(data.get("title", "")).strip()[:200], str(data.get("body", "")).strip())
+    if not clean.title or not clean.body:
+        raise LlmError("the model proposed an empty note; try again")
+    return clean.title, clean.body, clean.flagged

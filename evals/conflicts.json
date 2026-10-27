@@ -1,0 +1,292 @@
+{
+ "pairs": [
+  {
+   "a": {
+    "title": "Max upload size",
+    "body": "The maximum upload size is 25 MB."
+   },
+   "b": {
+    "title": "Max upload size",
+    "body": "The maximum upload size is 50 MB."
+   },
+   "contradict": true,
+   "kind": "number"
+  },
+  {
+   "a": {
+    "title": "Retries",
+    "body": "Requests are retried 3 times by default."
+   },
+   "b": {
+    "title": "Retries",
+    "body": "Requests are retried 5 times by default."
+   },
+   "contradict": true,
+   "kind": "number"
+  },
+  {
+   "a": {
+    "title": "Load tests",
+    "body": "Use the staging cluster for load tests."
+   },
+   "b": {
+    "title": "Load tests",
+    "body": "Never use the staging cluster for load tests."
+   },
+   "contradict": true,
+   "kind": "negation"
+  },
+  {
+   "a": {
+    "title": "Pagination",
+    "body": "The API supports pagination."
+   },
+   "b": {
+    "title": "Pagination",
+    "body": "The API does not support pagination."
+   },
+   "contradict": true,
+   "kind": "negation"
+  },
+  {
+   "a": {
+    "title": "Deploy day",
+    "body": "Production deploys happen on Tuesdays."
+   },
+   "b": {
+    "title": "Deploy day",
+    "body": "Production deploys happen on Thursdays."
+   },
+   "contradict": true,
+   "kind": "semantic"
+  },
+  {
+   "a": {
+    "title": "Region",
+    "body": "The primary region is eu-west."
+   },
+   "b": {
+    "title": "Region",
+    "body": "The primary region is us-east."
+   },
+   "contradict": true,
+   "kind": "semantic"
+  },
+  {
+   "a": {
+    "title": "Timeout",
+    "body": "The request timeout is 30 seconds."
+   },
+   "b": {
+    "title": "Timeout",
+    "body": "The request timeout is 60 seconds."
+   },
+   "contradict": true,
+   "kind": "number"
+  },
+  {
+   "a": {
+    "title": "Ownership",
+    "body": "The billing service is owned by the Platform team."
+   },
+   "b": {
+    "title": "Ownership",
+    "body": "The billing service is owned by the Payments team."
+   },
+   "contradict": true,
+   "kind": "semantic"
+  },
+  {
+   "a": {
+    "title": "Password rotation",
+    "body": "Passwords must be rotated every 90 days."
+   },
+   "b": {
+    "title": "Password rotation",
+    "body": "Passwords must be rotated every 180 days."
+   },
+   "contradict": true,
+   "kind": "number"
+  },
+  {
+   "a": {
+    "title": "Feature flag",
+    "body": "The new checkout flag is enabled in production."
+   },
+   "b": {
+    "title": "Feature flag",
+    "body": "The new checkout flag is disabled in production."
+   },
+   "contradict": true,
+   "kind": "semantic"
+  },
+  {
+   "a": {
+    "title": "TLS",
+    "body": "TLS 1.0 is allowed for legacy clients."
+   },
+   "b": {
+    "title": "TLS",
+    "body": "TLS 1.0 is not allowed for any client."
+   },
+   "contradict": true,
+   "kind": "negation"
+  },
+  {
+   "a": {
+    "title": "Backups",
+    "body": "Backups run nightly at 02:00."
+   },
+   "b": {
+    "title": "Backups",
+    "body": "Backups run nightly at 04:00."
+   },
+   "contradict": true,
+   "kind": "number"
+  },
+  {
+   "a": {
+    "title": "Upload limit",
+    "body": "The maximum upload size is 25 MB."
+   },
+   "b": {
+    "title": "Upload limit",
+    "body": "Uploads over 25 MB are rejected with HTTP 413."
+   },
+   "contradict": false,
+   "kind": "consistent"
+  },
+  {
+   "a": {
+    "title": "Retry backoff",
+    "body": "Requests are retried 3 times. The wait doubles each time."
+   },
+   "b": {
+    "title": "Retry backoff",
+    "body": "Requests are retried 3 times with exponential backoff."
+   },
+   "contradict": false,
+   "kind": "consistent"
+  },
+  {
+   "a": {
+    "title": "Build",
+    "body": "The build takes about 10 minutes on 4 cores."
+   },
+   "b": {
+    "title": "CI",
+    "body": "The test stage of CI uses 8 cores."
+   },
+   "contradict": false,
+   "kind": "unrelated numbers"
+  },
+  {
+   "a": {
+    "title": "Deploying",
+    "body": "Deploy with make deploy. Do not deploy on Fridays."
+   },
+   "b": {
+    "title": "Deploying",
+    "body": "Deploy with make deploy from the main branch."
+   },
+   "contradict": false,
+   "kind": "unrelated negation"
+  },
+  {
+   "a": {
+    "title": "Releases",
+    "body": "Version 2.1 fixed the login bug."
+   },
+   "b": {
+    "title": "Releases",
+    "body": "Version 2.3 added a dark mode."
+   },
+   "contradict": false,
+   "kind": "unrelated numbers"
+  },
+  {
+   "a": {
+    "title": "Large lists",
+    "body": "Use pagination for large lists."
+   },
+   "b": {
+    "title": "Large lists",
+    "body": "Use cursors for large result sets."
+   },
+   "contradict": false,
+   "kind": "consistent"
+  },
+  {
+   "a": {
+    "title": "Cache",
+    "body": "The cache is not shared between replicas."
+   },
+   "b": {
+    "title": "Cache",
+    "body": "Each replica keeps its own cache."
+   },
+   "contradict": false,
+   "kind": "consistent negation"
+  },
+  {
+   "a": {
+    "title": "Billing",
+    "body": "Alice owns the billing service."
+   },
+   "b": {
+    "title": "Billing on-call",
+    "body": "The billing on-call rota is Alice and Bob."
+   },
+   "contradict": false,
+   "kind": "consistent"
+  },
+  {
+   "a": {
+    "title": "Audits",
+    "body": "The 2024 audit found 3 issues."
+   },
+   "b": {
+    "title": "Audits",
+    "body": "The 2023 audit found 5 issues."
+   },
+   "contradict": false,
+   "kind": "different events"
+  },
+  {
+   "a": {
+    "title": "Staging reset",
+    "body": "Staging resets at midnight."
+   },
+   "b": {
+    "title": "Staging reset",
+    "body": "Staging resets at midnight UTC."
+   },
+   "contradict": false,
+   "kind": "consistent"
+  },
+  {
+   "a": {
+    "title": "Secrets",
+    "body": "Never commit secrets."
+   },
+   "b": {
+    "title": "Secrets",
+    "body": "Do not commit secrets to the repository."
+   },
+   "contradict": false,
+   "kind": "consistent"
+  },
+  {
+   "a": {
+    "title": "Naming",
+    "body": "Name services in lower-case with hyphens."
+   },
+   "b": {
+    "title": "Naming",
+    "body": "Service names are lower-case words joined by hyphens."
+   },
+   "contradict": false,
+   "kind": "consistent"
+  }
+ ]
+}

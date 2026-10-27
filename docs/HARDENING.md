@@ -109,6 +109,6 @@ Some mutants cannot be killed because they change nothing observable: a header n
 `# pragma: no mutate` with the reason (mutmut reads it on the first line of a statement, so such values are kept in
 a one-line constant). That is deliberate and should stay rare. Mutants in *messages* that tell a person what to do
 are killed with exact-text assertions instead. To look at a survivor: `uv run --group mutation mutmut show <name>`
-to widen the scope, add files to `source_paths` under `[tool.mutmut]` in `pyproject.toml`
+; to widen the scope, add files to `source_paths` under `[tool.mutmut]` in `pyproject.toml`
 together with the tests that cover them (`pytest_add_cli_args_test_selection`). A mutant reported as "no tests" is not
 covered by the selected tests at all: add the tests that exercise it.

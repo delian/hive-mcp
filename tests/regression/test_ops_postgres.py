@@ -116,6 +116,14 @@ def test_bug_ops_3_migrate_does_not_print_the_database_password(
     found = re.search(r"password=(\S+)", empty_pg_database)
     secret = found.group(1) if found else "hunter2-s3cret"
     url = empty_pg_database if found else f"{empty_pg_database} password={secret}"
+
+    def leaked(text: str) -> bool:  # the secret may equal another word (CI: user and password)
+        return (
+            f"password={secret}" in text
+            or f":{secret}@" in text
+            or (secret not in {"postgres"} and secret in text)
+        )
+
     source = tmp_path / "src"
     source.mkdir()
     Database(source / "hive.db").close()
@@ -123,7 +131,7 @@ def test_bug_ops_3_migrate_does_not_print_the_database_password(
     monkeypatch.delenv("HIVE_DATABASE_URL", raising=False)
     up = CliRunner().invoke(cli, ["migrate", "to-postgres", "--database-url", url, "--no-reindex"])
     assert up.exit_code == 0, up.output
-    assert secret not in up.output
+    assert not leaked(up.output)
     monkeypatch.setenv("HIVE_PROFILE", "external")
     monkeypatch.setenv("HIVE_DATABASE_URL", url)
     monkeypatch.setenv("HIVE_SECRET_KEY", "k" * 40)
@@ -131,7 +139,7 @@ def test_bug_ops_3_migrate_does_not_print_the_database_password(
         cli, ["migrate", "to-sqlite", "--data-dir", str(tmp_path / "out"), "--no-reindex"]
     )
     assert down.exit_code == 1 or "from PostgreSQL" in down.output  # source is not empty
-    assert secret not in down.output
+    assert not leaked(down.output)
 
 
 @needs_pg

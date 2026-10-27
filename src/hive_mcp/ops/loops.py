@@ -10,11 +10,12 @@ from typing import TYPE_CHECKING
 from hive_mcp.domain.clock import SystemClock
 from hive_mcp.domain.errors import HiveError, StorageBusy
 from hive_mcp.ops.usage import FLUSH_SECONDS, METER
-from hive_mcp.security.groups.factory import run_group_sync
+from hive_mcp.security.groups.factory import group_sync_configured, run_group_sync
 
 if TYPE_CHECKING:
     from hive_mcp.bootstrap import Services
     from hive_mcp.config import Settings
+    from hive_mcp.connectors.spec import ConnectorSpec
 
 log = logging.getLogger("hive.app")
 PURGE_INTERVAL_SECONDS = 600
@@ -70,3 +71,58 @@ async def usage_loop(services: Services) -> None:
     finally:
         with contextlib.suppress(Exception):
             await METER.flush(services.backend.audit, clock)
+
+
+CONNECTOR_CHECK_SECONDS = 60
+RUN_NS = "connector:run"
+
+
+async def connector_loop(
+    services: Services, settings: Settings, specs: list[ConnectorSpec]
+) -> None:
+    """Runs each connector once per interval slot; a claim in the key-value store keeps it to one
+    replica per slot, and a restart inside a slot does not repeat the run."""
+    import time  # noqa: PLC0415
+
+    from hive_mcp.connectors.factory import make_connector  # noqa: PLC0415
+
+    assert services.connectors is not None  # noqa: S101 - built by bootstrap
+    while True:
+        for spec in specs:
+            slot = int(time.time() // (spec.every_minutes * 60))
+            claimed = await services.backend.kv.put_if_absent(
+                RUN_NS,
+                f"{spec.name}:{slot}",
+                {"claimed": True},
+                ttl_seconds=spec.every_minutes * 120,
+            )
+            if not claimed:
+                continue
+            try:
+                report = await services.connectors.run(spec, make_connector(spec, settings))
+                log.info("connector.sync name=%s %s", spec.name, report.line())
+            except HiveError:
+                log.exception("connector.failed name=%s", spec.name)
+        await asyncio.sleep(CONNECTOR_CHECK_SECONDS)
+
+
+def start_loops(services: Services, settings: Settings) -> list[asyncio.Task[None]]:
+    """The server's background loops, all inside this process; cancel them at shutdown."""
+    from hive_mcp.connectors.spec import parse_specs  # noqa: PLC0415
+
+    tasks = [
+        asyncio.create_task(purge_loop(services, settings.retention_session_days)),
+        asyncio.create_task(usage_loop(services)),
+    ]
+    if services.digest_sender and settings.digest_weekday is not None:
+        tasks.append(
+            asyncio.create_task(
+                digest_loop(services, settings.digest_weekday, settings.digest_hour_utc)
+            )
+        )
+    if settings.group_sync_minutes and group_sync_configured(settings):
+        tasks.append(asyncio.create_task(group_sync_loop(settings)))
+    specs = parse_specs(settings.connectors)
+    if specs and settings.run_jobs:
+        tasks.append(asyncio.create_task(connector_loop(services, settings, specs)))
+    return tasks

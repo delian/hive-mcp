@@ -18,13 +18,12 @@ from hive_mcp.domain.clock import SystemClock
 from hive_mcp.domain.errors import StorageBusy
 from hive_mcp.mcp_api.server import build_mcp
 from hive_mcp.ops.health import health_routes
-from hive_mcp.ops.loops import digest_loop, group_sync_loop, purge_loop, usage_loop
+from hive_mcp.ops.loops import start_loops
 from hive_mcp.ops.metrics import METRICS, metrics_routes
 from hive_mcp.ops.observe import ObserveMiddleware
 from hive_mcp.ops.ratelimit import Limiter, RateLimiter, RateLimitMiddleware, Rule
 from hive_mcp.ops.state import Lifecycle
 from hive_mcp.security.directory import UserDirectory
-from hive_mcp.security.groups.factory import group_sync_configured
 from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.security.oauth.cookies import CookieSigner, load_secret_key
 from hive_mcp.security.oauth.models import SCOPE, OAuthConfig
@@ -206,20 +205,7 @@ def create_app(
         services = await services_factory(settings)
         holder["services"] = services
         runner = asyncio.create_task(services.runner.run_forever()) if settings.run_jobs else None
-        maintenance = asyncio.create_task(purge_loop(services, settings.retention_session_days))
-        metering = asyncio.create_task(usage_loop(services))
-        digesting = (
-            asyncio.create_task(
-                digest_loop(services, settings.digest_weekday, settings.digest_hour_utc)
-            )
-            if services.digest_sender and settings.digest_weekday is not None
-            else None
-        )
-        syncing = (
-            asyncio.create_task(group_sync_loop(settings))
-            if settings.group_sync_minutes and group_sync_configured(settings)
-            else None
-        )
+        background = start_loops(services, settings)
         lifecycle.mark_ready()
         try:
             yield
@@ -229,11 +215,10 @@ def create_app(
                 runner.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await runner
-            for task in (maintenance, syncing, digesting, metering):
-                if task:
-                    task.cancel()
-                    with contextlib.suppress(asyncio.CancelledError):
-                        await task
+            for task in background:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
             holder.pop("services", None)
             await services.close()
 

@@ -73,6 +73,8 @@ class Settings(BaseSettings):
     # Delete-by-age rules: [{"kind": "session", "days": 90}, {"scope": "private", "days": 730}].
     # Each needs a kind or a scope; age counts from the last change. See docs/RETENTION.md.
     retention_rules: list[dict[str, Any]] = Field(default_factory=list)
+    # Scheduled imports from URLs, GitHub or Google Drive, run in this process (docs/CONNECTORS.md).
+    connectors: list[dict[str, Any]] = Field(default_factory=list)
     # Fetching documents from URLs on users' behalf (kb_ingest_url): off unless enabled.
     ingest_urls_enabled: bool = False
     ingest_url_hosts: list[str] = Field(default_factory=list)  # empty = any public host
@@ -155,6 +157,17 @@ class Settings(BaseSettings):
             parse_rules(self.retention_rules)
         except ValidationError as exc:
             raise ValueError(f"HIVE_RETENTION_RULES: {exc}") from exc
+        return self
+
+    @model_validator(mode="after")
+    def _check_connectors(self) -> Settings:
+        from hive_mcp.connectors.spec import parse_specs  # noqa: PLC0415
+        from hive_mcp.domain.errors import ValidationError  # noqa: PLC0415
+
+        try:
+            parse_specs(self.connectors)
+        except ValidationError as exc:
+            raise ValueError(f"HIVE_CONNECTORS: {exc}") from exc
         return self
 
     @model_validator(mode="after")

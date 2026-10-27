@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from hive_mcp.adapters.sqlite import SqliteBackend
 from hive_mcp.config import Profile, Settings
+from hive_mcp.connectors.sync import ConnectorSync
 from hive_mcp.domain.clock import SystemClock
 from hive_mcp.domain.errors import ValidationError
 from hive_mcp.domain.retention import parse_rules
@@ -70,6 +71,7 @@ class Services:
     stale: StaleReview | None = None
     retention: RetentionService | None = None
     activity: ActivityReport | None = None
+    connectors: ConnectorSync | None = None
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -243,4 +245,5 @@ async def build_services(settings: Settings) -> Services:
         stale,
         RetentionService(backend.maintenance, purge, parse_rules(settings.retention_rules), clock),
         ActivityReport(backend.audit, backend.maintenance, clock, _teams_of(settings)),
+        ConnectorSync(ingest, knowledge, backend.kv, backend.audit, clock),
     )

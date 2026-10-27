@@ -10,6 +10,7 @@ from hive_hooks.cli import app as client_app
 
 from hive_mcp import __version__
 from hive_mcp.app import create_app
+from hive_mcp.cli_connectors import app as connectors_app
 from hive_mcp.cli_digest import app as digest_app
 from hive_mcp.cli_eval import app as eval_app
 from hive_mcp.cli_groups import app as groups_app
@@ -39,6 +40,7 @@ users = typer.Typer(
 cli.add_typer(users, name="user")
 models = typer.Typer(no_args_is_help=True, help="Manage local embedding models.")
 cli.add_typer(models, name="models")
+cli.add_typer(connectors_app, name="connectors")
 cli.add_typer(ops_app)  # reindex, forget, purge, eval
 cli.add_typer(ingest_app)  # ingest, ingest-git
 cli.add_typer(maint_app)  # vectors, backup, restore

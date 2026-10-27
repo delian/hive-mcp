@@ -6,8 +6,10 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
+from hive_mcp.domain.errors import PermissionDenied, ValidationError
+from hive_mcp.domain.principal import Role
 from hive_mcp.mcp_api.errors import guarded
-from hive_mcp.mcp_api.tools import READ, current_principal
+from hive_mcp.mcp_api.tools import READ, WRITE, current_principal
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -15,6 +17,7 @@ if TYPE_CHECKING:
     from mcp.server import MCPServer
 
     from hive_mcp.bootstrap import Services
+    from hive_mcp.integrations.config import IntegrationConfig
 
 
 class UsageOut(BaseModel):
@@ -42,6 +45,23 @@ class ActivityOut(BaseModel):
     truncated: bool = Field(description="True when the window held too many events to read all.")
 
 
+class IntegrationOut(BaseModel):
+    name: str
+    enabled: bool
+    workspace: str = Field(description="Slack workspace id, or the Teams (Entra) tenant id.")
+    app_id: str = Field(description="Teams bot application id (empty for Slack).")
+    allow_mentions: bool
+    channel_projects: dict[str, str] = Field(
+        description="channel id -> project that 'Save to Hive' shares into (members only)."
+    )
+    users: dict[str, str] = Field(
+        description="chat user id -> work email (used without a bot token)."
+    )
+    secrets_set: list[str] = Field(
+        description="Which secrets are stored. Their values are never shown or accepted here."
+    )
+
+
 class AuditOut(BaseModel):
     seq: int = Field(
         description="Next page: pass the last seq as after_seq (oldest first) or before_seq (newest first)."
@@ -51,6 +71,11 @@ class AuditOut(BaseModel):
     action: str
     target: str | None
     details: dict[str, str]
+
+
+def _require_admin() -> None:
+    if current_principal().role < Role.ADMIN:
+        raise PermissionDenied("this needs an admin")
 
 
 def register_admin_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None:
@@ -94,6 +119,72 @@ def register_admin_tools(mcp: MCPServer, get_services: Callable[[], Services]) -
             busiest_tools=dict(a.tools),
             truncated=a.truncated,
         )  # fmt: skip
+
+    def _integration_out(config: IntegrationConfig) -> IntegrationOut:
+        return IntegrationOut(**config.public())
+
+    @mcp.tool(annotations=READ)
+    @guarded
+    async def kb_admin_integration(name: str) -> IntegrationOut:
+        """Admins only: the settings of a chat integration ("slack" or "teams"), secrets excluded."""
+        store = get_services().integrations
+        assert store is not None  # noqa: S101 - set by the app
+        current_principal()  # authenticated
+        _require_admin()
+        return _integration_out(await store.get(name))
+
+    @mcp.tool(annotations=WRITE)
+    @guarded
+    async def kb_admin_integration_set(  # noqa: PLR0913, PLR0917 - one parameter per setting
+        name: str,
+        enabled: bool | None = None,
+        workspace: str | None = None,
+        app_id: str | None = None,
+        allow_mentions: bool | None = None,
+        users: dict[str, str] | None = None,
+        signing_secret: str | None = None,
+        bot_token: str | None = None,
+        app_password: str | None = None,
+    ) -> IntegrationOut:
+        """Admins only: change a chat integration ("slack" or "teams"); only what you pass changes.
+
+        Takes effect within seconds, no restart. Enabling needs the workspace id and the secrets;
+        **secrets (signing secret, bot token, app password) cannot be set here**, because tool
+        arguments are visible in chat transcripts: use the admin page (/admin/integrations) or the
+        HIVE_SLACK_* variables. Every change is audited.
+        """
+        store = get_services().integrations
+        assert store is not None  # noqa: S101
+        if signing_secret or bot_token or app_password:  # refuse loudly rather than ignore
+            raise ValidationError(
+                "secrets cannot be set through chat (tool arguments appear in transcripts): "
+                "use the admin page /admin/integrations or the HIVE_SLACK_* variables"
+            )
+        changes = {
+            k: v
+            for k, v in (
+                ("enabled", enabled), ("workspace", workspace), ("app_id", app_id),
+                ("allow_mentions", allow_mentions), ("users", users),
+            )
+            if v is not None
+        }  # fmt: skip
+        return _integration_out(await store.update(current_principal(), name, changes))
+
+    @mcp.tool(annotations=WRITE)
+    @guarded
+    async def kb_admin_integration_map(
+        name: str, channel: str, project: str = ""
+    ) -> IntegrationOut:
+        """Admins only: make a chat channel share into a project ("Save to Hive" there saves to the
+        project for its members instead of privately). Empty `project` removes the mapping."""
+        store = get_services().integrations
+        assert store is not None  # noqa: S101
+        who = current_principal()
+        current = (await store.get(name)).channel_projects
+        mapping = {k: v for k, v in current.items() if k != channel}
+        if project:
+            mapping[channel] = project
+        return _integration_out(await store.update(who, name, {"channel_projects": mapping}))
 
     @mcp.tool(annotations=READ)
     @guarded

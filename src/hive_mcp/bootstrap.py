@@ -45,6 +45,7 @@ from hive_mcp.services.vector_admin import VectorAdmin
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from hive_mcp.integrations.store import IntegrationStore
     from hive_mcp.ports.indexes import VectorIndex
 
 
@@ -72,6 +73,7 @@ class Services:
     retention: RetentionService | None = None
     activity: ActivityReport | None = None
     connectors: ConnectorSync | None = None
+    integrations: IntegrationStore | None = None  # set by the app: it needs the services lazily
 
     async def close(self) -> None:
         await close_backend(self.backend)

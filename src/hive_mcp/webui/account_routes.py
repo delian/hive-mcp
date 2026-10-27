@@ -109,7 +109,7 @@ class AccountPages:
         try:
             token = await self.accounts.create_token(
                 gate[1], field("label"), field("subject"), field("role"), field("teams"),
-                field("projects"), field("approves"), field("days"),
+                field("projects"), field("approves"), field("days"), field("rate"),
             )  # fmt: skip
         except HiveError as exc:
             body = f"<p>{escape(str(exc))}</p><p><a href=/admin/tokens>Back</a></p>"

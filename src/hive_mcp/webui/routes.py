@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from hive_mcp.bootstrap import Services
     from hive_mcp.domain.principal import Principal
     from hive_mcp.webui.account_routes import AccountPages
+    from hive_mcp.webui.ops_pages import OpsPages
     from hive_mcp.webui.session import AdminSession
     from hive_mcp.webui.signin import SignIn
 
@@ -47,6 +48,7 @@ class AdminUi:
     ) -> None:
         self.get_services, self.signin, self.quota = get_services, signin, quota
         self.accounts: AccountPages | None = None  # set by build_admin_ui
+        self.ops: OpsPages | None = None  # set by build_admin_ui
 
     async def gate(
         self,
@@ -83,7 +85,9 @@ class AdminUi:
             links += [
                 ("/admin/users", "People"), ("/admin/tokens", "Tokens"),
                 ("/admin/audit", "Audit"), ("/admin/usage", "Usage"),
-                ("/admin/activity", "Activity"),
+                ("/admin/activity", "Activity"), ("/admin/integrations", "Integrations"),
+                ("/admin/connectors", "Connectors"), ("/admin/stale", "Stale"),
+                ("/admin/duplicates", "Duplicates"),
             ]  # fmt: skip
         return render(title, body, nav=nav_bar(links, principal.id, session.csrf), status=status)
 
@@ -204,4 +208,5 @@ class AdminUi:
             Route("/admin/usage", self.usage),
             Route("/admin/activity", self.activity),
             *(self.accounts.routes() if self.accounts else []),
+            *(self.ops.routes() if self.ops else []),
         ]

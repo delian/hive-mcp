@@ -107,6 +107,7 @@ def tokens(rows: list[TokenRecord], csrf: str, message: str = "") -> str:
         + _role_select("member")
         + " <input name=teams placeholder='teams'> <input name=projects placeholder='projects'>"
         " <input name=approves placeholder='approves'> <input name=days placeholder='days (blank = never)' size=8>"
+        " <input name=rate placeholder='requests/min (blank = default)' size=14>"
         " <button class=ok>Create</button></form>"
         "<p class=muted>The token is shown once, on the next page.</p></div>"
     )
@@ -118,11 +119,12 @@ def tokens(rows: list[TokenRecord], csrf: str, message: str = "") -> str:
             esc(_words(t.claims.get("hive_teams"))),
             esc(_words(t.claims.get("hive_projects"))),
             _expires(t),
+            f"{t.rate_per_min}/min" if t.rate_per_min else "default",
             _post("/admin/tokens/revoke", csrf, {"label": t.label}, "Revoke"),
         ]
         for t in rows
     ]
-    cols = ["label", "acts as", "role", "teams", "projects", "expires", "actions"]
+    cols = ["label", "acts as", "role", "teams", "projects", "expires", "limit", "actions"]
     return "".join(out) + table(cols, body)
 
 

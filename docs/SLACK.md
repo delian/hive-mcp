@@ -29,6 +29,29 @@ HIVE_SLACK_BOT_TOKEN=xoxb-...        # finds each person's email (users.info), c
 # or, without a token: HIVE_SLACK_USERS='{"U123ABC": "ann@acme.com"}'
 ```
 
+## Managing it at run time (no restart)
+
+The environment variables above are only the starting point. Once an admin saves settings, the stored ones win:
+
+- **Admin page** `/admin/integrations`: enable or disable, workspace id, the signing secret and bot token (write-only:
+  shown as "stored", never displayed again, encrypted at rest with a key derived from `HIVE_SECRET_KEY`), who may be
+  mapped without a bot token, which channels share into which project, and whether `@mentions` are answered.
+- **Admin chat tools** (admins only, audited): `kb_admin_integration(name)` shows the settings (never secrets),
+  `kb_admin_integration_set` changes enabled/workspace/mentions/users, `kb_admin_integration_map(name, channel, project)`
+  maps or unmaps a channel. **Secrets are refused in tool arguments on purpose**: tool calls appear in chat transcripts.
+- Every change is an `integration.update` audit event (which fields, never values). Other replicas pick a change up within
+  5 seconds.
+
+**Channel to project.** With `channel-id=project` mappings, `/hive save` and *Save to Hive* in that channel save into the
+project (visible to its members) instead of privately, **only for people who are members of that project** (the mapping
+never widens anyone's access), and the reply says where it went. Unmapped channels stay private.
+
+**@mentions** (off by default; enable per workspace). Add the bot to a channel, subscribe the app to the `app_mention`
+event with request URL `https://<public-url>/slack/events`, add scope `app_mentions:read` and `chat:write`. The bot answers
+in a thread, and because a channel is an audience it quotes **only org-wide knowledge plus the notes of the channel's mapped
+project**; everything else is answered privately by `/hive`. Bots, edits and other workspaces are ignored; retries of the
+same event are answered once.
+
 ## Who is asking
 
 The Slack user's confirmed email is looked up and must belong to a person in the user directory (`hive user add`);

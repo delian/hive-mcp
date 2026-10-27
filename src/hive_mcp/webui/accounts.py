@@ -141,7 +141,7 @@ class AccountAdmin:
 
     async def create_token(  # noqa: PLR0913, PLR0917 - the fields of a token
         self, actor: Principal, label: str, subject: str, role: str, teams: str, projects: str,
-        approves: str, days: str,
+        approves: str, days: str, rate: str = "",
     ) -> str:  # fmt: skip
         """The plaintext token: it is shown once and cannot be recovered."""
         who = subject.strip()
@@ -156,10 +156,18 @@ class AccountAdmin:
                 raise ValidationError("days must be a number") from None
             if not 0 < expires <= MAX_TOKEN_DAYS:
                 raise ValidationError(f"days must be between 0 and {MAX_TOKEN_DAYS}")
+        per_minute = None
+        if rate.strip():
+            try:
+                per_minute = int(rate)
+            except ValueError:
+                raise ValidationError("the rate limit must be a whole number per minute") from None
         principal = Principal(
             who, actor.org_id, parse_role(role), split(teams), split(projects), scopes
         )
-        token = self._tokens.create(principal, label=label.strip(), expires_in_days=expires)
+        token = self._tokens.create(
+            principal, label=label.strip(), expires_in_days=expires, rate_per_min=per_minute
+        )
         await self._log(actor, "admin.token.create", label.strip(), subject=who, role=role)
         return token
 

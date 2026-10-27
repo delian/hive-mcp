@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from hive_mcp.domain.clock import SystemClock
+from hive_mcp.integrations.secrets import SecretBox
+from hive_mcp.integrations.store import IntegrationStore, env_defaults
 from hive_mcp.security.directory import UserDirectory
 from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.security.oauth.cookies import CookieSigner, load_secret_key
@@ -18,6 +20,7 @@ from hive_mcp.slack.routes import SlackRoutes
 from hive_mcp.webui.account_routes import AccountPages
 from hive_mcp.webui.accounts import AccountAdmin
 from hive_mcp.webui.auth import AdminAuth
+from hive_mcp.webui.ops_pages import OpsPages
 from hive_mcp.webui.routes import AdminUi
 from hive_mcp.webui.session import SessionCodec, SessionStore
 from hive_mcp.webui.signin import SignIn
@@ -29,6 +32,7 @@ if TYPE_CHECKING:
 
     from hive_mcp.bootstrap import Services
     from hive_mcp.config import Settings
+    from hive_mcp.integrations.config import IntegrationConfig
     from hive_mcp.ports.kv import KeyValueStore
     from hive_mcp.security.tokens import StaticTokenVerifier, TokenStore
 
@@ -72,26 +76,47 @@ def build_oauth(
     return provider, oauth_routes(provider, upstream, signer, settings.google_allowed_domains)
 
 
+def build_integrations(
+    settings: Settings, get_services: Callable[[], Services]
+) -> IntegrationStore:
+    """Run-time settings of the chat integrations, starting from the environment."""
+    key = settings.secret_key.get_secret_value() if settings.secret_key else None
+    box = SecretBox(load_secret_key(key, settings.data_dir / "secret.key"))
+    return IntegrationStore(
+        lambda: get_services().backend.kv,
+        lambda: get_services().backend.audit,
+        box,
+        env_defaults(settings),
+        SystemClock(),
+    )
+
+
 def build_slack(
-    settings: Settings, directory: UserDirectory, get_services: Callable[[], Services]
+    directory: UserDirectory,
+    store: IntegrationStore,
+    get_services: Callable[[], Services],
 ) -> list[Route]:
-    """The Slack command and shortcut routes (only when the app's signing secret is set)."""
-    assert settings.slack_signing_secret and settings.slack_team_id  # noqa: S101 - validated
-    token = settings.slack_bot_token.get_secret_value() if settings.slack_bot_token else None
+    """The Slack routes; the stored integration settings decide whether and how they answer."""
 
     def kv() -> KeyValueStore:
         return get_services().backend.kv
 
-    identity = SlackIdentity(
-        directory,
-        kv,
-        team_id=settings.slack_team_id,
-        bot_token=token,
-        pinned=settings.slack_users,
-    )
-    bot = SlackBot(get_services, identity)
-    secret = settings.slack_signing_secret.get_secret_value()
-    return SlackRoutes(bot, secret, kv).routes()
+    def make_bot(config: IntegrationConfig) -> SlackBot:
+        identity = SlackIdentity(
+            directory,
+            kv,
+            team_id=config.workspace,
+            bot_token=config.secrets.get("bot_token"),
+            pinned=config.users,
+        )
+        return SlackBot(
+            get_services,
+            identity,
+            channel_projects=config.channel_projects,
+            bot_token=config.secrets.get("bot_token"),
+        )
+
+    return SlackRoutes(lambda: store.get("slack"), make_bot, kv).routes()
 
 
 def build_admin_ui(
@@ -122,4 +147,5 @@ def build_admin_ui(
     ui.accounts = AccountPages(
         ui, AccountAdmin(directory, tokens, sessions, lambda: get_services().backend.audit)
     )
+    ui.ops = OpsPages(ui, get_services, settings)
     return ui.routes()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from typing import TYPE_CHECKING
@@ -11,10 +12,11 @@ import httpx
 import pytest
 
 from hive_mcp.config import Settings
-from hive_mcp.domain.principal import Role
+from hive_mcp.domain.principal import Principal, Role
 from hive_mcp.security.directory import DirectoryUser
 from hive_mcp.slack.handlers import mrkdwn
 from hive_mcp.slack.verify import WINDOW_SECONDS, sign, verify
+from tests.conformance.factory import ROOT
 from tests.integration.conftest import Live
 
 if TYPE_CHECKING:
@@ -184,3 +186,96 @@ def test_the_message_shortcut_saves_the_message_privately_and_is_idempotent(
         slack, {**payload, "user": {"id": "UGHOST"}, "message": {"text": "x", "ts": "9"}}
     )
     assert wrong_user.status_code == 200 and any("could not match" in r for r in replies)
+
+
+# ---------------------------------------------------------------- mentions in channels
+def events(live: Live, payload: dict, secret: str = SECRET) -> httpx.Response:
+    body = json.dumps(payload).encode()
+    stamp = str(int(time.time()))
+    headers = {
+        "x-slack-request-timestamp": stamp, "x-slack-signature": sign(secret, stamp, body),
+        "content-type": "application/json",
+    }  # fmt: skip
+    return httpx.post(f"{live.url}/slack/events", content=body, headers=headers)
+
+
+@pytest.fixture
+def mentions(tmp_path: Path, monkeypatch) -> Iterator[tuple[Live, list[tuple[str, str, str]]]]:
+    posted: list[tuple[str, str, str]] = []
+
+    async def capture(self, channel, thread, text):
+        posted.append((channel, thread, text))
+
+    monkeypatch.setattr("hive_mcp.slack.handlers.SlackBot.post", capture)
+    srv = Live(
+        tmp_path / "data", slack_signing_secret=SECRET, slack_team_id=TEAM, slack_users=USERS,
+        slack_bot_token="xoxb-test-token",
+    )  # fmt: skip
+    srv.directory.upsert(
+        DirectoryUser("ann@acme.com", "org1", Role.ADMIN, projects=frozenset({"p1"}))
+    )
+    srv.start()
+    yield srv, posted
+    srv.stop()
+
+
+def mention(text: str, event_id: str, **kw) -> dict:
+    event = {"type": "app_mention", "user": "UANN", "channel": "C1", "ts": "100.1", "text": text}
+    return {
+        "type": "event_callback",
+        "team_id": TEAM,
+        "event_id": event_id,
+        "event": {**event, **kw},
+    }
+
+
+async def test_the_url_check_is_answered_and_mentions_are_off_until_an_admin_allows_them(mentions):
+    live, posted = mentions
+    check = events(live, {"type": "url_verification", "challenge": "abc123"})
+    assert check.status_code == 200 and check.json() == {"challenge": "abc123"}
+    assert events(live, {"type": "url_verification"}, secret="wrong").status_code == 401
+    assert events(live, mention("<@UBOT> how do we deploy", "E1")).status_code == 200
+    assert posted == []  # allow_mentions is false by default
+    async with live.client(live.token_for(ROOT)) as admin:
+        await admin.call_tool("kb_admin_integration_set", {"name": "slack", "allow_mentions": True})
+
+
+async def test_a_mention_gets_a_thread_reply_with_only_what_the_channel_may_see(mentions):
+    live, posted = mentions
+    async with live.client(live.token_for(ROOT)) as admin:
+        await admin.call_tool("kb_admin_integration_set", {"name": "slack", "allow_mentions": True})
+        await admin.call_tool(
+            "kb_admin_integration_map", {"name": "slack", "channel": "C1", "project": "p1"}
+        )
+    ann = Principal("ann@acme.com", "org1", Role.ADMIN, projects=frozenset({"p1"}))
+    async with live.client(live.token_for(ann)) as writer:
+        for title, body, extra in (
+            ("Deploy runbook private", "private deploy steps nobody else sees", {}),
+            (
+                "Deploy runbook project",
+                "project deploy steps for the team",
+                {"share_with_project": "p1"},
+            ),
+        ):
+            await writer.call_tool("kb_remember", {"title": title, "body": body, **extra})
+    # make the mapping and flag visible to the server before asking (cache window is seconds)
+    deadline = time.time() + 8
+    while time.time() < deadline and not posted:
+        events(live, mention("<@UBOT> deploy runbook steps", f"E{time.time_ns()}"))
+        await asyncio.sleep(1)
+    assert posted, "the bot never answered"
+    channel, thread, text = posted[-1]
+    assert (channel, thread) == ("C1", "100.1")  # a reply in the thread of the mention
+    assert "Deploy runbook project" in text and "private" not in text.lower().replace(
+        "your private notes", ""
+    )
+    count = len(posted)
+    same = mention("<@UBOT> deploy runbook steps", "FIXED")
+    events(live, same)
+    events(live, same)  # a retry of the same event
+    assert len(posted) - count <= 1
+    n = len(posted)
+    events(live, mention("loop", f"B{time.time_ns()}", bot_id="B1"))
+    events(live, mention("loop", f"S{time.time_ns()}", subtype="message_changed"))
+    events(live, {**mention("other", f"T{time.time_ns()}"), "team_id": "T0OTHER"})
+    assert len(posted) == n  # bots, edits and other workspaces are ignored

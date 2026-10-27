@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.transport_security import TransportSecuritySettings
 
-from hive_mcp.app_front import build_admin_ui, build_oauth, build_slack
+from hive_mcp.app_front import build_admin_ui, build_integrations, build_oauth, build_slack
 from hive_mcp.bootstrap import Services, build_services
 from hive_mcp.config import Settings
 from hive_mcp.domain.errors import StorageBusy
@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from starlette.routing import Route
 
     from hive_mcp.adapters.postgres.db import PgDatabase
+    from hive_mcp.integrations.store import IntegrationStore
     from hive_mcp.security.oauth.provider import HiveOAuthProvider
 
 
@@ -106,6 +107,26 @@ def shared_limiter(
     return lambda per_min, burst: PgRateLimiter(db, per_min, burst)
 
 
+def front_doors(  # noqa: PLR0913, PLR0917 - everything the routes are built from
+    settings: Settings,
+    tokens: TokenStore,
+    directory: UserDirectory,
+    static: StaticTokenVerifier,
+    integrations: IntegrationStore,
+    get_services: Callable[[], Services],
+    verifier: TokenVerifier | None,
+) -> tuple[HiveOAuthProvider | None, list[Route]]:
+    """Sign-in, admin pages and chat routes; the OAuth provider is None without Google/Entra."""
+    provider: HiveOAuthProvider | None = None
+    routes: list[Route] = []
+    if settings.oauth_enabled and verifier is None:
+        provider, routes = build_oauth(settings, static, lambda: get_services().backend.kv)
+    if settings.admin_ui:
+        routes += build_admin_ui(settings, tokens, get_services)
+    routes += build_slack(directory, integrations, get_services)
+    return provider, routes
+
+
 def create_app(
     settings: Settings | None = None,
     lifecycle: Lifecycle | None = None,
@@ -128,6 +149,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_: MCPServer) -> AsyncIterator[None]:
         services = await services_factory(settings)
+        services.integrations = integrations
         holder["services"] = services
         runner = asyncio.create_task(services.runner.run_forever()) if settings.run_jobs else None
         background = start_loops(services, settings)
@@ -152,14 +174,10 @@ def create_app(
     tokens = TokenStore(settings.tokens_path)
     directory = UserDirectory(AtomicJsonFile(settings.users_path, default=[]))
     static = StaticTokenVerifier(tokens, resource=settings.resource_url, directory=directory)
-    extra_routes: list[Route] = []
-    provider: HiveOAuthProvider | None = None
-    if settings.oauth_enabled and verifier is None:
-        provider, extra_routes = build_oauth(settings, static, lambda: get_services().backend.kv)
-    if settings.admin_ui:
-        extra_routes += build_admin_ui(settings, tokens, get_services)
-    if settings.slack_signing_secret:
-        extra_routes += build_slack(settings, directory, get_services)
+    integrations = build_integrations(settings, get_services)
+    provider, extra_routes = front_doors(
+        settings, tokens, directory, static, integrations, get_services, verifier
+    )
     auth = AuthSettings(
         issuer_url=settings.public_url,
         resource_server_url=settings.resource_url,

@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import html
 import logging
+import re
 from typing import TYPE_CHECKING
 
 import httpx
 
 from hive_mcp.domain.errors import HiveError
+from hive_mcp.domain.scope import Scope, ScopeLevel
 from hive_mcp.mcp_api.errors import user_message
 from hive_mcp.services.models import ConsultRequest, RememberRequest
 
@@ -18,6 +20,7 @@ if TYPE_CHECKING:
 
     from hive_mcp.bootstrap import Services
     from hive_mcp.domain.principal import Principal
+    from hive_mcp.services.models import Match
     from hive_mcp.slack.identity import SlackIdentity
 
 log = logging.getLogger("hive.slack")
@@ -37,6 +40,24 @@ NOT_LINKED = (
 )
 
 
+MENTION = re.compile(r"<@[A-Z0-9]+(?:\|[^>]*)?>")
+POST_MESSAGE = "https://slack.com/api/chat.postMessage"
+
+
+def audience_filter(matches: list[Match], channel_project: str | None) -> list[Match]:
+    """What may be said in front of a whole channel: org-wide knowledge, plus the notes of the
+    project the channel is mapped to. Private and other shared notes stay in the private `/hive`."""
+    return [
+        m
+        for m in matches
+        if m.tier.value == "primary"
+        and (
+            m.scope.level is ScopeLevel.ORG
+            or (channel_project and m.scope == Scope(ScopeLevel.PROJECT, channel_project))
+        )
+    ]
+
+
 def mrkdwn(text: str) -> str:
     """Slack's three escapes: stops stored text from creating mentions, links or formatting
     tricks (`<!channel>`, `<http://evil|label>`) in a reply."""
@@ -53,9 +74,63 @@ class SlackBot:
         get_services: Callable[[], Services],
         identity: SlackIdentity,
         http: httpx.AsyncClient | None = None,
+        channel_projects: dict[str, str] | None = None,
+        bot_token: str | None = None,
     ) -> None:
         self._services, self._identity = get_services, identity
+        self._channel_projects = channel_projects or {}
+        self._bot_token = bot_token
         self._http = http or httpx.AsyncClient(timeout=5.0)
+
+    async def mention(self, event: dict[str, object], team_id: str) -> None:
+        """Answer an @-mention in a thread, quoting only what the whole channel may see."""
+        if not self._bot_token:
+            return
+        text = html.unescape(MENTION.sub("", str(event.get("text", "")))).strip()
+        channel = str(event.get("channel", ""))
+        thread = str(event.get("thread_ts") or event.get("ts") or "")
+        who = await self._identity.resolve(team_id, str(event.get("user", "")))
+        if who is None:
+            await self.post(channel, thread, NOT_LINKED)
+        elif not text:
+            await self.post(channel, thread, "Ask me something: `@hive how do we deploy?`")
+        else:
+            await self.post(channel, thread, await self._public_answer(who, channel, text))
+
+    async def _public_answer(self, who: Principal, channel: str, text: str) -> str:
+        try:
+            result = await self._services().consult.consult(who, ConsultRequest(text, limit=10))
+        except HiveError as exc:
+            return f"Sorry: {mrkdwn(user_message(exc))}"
+        project = self._channel_projects.get(channel)
+        audience = project if project in who.projects else None
+        shown = audience_filter(list(result.primary), audience)[:RESULTS]
+        if not shown:
+            hint = " I only quote shared knowledge in channels." if result.primary else ""
+            return (
+                f"Nothing to share here for *{mrkdwn(text)}*.{hint} "
+                f"`/hive {mrkdwn(text)}` answers privately."
+            )
+        lines = [f"*{len(shown)} result(s)* for _{mrkdwn(text)}_"]
+        for m in shown:
+            snippet = mrkdwn(m.snippet.replace("\n", " "))[:200]
+            lines.append(f"*{mrkdwn(m.title)}*  _{mrkdwn(m.provenance)}_\n{snippet}")
+        return "\n\n".join(lines)
+
+    async def post(self, channel: str, thread_ts: str, text: str) -> None:
+        try:
+            await self._http.post(
+                POST_MESSAGE,
+                headers={"Authorization": f"Bearer {self._bot_token}"},
+                json={
+                    "channel": channel,
+                    "thread_ts": thread_ts,
+                    "text": text,
+                    "unfurl_links": False,
+                },
+            )
+        except httpx.HTTPError:
+            log.warning("slack chat.postMessage failed")
 
     async def command(self, form: dict[str, str]) -> dict[str, str]:
         who = await self._identity.resolve(form.get("team_id", ""), form.get("user_id", ""))
@@ -69,7 +144,9 @@ class SlackBot:
                 body = text.split(None, 1)[1] if " " in text else ""
                 if not body.strip():
                     return ephemeral("Nothing to save: `/hive save <text>`")
-                return ephemeral(await self._save(who, body, f"slack:{form.get('team_id')}:cmd"))
+                origin = f"slack:{form.get('team_id')}:{form.get('channel_id')}:cmd"
+                project = self._project_for(who, form.get("channel_id", ""))
+                return ephemeral(await self._save(who, body, origin, project=project))
             return ephemeral(await self._search(who, text))
         except HiveError as exc:
             return ephemeral(f"Sorry: {mrkdwn(user_message(exc))}")
@@ -103,7 +180,15 @@ class SlackBot:
             lines.append(f"*{mrkdwn(m.title)}*  _{mrkdwn(m.provenance)}_\n{snippet}\n`{m.item_id}`")
         return "\n\n".join(lines)
 
-    async def _save(self, who: Principal, body: str, origin: str, note: str = "") -> str:
+    def _project_for(self, who: Principal, channel_id: str) -> str | None:
+        """The project this channel is mapped to, if the person is a member of it (an admin chose
+        the mapping; membership is still checked, so a mapping never widens anyone's access)."""
+        project = self._channel_projects.get(channel_id)
+        return project if project and project in who.projects else None
+
+    async def _save(
+        self, who: Principal, body: str, origin: str, note: str = "", project: str | None = None
+    ) -> str:
         body = body[:MAX_NOTE]
         first = body.strip().splitlines()[0][:MAX_TITLE]
         saved = await self._services().knowledge.remember(
@@ -112,6 +197,7 @@ class SlackBot:
                 title=first or "Slack note",
                 body=f"{note}\n\n{body}".strip() if note else body,
                 tags=("source/slack",),
+                scope=Scope(ScopeLevel.PROJECT, project) if project else None,
                 source=origin[:400],
                 idempotency_key=f"slack:{origin}:{who.id}"[:200],
             ),
@@ -120,10 +206,13 @@ class SlackBot:
             " (flagged as possibly unsafe text)" if saved.item.tags & {"flag/injection"} else ""
         )
         verb = "Saved" if saved.created else "Already saved"
-        return (
-            f"{verb} as a private note: *{mrkdwn(saved.item.title)}*{flagged}\n`{saved.item.id}`"
-            "  Share it with your project from your agent (`kb_share`)."
-        )
+        if project:
+            where = f"to project *{mrkdwn(project)}* (visible to its members)"
+            tail = ""
+        else:
+            where = "as a private note"
+            tail = "  Share it with your project from your agent (`kb_share`)."
+        return f"{verb} {where}: *{mrkdwn(saved.item.title)}*{flagged}\n`{saved.item.id}`{tail}"
 
     async def reply(self, response_url: str, text: str) -> None:
         """Post a follow-up through the `response_url` Slack supplied (only to Slack's own host)."""

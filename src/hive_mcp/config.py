@@ -90,6 +90,8 @@ class Settings(BaseSettings):
     # Weekly email digest (needs SMTP): day of the week, 0 = Monday ... 6 = Sunday; unset = off.
     digest_weekday: int | None = Field(default=None, ge=0, le=6)
     digest_hour_utc: int = Field(default=8, ge=0, le=23)
+    # "Still true?" section in the weekly digest for notes older than this many days; 0 = off.
+    stale_review_days: int = Field(default=0, ge=0, le=3650)
     admin_ui: bool = False  # serve the small web admin pages under /admin (opt-in)
     # Number of server processes sharing one database (external profile). Above 1: rate limits are
     # shared through Postgres, quota reads are fresh, and a fixed HIVE_SECRET_KEY is required.

@@ -22,6 +22,7 @@ from hive_mcp.services.admin import AdminService
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.curation import CurationService
 from hive_mcp.services.digest import DigestSender, DigestService
+from hive_mcp.services.duplicates import DuplicateFinder
 from hive_mcp.services.entities import EntityService
 from hive_mcp.services.feedback import SearchFeedback
 from hive_mcp.services.graph import GraphService
@@ -34,6 +35,7 @@ from hive_mcp.services.purge import PURGE_JOB, PurgeService
 from hive_mcp.services.quota import CACHE_SECONDS, QuotaGuard
 from hive_mcp.services.runner import JobRunner
 from hive_mcp.services.sessions import SessionService
+from hive_mcp.services.staleness import StaleReview
 from hive_mcp.services.vector_admin import VectorAdmin
 
 if TYPE_CHECKING:
@@ -59,6 +61,8 @@ class Services:
     digests: DigestService
     feedback: SearchFeedback | None = None
     digest_sender: DigestSender | None = None
+    duplicates: DuplicateFinder | None = None
+    stale: StaleReview | None = None
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -186,7 +190,8 @@ async def build_services(settings: Settings) -> Services:
         knowledge=knowledge,
         graph=graph,
     )
-    digests = DigestService(knowledge, promotions, clock)
+    stale = StaleReview(backend.items, backend.kv, backend.audit, clock)
+    digests = DigestService(knowledge, promotions, clock, stale, settings.stale_review_days)
     email = channels.get("email")
     sender = (
         DigestSender(
@@ -217,4 +222,6 @@ async def build_services(settings: Settings) -> Services:
         digests,
         SearchFeedback(backend.audit, clock) if settings.search_feedback else None,
         sender,
+        DuplicateFinder(backend.items, curation),
+        stale,
     )

@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from hive_mcp.domain.access import Tier
 from hive_mcp.domain.errors import HiveError, ValidationError
-from hive_mcp.domain.item import Cursor, ItemQuery
+from hive_mcp.domain.item import Cursor, ItemQuery, ItemView
 from hive_mcp.ports.notify import Notification
 from hive_mcp.services.models import provenance
 
@@ -22,13 +22,13 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from hive_mcp.domain.clock import Clock
-    from hive_mcp.domain.item import ItemView
     from hive_mcp.domain.principal import Principal
     from hive_mcp.ports.kv import KeyValueStore
     from hive_mcp.ports.notify import Notifier
     from hive_mcp.security.directory import UserDirectory
     from hive_mcp.services.knowledge import KnowledgeService
     from hive_mcp.services.promotions import PromotionService
+    from hive_mcp.services.staleness import StaleReview
 
 log = logging.getLogger(__name__)
 MAX_DAYS = 90
@@ -63,10 +63,11 @@ class Digest:
     by_origin: dict[str, int] = field(default_factory=dict)
     edited: tuple[DigestItem, ...] = ()  # older items someone else changed in the window
     total_edited: int = 0
+    stale: tuple[DigestItem, ...] = ()  # the reader's own notes nobody has confirmed in a long time
 
     @property
     def empty(self) -> bool:
-        return not self.items and not self.edited and not self.pending_approvals
+        return not self.items and not self.edited and not self.pending_approvals and not self.stale
 
 
 class DigestService:
@@ -75,8 +76,14 @@ class DigestService:
         knowledge: KnowledgeService,
         promotions: PromotionService,
         clock: Clock,
+        stale: StaleReview | None = None,
+        stale_days: int = 0,
     ) -> None:
         self._knowledge, self._promotions, self._clock = knowledge, promotions, clock
+        self._stale, self._stale_days = stale, stale_days
+
+    def now(self) -> datetime:
+        return self._clock.now()
 
     async def build(
         self,
@@ -121,8 +128,20 @@ class DigestService:
         top = tuple(tags.most_common(8))
         return Digest(
             since, until, tuple(found[:limit]), len(found), top, pending, complete, dict(origins),
-            tuple(edited[:limit]), len(edited),
+            tuple(edited[:limit]), len(edited), await self._needs_review(who),
         )  # fmt: skip
+
+    async def _needs_review(self, who: Principal) -> tuple[DigestItem, ...]:
+        if not (self._stale and self._stale_days):
+            return ()
+        page = await self._stale.stale(who, days=self._stale_days, limit=10)
+        return tuple(
+            self._entry(
+                ItemView(s.item, Tier.PRIMARY),
+                provenance(s.item.scope, Tier.PRIMARY, s.item.author_id),
+            )
+            for s in page.items
+        )
 
     async def _edited(self, who: Principal, since: datetime, external: bool) -> list[DigestItem]:
         """Items from before the window that someone else changed during it, latest change first."""
@@ -194,6 +213,13 @@ def render_text(digest: Digest, recipient: str = "") -> str:
         lines += [
             f"  - {i.title}  [{i.kind}, edited by {i.edited_by}, id {i.id}]" for i in digest.edited
         ]
+        lines.append("")
+    if digest.stale:
+        lines.append(
+            "Still true? These notes of yours have not been edited or confirmed for a while"
+        )
+        lines += [f"  - {i.title}  [id {i.id}]" for i in digest.stale]
+        lines.append("  Ask your agent: kb_confirm <id> if it holds, or archive it with kb_update.")
         lines.append("")
     if digest.total_new > len(digest.items):
         lines.append(f"... and {digest.total_new - len(digest.items)} more (kb_digest lists them).")

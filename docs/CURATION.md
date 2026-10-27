@@ -21,3 +21,17 @@ share a timestamp); `kb_tags(prefix, limit)` lists tags in use with counts among
 `kb_tags` before tagging so agents reuse existing tags. MCP clients can also use the prompts (`consult_before_task`,
 `end_of_session_report`, `before_compaction`, `tidy_tag`, `review_promotions`) and resources
 (`kb://guide`, `kb://recent`, `kb://item/{id}`).
+
+## Keeping knowledge trustworthy
+
+**Duplicates.** `kb_duplicates` sweeps the notes you can edit (50 per call; `next_cursor` continues) and
+returns groups that say nearly the same thing (`threshold` 0.5-1.0, default 0.9; `exact` marks identical
+text). It changes nothing: read a group, write one consolidated note, and `kb_merge` it (the sources are
+marked superseded and linked, so history stays).
+
+**Stale notes.** A note is stale when neither an edit nor a confirmation is newer than the window
+(default 180 days; session and compaction logs are exempt). `kb_review_stale` lists yours
+(`mine_only=false`: anything you can edit); for each, `kb_confirm` (vouch it is still true: recorded in the
+key-value store and the audit log, no new revision), `kb_update` (fix) or `kb_update status=archived`
+(retire). With `HIVE_STALE_REVIEW_DAYS=N` the weekly digest email gets a "Still true?" section listing each
+author's own stale notes, so nobody has to remember to look.

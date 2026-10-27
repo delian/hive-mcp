@@ -18,6 +18,7 @@ from hive_mcp.mcp_api.tools_digest import register_digest_tools
 from hive_mcp.mcp_api.tools_entity import register_entity_tools
 from hive_mcp.mcp_api.tools_graph import register_graph_tools
 from hive_mcp.mcp_api.tools_history import register_history_tools
+from hive_mcp.mcp_api.tools_hygiene import register_hygiene_tools
 from hive_mcp.mcp_api.tools_ingest import register_ingest_tools
 from hive_mcp.mcp_api.tools_promotion import register_promotion_tools
 from hive_mcp.mcp_api.tools_purge import register_purge_tools
@@ -61,6 +62,7 @@ def build_mcp(
     register_entity_tools(mcp, get_services)
     register_history_tools(mcp, get_services)
     register_digest_tools(mcp, get_services)
+    register_hygiene_tools(mcp, get_services)
     register_prompts(mcp)
     register_resources(mcp, get_services)
 

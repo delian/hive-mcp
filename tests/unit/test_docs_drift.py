@@ -13,6 +13,8 @@ from hive_mcp.cli import cli
 from hive_mcp.config import Settings
 
 ROOT = Path(__file__).parents[2]
+if not (ROOT / "README.md").is_file():  # the mutation-testing copy of the tree has no docs
+    pytest.skip("documentation not present", allow_module_level=True)
 DOCS = sorted([ROOT / "README.md", *(ROOT / "docs").glob("*.md")])
 TEXT = {p: p.read_text() for p in DOCS}
 # Generated or historical material that may mention things that no longer exist.

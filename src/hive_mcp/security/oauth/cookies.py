@@ -25,12 +25,12 @@ def load_secret_key(configured: str | None, path: Path) -> bytes:
         try:
             key = bytes.fromhex(path.read_text().strip())
         except ValueError:
-            key = b""
+            key = b""  # pragma: no mutate - any value shorter than KEY_BYTES is refused below
         if len(key) < KEY_BYTES:  # a crash while the file was being written: never sign with it
             raise ValidationError(f"{path} is empty or damaged; delete it to generate a new key")
         return key
     path.parent.mkdir(parents=True, exist_ok=True)
-    key = secrets.token_bytes(KEY_BYTES)
+    key = secrets.token_bytes(KEY_BYTES)  # pragma: no mutate - None means 32, which is KEY_BYTES
     fd = os.open(
         path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
     )  # never readable by others, even briefly

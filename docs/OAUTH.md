@@ -68,3 +68,25 @@ but another Google account (an address deleted and reassigned) is refused. Editi
 - Teams and projects come from the directory file, or from Workspace groups with [group sync](GROUPS.md).
 - Google is only contacted at sign-in; later Google-side suspension is not noticed until the directory entry is changed.
 - The SDK's `/revoke` is replaced by ours because its request model rejects secret-less public clients.
+
+## Other identity providers: Microsoft Entra ID and generic OIDC
+
+The sign-in (claude.ai, ChatGPT, Gemini, the admin pages) is an OpenID Connect login upstream; Google is the default.
+`HIVE_SSO_PROVIDER` selects the provider the client id and secret (`HIVE_GOOGLE_CLIENT_ID`/`_SECRET`, the names are
+historical) belong to. In every case a person must also be in the user directory (`hive user add`), be in an allowed
+domain (`HIVE_GOOGLE_ALLOWED_DOMAINS`) and keep the same provider account (`sub`) as at their first sign-in.
+
+| provider | settings | what proves the account belongs to your organisation |
+|---|---|---|
+| `google` (default) | client id/secret | the `hd` claim equals the address's domain (Workspace), and `email_verified` |
+| `entra` | `HIVE_ENTRA_TENANT=<directory id (GUID)>` | the token's `tid` equals your tenant (the issuer is built from it: `login.microsoftonline.com/<tenant>/v2.0`); the address is `email` or else `preferred_username` |
+| `oidc` | `HIVE_GOOGLE_ISSUER=https://idp.example.com` | `email_verified` is true; **use only an IdP that holds your organisation's own accounts** (Okta, Keycloak, Auth0 tenant...), not a public one |
+
+Register `https://<public-url>/oauth/google/callback` and `https://<public-url>/admin/google/callback` as redirect URIs
+at the provider (the path name is historical too). For Entra: App registration, single tenant, Web platform, a client
+secret; the token needs the `openid email profile` scopes (requested automatically). Not supported: multi-tenant
+`common`/`organizations` issuers (tokens carry per-tenant issuers) and providers that sign with algorithms other than RS256.
+
+Entra note: Microsoft advises against trusting `email`/`preferred_username` for authorisation because directory admins
+can change them. Here they only *name* the person; the pinned `sub` (checked at every later sign-in) and the `tid`
+check are what bind the account, and an admin who can rename accounts in your tenant could already sign in as them.

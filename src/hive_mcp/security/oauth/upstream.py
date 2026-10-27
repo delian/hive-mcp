@@ -1,4 +1,5 @@
-"""Google (OpenID Connect) upstream identity: login URL, code exchange, ID-token verification.
+"""OpenID Connect upstream identity (Google, Microsoft Entra ID, any other OIDC provider):
+login URL, code exchange, ID-token verification.
 
 Signature and claims are verified with PyJWT even though the token arrives over a direct TLS call
 (defence in depth). Endpoints come from the configured issuer's discovery document only.
@@ -8,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -20,6 +22,9 @@ from jwt.algorithms import RSAAlgorithm
 from hive_mcp.domain.errors import HiveError
 
 GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
+ENTRA_ISSUER = "https://login.microsoftonline.com/{tenant}/v2.0"
+GUID = re.compile(r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}")
+PROVIDERS = ("google", "entra", "oidc")
 JWKS_MIN_REFETCH_SECONDS = 60.0
 HTTP_TIMEOUT = 10.0
 
@@ -41,7 +46,7 @@ def pkce_challenge(verifier: str) -> str:
 
 
 class GoogleOidc:
-    def __init__(
+    def __init__(  # noqa: PLR0913 - keyword-only settings of one provider
         self,
         *,
         client_id: str,
@@ -49,7 +54,16 @@ class GoogleOidc:
         issuer: str,
         callback_url: str,
         http: httpx.AsyncClient | None = None,
+        provider: str = "google",
+        tenant: str | None = None,
     ) -> None:
+        if provider not in PROVIDERS:
+            raise UpstreamError(f"unknown identity provider type {provider!r}")
+        if provider == "entra":
+            if not tenant or not GUID.fullmatch(tenant):
+                raise UpstreamError("Entra ID needs the tenant id (a GUID), not a domain name")
+            issuer = ENTRA_ISSUER.format(tenant=tenant.lower())
+        self._provider, self._tenant = provider, (tenant or "").lower()
         parsed = urlparse(issuer)
         if parsed.scheme != "https" and parsed.hostname not in ("localhost", "127.0.0.1"):
             raise UpstreamError("the identity provider issuer must use https")
@@ -90,14 +104,14 @@ class GoogleOidc:
             "client_id": self._id,
             "redirect_uri": self._callback,
             "response_type": "code",
-            "scope": "openid email",
+            "scope": "openid email profile" if self._provider == "entra" else "openid email",
             "state": state,
             "nonce": nonce,
             "prompt": "select_account",
             "code_challenge": pkce_challenge(code_verifier),
             "code_challenge_method": "S256",
         }
-        if hosted_domain:
+        if hosted_domain and self._provider == "google":
             params["hd"] = hosted_domain  # a UI hint only: the returned token is still checked
         return f"{doc['authorization_endpoint']}?{urlencode(params)}"
 
@@ -155,12 +169,27 @@ class GoogleOidc:
             raise UpstreamError(f"ID token rejected: {exc.__class__.__name__}") from exc
         if claims.get("nonce") != nonce:
             raise UpstreamError("ID token nonce mismatch")
+        return self._identity(claims)
+
+    def _identity(self, claims: dict[str, Any]) -> GoogleIdentity:
+        """What each provider vouches for. `hosted_domain` is the proof that the account belongs
+        to the organisation's own directory: Google says it with `hd`; for Entra it is the tenant
+        check (`tid`); for a generic provider it is the verified email on the organisation's own IdP."""
         email = claims.get("email")
-        if not isinstance(email, str) or not email:
+        if self._provider == "entra" and not email:
+            email = claims.get("preferred_username")  # Entra often omits `email`
+        if not isinstance(email, str) or "@" not in email:
             raise UpstreamError("ID token has no email")
+        domain = email.rpartition("@")[2].casefold()
+        if self._provider == "google":
+            hosted = claims.get("hd") if isinstance(claims.get("hd"), str) else None
+            verified = claims.get("email_verified") is True
+        elif self._provider == "entra":
+            if str(claims.get("tid", "")).lower() != self._tenant:
+                raise UpstreamError("ID token is from another tenant")
+            hosted, verified = domain, True  # directory accounts: the tenant vouches for them
+        else:
+            hosted, verified = domain, claims.get("email_verified") is True
         return GoogleIdentity(
-            email=email,
-            email_verified=claims.get("email_verified") is True,
-            hosted_domain=claims.get("hd") if isinstance(claims.get("hd"), str) else None,
-            subject=str(claims["sub"]),
+            email=email, email_verified=verified, hosted_domain=hosted, subject=str(claims["sub"])
         )

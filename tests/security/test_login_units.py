@@ -162,3 +162,78 @@ def test_pkce_challenge_matches_the_rfc_example():
         pkce_challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
         == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
     )
+
+
+# ---------------------------------------------------------------- other identity providers
+TENANT = "11111111-2222-3333-4444-555555555555"
+
+
+def entra():
+    return GoogleOidc(
+        client_id="c", client_secret="s", issuer="", callback_url="https://x/cb",
+        provider="entra", tenant=TENANT.upper(),
+    )  # fmt: skip
+
+
+def test_entra_needs_a_guid_tenant_and_builds_its_issuer():
+    assert entra()._issuer == f"https://login.microsoftonline.com/{TENANT}/v2.0"
+    for bad in (None, "", "contoso.onmicrosoft.com", "common", "organizations"):
+        with pytest.raises(UpstreamError):
+            GoogleOidc(
+                client_id="c", client_secret="s", issuer="", callback_url="https://x/cb",
+                provider="entra", tenant=bad,
+            )  # fmt: skip
+    with pytest.raises(UpstreamError):
+        GoogleOidc(
+            client_id="c", client_secret="s", issuer="https://x", callback_url="https://x/cb",
+            provider="saml",
+        )  # fmt: skip
+
+
+def test_entra_identity_comes_from_the_tenant_and_may_use_preferred_username():
+    up = entra()
+    who = up._identity({"preferred_username": "Ann@Acme.com", "tid": TENANT.upper(), "sub": "s1"})
+    assert (who.email, who.email_verified, who.hosted_domain) == ("Ann@Acme.com", True, "acme.com")
+    assert (
+        up._identity(
+            {"email": "a@acme.com", "preferred_username": "x@y.z", "tid": TENANT, "sub": "s"}
+        ).email
+        == "a@acme.com"
+    )
+    with pytest.raises(
+        UpstreamError, match="another tenant"
+    ):  # a token from someone else's directory
+        up._identity(
+            {"email": "a@acme.com", "tid": "99999999-2222-3333-4444-555555555555", "sub": "s"}
+        )
+    with pytest.raises(UpstreamError, match="another tenant"):
+        up._identity({"email": "a@acme.com", "sub": "s"})
+    with pytest.raises(UpstreamError, match="no email"):
+        up._identity({"tid": TENANT, "sub": "s"})
+    with pytest.raises(UpstreamError, match="no email"):
+        up._identity({"preferred_username": "not-an-email", "tid": TENANT, "sub": "s"})
+
+
+def test_generic_oidc_needs_a_verified_email_and_ignores_google_only_claims():
+    up = GoogleOidc(
+        client_id="c", client_secret="s", issuer="https://idp.acme.com", callback_url="https://x/cb",
+        provider="oidc",
+    )  # fmt: skip
+    ok = up._identity({"email": "a@acme.com", "email_verified": True, "sub": "s", "hd": "evil.com"})
+    assert (ok.email_verified, ok.hosted_domain) == (True, "acme.com")  # hd is Google's claim
+    assert up._identity({"email": "a@acme.com", "sub": "s"}).email_verified is False
+    assert (
+        up._identity({"email": "a@acme.com", "email_verified": "true", "sub": "s"}).email_verified
+        is False
+    )
+    # preferred_username is only trusted for Entra
+    with pytest.raises(UpstreamError, match="no email"):
+        up._identity({"preferred_username": "a@acme.com", "sub": "s"})
+
+
+def test_the_check_accepts_entra_identities_through_the_normal_policy(tmp_path):
+    directory = UserDirectory(AtomicJsonFile(tmp_path / "u.json", default=[]))
+    directory.upsert(DirectoryUser("ann@acme.com", "org1"))
+    who = entra()._identity({"preferred_username": "ann@acme.com", "tid": TENANT, "sub": "s1"})
+    assert not isinstance(check_identity(who, ["acme.com"], directory), Denied)
+    assert isinstance(check_identity(who, ["other.com"], directory), Denied)

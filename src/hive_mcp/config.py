@@ -108,6 +108,10 @@ class Settings(BaseSettings):
     google_client_id: str | None = None
     google_client_secret: SecretStr | None = None
     google_issuer: str = "https://accounts.google.com"
+    # Which identity provider the client id/secret above belong to: "google", "entra" (Microsoft
+    # Entra ID; needs HIVE_ENTRA_TENANT) or "oidc" (any provider; HIVE_GOOGLE_ISSUER is its issuer).
+    sso_provider: Literal["google", "entra", "oidc"] = "google"
+    entra_tenant: str | None = None  # the directory (tenant) id, a GUID
     google_allowed_domains: list[str] = Field(
         default_factory=list
     )  # e.g. ["acme.com"]; empty = refuse all
@@ -151,6 +155,12 @@ class Settings(BaseSettings):
             parse_rules(self.retention_rules)
         except ValidationError as exc:
             raise ValueError(f"HIVE_RETENTION_RULES: {exc}") from exc
+        return self
+
+    @model_validator(mode="after")
+    def _check_sso(self) -> Settings:
+        if self.sso_provider == "entra" and not self.entra_tenant:
+            raise ValueError("HIVE_SSO_PROVIDER=entra needs HIVE_ENTRA_TENANT (the directory id)")
         return self
 
     @model_validator(mode="after")

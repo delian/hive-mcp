@@ -407,3 +407,28 @@ def test_the_activity_page_is_for_admins_and_clamps_the_window(ui: Live) -> None
     assert "Last 30 days" in admin.get("/admin/activity?days=abc").text
     member = sign_in(ui, ALICE)
     assert member.get("/admin/activity").status_code == 403
+
+
+# ---------------------------------------------------------------- a generic OIDC provider
+def test_a_generic_oidc_provider_signs_people_in_without_googles_hosted_domain(
+    tmp_path: Path, google: FakeGoogle
+) -> None:
+    google.account = {"email": "ada@acme.com", "email_verified": True, "sub": "o-1"}  # no `hd`
+    srv = _oauth_server(tmp_path, google, admin_ui=True, sso_provider="oidc")
+    srv.directory.upsert(DirectoryUser("ada@acme.com", "acme", Role.ADMIN))
+    try:
+        client, done = google_login(srv, google, "ada@acme.com")
+        assert done.status_code == 303 and "ada@acme.com" in client.get("/admin").text
+        google.account = {"email": "ada@acme.com", "email_verified": False, "sub": "o-1"}
+        _, unverified = google_login(srv, google, "ada@acme.com")
+        assert unverified.status_code == 403  # the provider did not verify the address
+    finally:
+        srv.stop()
+
+
+def test_the_same_account_without_hd_is_refused_when_the_provider_is_google(
+    google_ui: Live, google: FakeGoogle
+) -> None:
+    google.account = {"email": "ada@acme.com", "email_verified": True, "sub": "g-1"}  # personal
+    _, denied = google_login(google_ui, google, "ada@acme.com")
+    assert denied.status_code == 403

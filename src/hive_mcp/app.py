@@ -115,6 +115,19 @@ def shared_limiter(
     return lambda per_min, burst: PgRateLimiter(db, per_min, burst)
 
 
+def make_upstream(settings: Settings, callback_url: str) -> GoogleOidc:
+    """The configured identity provider (Google, Entra ID or another OIDC provider)."""
+    assert settings.google_client_id and settings.google_client_secret  # noqa: S101 - guarded by oauth_enabled
+    return GoogleOidc(
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret.get_secret_value(),
+        issuer=settings.google_issuer,
+        callback_url=callback_url,
+        provider=settings.sso_provider,
+        tenant=settings.entra_tenant,
+    )
+
+
 def build_oauth(
     settings: Settings, static: StaticTokenVerifier, get_kv: Callable[[], KeyValueStore]
 ) -> tuple[HiveOAuthProvider, list[Route]]:
@@ -135,12 +148,7 @@ def build_oauth(
         clock=SystemClock(),
         static_tokens=static,
     )
-    upstream = GoogleOidc(
-        client_id=settings.google_client_id,
-        client_secret=settings.google_client_secret.get_secret_value(),
-        issuer=settings.google_issuer,
-        callback_url=f"{settings.public_url.rstrip('/')}/oauth/google/callback",
-    )
+    upstream = make_upstream(settings, f"{settings.public_url.rstrip('/')}/oauth/google/callback")
     key = settings.secret_key.get_secret_value() if settings.secret_key else None
     signer = CookieSigner(load_secret_key(key, settings.data_dir / "secret.key"))
     return provider, oauth_routes(provider, upstream, signer, settings.google_allowed_domains)
@@ -155,11 +163,8 @@ def build_admin_ui(
     upstream = None
     if settings.oauth_enabled:
         assert settings.google_client_id and settings.google_client_secret  # noqa: S101
-        upstream = GoogleOidc(
-            client_id=settings.google_client_id,
-            client_secret=settings.google_client_secret.get_secret_value(),
-            issuer=settings.google_issuer,
-            callback_url=f"{settings.public_url.rstrip('/')}/admin/google/callback",
+        upstream = make_upstream(
+            settings, f"{settings.public_url.rstrip('/')}/admin/google/callback"
         )
     signin = SignIn(
         get_services,

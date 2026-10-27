@@ -71,6 +71,17 @@ class TeamsBot:
         self._cfg, self._connector, self._directory = config, connector, directory
         self._services, self._get_kv, self._clock = get_services, get_kv, clock
 
+    def services(self) -> Services:
+        return self._services()
+
+    async def invoke(self, activity: dict[str, Any]) -> dict[str, Any]:
+        """Message extension commands (search, save a message); see extension.py."""
+        from hive_mcp.teams.extension import TeamsExtension  # noqa: PLC0415 - imports this module
+
+        return await TeamsExtension(self, self._cfg.workspace, self._cfg.channel_projects).invoke(
+            activity
+        )
+
     async def handle(self, activity: dict[str, Any]) -> None:
         if activity.get("type") != "message" or not activity.get("text"):
             return  # conversation updates, typing, reactions...: nothing to do
@@ -81,7 +92,7 @@ class TeamsBot:
         personal = conversation.get("conversationType") == "personal"
         if not personal and not self._cfg.allow_mentions:
             return
-        who = await self._resolve(activity)
+        who = await self.resolve(activity)
         if who is not None and personal:  # remember where to reach them for notifications
             reference = {
                 "serviceUrl": str(activity.get("serviceUrl", "")),
@@ -152,7 +163,7 @@ class TeamsBot:
         where = f"to project {project}" if project else "as a private note"
         return f"{verb} {where}: {saved.item.title}"
 
-    async def _resolve(self, activity: dict[str, Any]) -> Principal | None:
+    async def resolve(self, activity: dict[str, Any]) -> Principal | None:
         sender = activity.get("from") or {}
         aad = str(sender.get("aadObjectId", ""))
         if not aad:

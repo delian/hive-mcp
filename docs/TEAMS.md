@@ -18,11 +18,26 @@ the admin page (tool arguments appear in chat transcripts, so they are refused f
    *Directory (tenant) id*; create a client secret.
 2. Azure portal, **Azure Bot** resource: type single-tenant, use that app id, messaging endpoint
    `https://<public-url>/teams/messages`; enable the **Microsoft Teams** channel.
-3. A Teams app manifest (Teams Developer Portal) with that bot id, scopes personal, team and group chat; upload or publish
-   to your organisation.
+3. The Teams app package: `HIVE_PUBLIC_URL=https://<public-url> hive teams-package --app-id <application id> --out hive-teams.zip`
+   writes a zip with the manifest (bot for personal chats, teams and group chats, plus the message extension below) and
+   two icons. Upload it in Teams (Apps, Manage your apps, Upload an app) or in the Teams admin center. The privacy and terms
+   links in it point at your server's address: replace them in the manifest before publishing beyond your own tenant.
 4. In Hive, `/admin/integrations`: tenant id, application id, app password, enable. Add people to the user directory
    (`hive user add`): they are matched by the email Teams reports for them (looked up through the bot connector, cached an
    hour), or pin `aad-object-id=email` lines in the page for people the lookup cannot find.
+
+## Message extension
+Two commands, declared in the package:
+- **Search Hive** (compose box and the Teams search bar): type a query, get result cards to insert into the message.
+  The card goes into a conversation in front of everyone there, so, as for channel answers, only organisation-wide
+  knowledge and the notes of the project the conversation is mapped to are offered; private and project notes stay with
+  the bot in your personal chat. Card text is escaped (no links, mentions or formatting from stored text).
+- **Save to Hive** (the `...` menu of any message): saves the message as a note **private to you**, with the author's name
+  and a link to the message as its source, and tells you in a small dialog. There is no form: saving happens as the dialog
+  opens (the note is keyed to the message, so a retry or second click saves nothing twice). Move it to a project later
+  with `kb_request_promotion`.
+These arrive as `invoke` activities, are verified like every other activity, answered in the HTTP response (Teams allows
+five seconds), and are not de-duplicated (a retry is simply answered again). The same tenant and directory checks apply.
 
 ## Security properties
 - Every request must carry a Bot Framework JWT: signature checked against the published keys (RS256 only; refetched on an
@@ -34,7 +49,8 @@ the admin page (tool arguments appear in chat transcripts, so they are refused f
   are refused.
 
 ## Not built
-- A message extension / message action ("Save to Hive" on any message, like Slack's shortcut) needs `invoke` handling and
-  manifest `composeExtensions`; not implemented. Say `save <text>` to the bot instead.
 - Multi-tenant bots (Microsoft no longer allows creating them) and the Bot Framework Emulator's tokens.
-- Verified only against locally signed tokens and mocked HTTP, not a real tenant.
+- A form for choosing a project when saving a message, link unfurling, and Outlook support for the extension.
+- Verified only against locally signed tokens and mocked HTTP, plus Microsoft's documented request and response shapes
+  (manifest 1.17, `composeExtension/query`, `composeExtension/fetchTask`), not a real tenant. Teams is strict about
+  manifests: if the upload is refused, the message names the field.

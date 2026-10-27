@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from hive_mcp.security.oauth.upstream import UpstreamError
@@ -58,6 +58,8 @@ class TeamsRoutes:
             )
         except UpstreamError:
             return Response("invalid token", status_code=401)
+        if activity.get("type") == "invoke":  # answered in the response; a retry just asks again
+            return JSONResponse(await bot.invoke(activity))
         activity_id = str(activity.get("id", ""))
         fresh = (
             await self._get_kv().put_if_absent(  # Teams redelivers slow activities: once

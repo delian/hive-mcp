@@ -16,6 +16,7 @@ from hive_mcp.cli_groups import app as groups_app
 from hive_mcp.cli_ingest import app as ingest_app
 from hive_mcp.cli_maint import app as maint_app
 from hive_mcp.cli_ops import app as ops_app
+from hive_mcp.cli_teams import app as teams_app
 from hive_mcp.config import Settings
 from hive_mcp.domain.errors import HiveError
 from hive_mcp.domain.principal import Principal, Role
@@ -46,6 +47,7 @@ cli.add_typer(groups_app)  # sync-groups
 cli.add_typer(eval_app)  # eval-build
 cli.add_typer(client_app)  # hook, hooks
 cli.add_typer(digest_app)  # digest
+cli.add_typer(teams_app)  # teams-package
 
 
 @cli.command()

@@ -229,3 +229,30 @@ def test_deeply_nested_json_and_html_do_not_blow_the_stack():
         with contextlib.suppress(HiveError):
             extract_text(name, nested if name.endswith("json") else b"<div>" * 100_000, None)
     assert json.dumps({})  # reached: no RecursionError escaped
+
+
+@FUZZ
+@given(TEXT)
+def test_card_text_escaping_never_fails_and_leaves_no_bare_link_syntax(text):
+    from hive_mcp.teams.extension import plain
+
+    out = plain(text)
+    assert "](" not in out.replace("\\](", "") and "<" not in out.replace("\\<", "")
+
+
+@FUZZ
+@given(st.dictionaries(st.text(max_size=12), JSON, max_size=8))
+def test_an_invoke_of_any_shape_gets_a_body_never_a_crash(activity):
+    import asyncio
+
+    from hive_mcp.teams.extension import TeamsExtension
+
+    class Nobody:
+        async def resolve(self, _activity):
+            return None
+
+    for name in ("composeExtension/query", "composeExtension/fetchTask", "other", None):
+        body = asyncio.run(
+            TeamsExtension(Nobody(), "t", {}).invoke({**activity, "name": name})  # type: ignore[arg-type]
+        )
+        assert isinstance(body, dict)

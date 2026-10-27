@@ -17,6 +17,10 @@ from hive_mcp.security.oauth.upstream import GoogleOidc
 from hive_mcp.slack.handlers import SlackBot
 from hive_mcp.slack.identity import SlackIdentity
 from hive_mcp.slack.routes import SlackRoutes
+from hive_mcp.teams.connector import BotConnector
+from hive_mcp.teams.handlers import TeamsBot
+from hive_mcp.teams.routes import TeamsRoutes
+from hive_mcp.teams.verify import BotFrameworkVerifier
 from hive_mcp.webui.account_routes import AccountPages
 from hive_mcp.webui.accounts import AccountAdmin
 from hive_mcp.webui.auth import AdminAuth
@@ -117,6 +121,24 @@ def build_slack(
         )
 
     return SlackRoutes(lambda: store.get("slack"), make_bot, kv).routes()
+
+
+def build_teams(
+    directory: UserDirectory,
+    store: IntegrationStore,
+    get_services: Callable[[], Services],
+) -> list[Route]:
+    """The Teams route; the stored integration settings decide whether and how it answers."""
+
+    def kv() -> KeyValueStore:
+        return get_services().backend.kv
+
+    def make(config: IntegrationConfig) -> tuple[BotFrameworkVerifier, TeamsBot]:
+        connector = BotConnector(config.app_id, config.secrets["app_password"], config.workspace)
+        bot = TeamsBot(config, connector, directory, get_services, kv)
+        return BotFrameworkVerifier(config.app_id), bot
+
+    return TeamsRoutes(lambda: store.get("teams"), make, kv).routes()
 
 
 def build_admin_ui(

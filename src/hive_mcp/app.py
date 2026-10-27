@@ -12,7 +12,13 @@ from urllib.parse import urlparse
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.transport_security import TransportSecuritySettings
 
-from hive_mcp.app_front import build_admin_ui, build_integrations, build_oauth, build_slack
+from hive_mcp.app_front import (
+    build_admin_ui,
+    build_integrations,
+    build_oauth,
+    build_slack,
+    build_teams,
+)
 from hive_mcp.bootstrap import Services, build_services
 from hive_mcp.config import Settings
 from hive_mcp.domain.errors import StorageBusy
@@ -124,6 +130,7 @@ def front_doors(  # noqa: PLR0913, PLR0917 - everything the routes are built fro
     if settings.admin_ui:
         routes += build_admin_ui(settings, tokens, get_services)
     routes += build_slack(directory, integrations, get_services)
+    routes += build_teams(directory, integrations, get_services)
     return provider, routes
 
 

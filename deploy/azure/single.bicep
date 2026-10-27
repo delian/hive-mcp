@@ -149,6 +149,7 @@ var settings = concat(
     { name: 'HIVE_BACKUP_DIR', value: '/backups' } // the Azure Files share
     { name: 'HIVE_BACKUP_EVERY_MINUTES', value: string(backupEveryMinutes) }
     { name: 'HIVE_BACKUP_KEEP', value: string(backupKeep) }
+    { name: 'HIVE_BACKUP_HANDOFF', value: 'true' } // a new revision asks the old one to hand over (CONTAINER_APP_REVISION identifies it)
     { name: 'HIVE_PUBLIC_URL', value: baseUrl }
     { name: 'HIVE_SECRET_KEY', secretRef: 'cookie-secret' }
     { name: 'HIVE_EMBEDDER', value: embedder }

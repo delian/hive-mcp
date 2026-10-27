@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import signal
+
 import uvicorn
 
 from hive_mcp.app import create_app
@@ -13,11 +16,20 @@ from hive_mcp.ops.logs import configure_logging
 from hive_mcp.ops.state import Lifecycle
 
 
+def _stop_self() -> None:
+    """A graceful stop, exactly as if the platform had sent SIGTERM: final backup, then release."""
+    os.kill(os.getpid(), signal.SIGTERM)
+
+
 def run_server(settings: Settings) -> None:
     configure_logging(settings.log_format, settings.log_level)
     lease = None
     if settings.backup_dir is not None and settings.profile is Profile.EMBEDDED:
-        lease = Lease(settings.backup_dir)  # one writer at a time (docs/SINGLE-CONTAINER.md)
+        lease = Lease(  # one writer at a time (docs/SINGLE-CONTAINER.md)
+            settings.backup_dir,
+            revision=settings.effective_revision if settings.backup_handoff else None,
+            on_handoff=_stop_self,
+        )
         lease.acquire(settings.backup_lease_wait)
         restore_if_empty(settings)  # a replaced container comes back with its data
     lifecycle = Lifecycle()

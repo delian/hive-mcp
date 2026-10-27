@@ -3,6 +3,7 @@ connectors and Slack. Kept apart so `config.py` stays small; `Settings` inherits
 
 from __future__ import annotations
 
+import os
 from pathlib import Path  # noqa: TC003 - pydantic reads the annotations at runtime
 from typing import Any, Literal, Self
 
@@ -20,6 +21,11 @@ class ExtrasSettings(BaseSettings):
     backup_keep: int = Field(default=8, ge=1, le=1000)
     # Seconds a starting instance waits for a running one to release the backup directory.
     backup_lease_wait: float = Field(default=90.0, ge=0)
+    # Let a newer revision of the app ask the running one to hand over (it takes its final backup
+    # and exits), for platforms that start the new instance before stopping the old one. Needs a
+    # revision id (HIVE_REVISION; Azure Container Apps supplies CONTAINER_APP_REVISION).
+    backup_handoff: bool = False
+    revision: str | None = None
     # An optional language model for merge proposals and contradiction checks (docs/LLM.md). Notes
     # narrower than llm_min_scope (default: project) are never sent to it.
     llm_provider: Literal["none", "openai", "anthropic"] = "none"
@@ -42,6 +48,16 @@ class ExtrasSettings(BaseSettings):
     slack_team_id: str | None = None
     slack_bot_token: SecretStr | None = None
     slack_users: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _check_handoff(self) -> Self:
+        if self.backup_handoff and not self.effective_revision:
+            raise ValueError("HIVE_BACKUP_HANDOFF needs HIVE_REVISION (or CONTAINER_APP_REVISION)")
+        return self
+
+    @property
+    def effective_revision(self) -> str | None:
+        return self.revision or os.environ.get("CONTAINER_APP_REVISION") or None
 
     @model_validator(mode="after")
     def _check_retention_rules(self) -> Self:

@@ -130,3 +130,52 @@ def test_after_a_crash_the_next_instance_waits_for_the_lease_to_go_stale(tmp_pat
     second = Instance(tmp_path / "disk2", backups, free_port())
     second.start()  # takes over the abandoned lease
     assert second.stop() == 0
+
+
+def test_a_new_revision_takes_over_a_running_one_in_seconds_and_the_old_one_cannot_come_back(
+    tmp_path: Path,
+) -> None:
+    backups = tmp_path / "share"
+    common = {"HIVE_BACKUP_HANDOFF": "true", "HIVE_BACKUP_LEASE_WAIT": "60"}
+    first = Instance(tmp_path / "disk1", backups, free_port(), HIVE_REVISION="rev-1", **common)
+    token = TokenStore(first.data / "tokens.json").create(ALICE, label="alice")
+    first.start()
+    import asyncio
+
+    async def remember() -> str:
+        async with first.client(token) as c:
+            made = await c.call_tool(
+                "kb_remember", {"title": "Before the deploy", "body": "written by revision one"}
+            )
+        return made.structured_content["id"]
+
+    note = asyncio.run(remember())
+    second = Instance(tmp_path / "disk2", backups, free_port(), HIVE_REVISION="rev-2", **common)
+    started = time.monotonic()
+    second.start()  # waits for the first to hand over, restores, serves
+    took = time.monotonic() - started
+    assert first.proc and first.proc.wait(timeout=30) in (
+        0,
+        -signal.SIGTERM,
+    )  # the old one stopped itself
+    assert took < 40, f"hand-over took {took:.0f} s"
+
+    async def read() -> str:
+        async with second.client(token) as c:
+            return (await c.call_tool("kb_get", {"id": note})).structured_content["title"]
+
+    try:
+        assert asyncio.run(read()) == "Before the deploy"  # nothing was lost
+        again = Instance(tmp_path / "disk3", backups, free_port(), HIVE_REVISION="rev-1", **common)
+        run = subprocess.run(  # noqa: S603
+            [sys.executable, "-c", START, "serve"],
+            env=again.env,
+            capture_output=True,
+            timeout=60,
+            check=False,
+        )
+        assert (
+            run.returncode != 0 and b"handed over" in run.stderr
+        )  # the retired revision is refused
+    finally:
+        assert second.stop() == 0

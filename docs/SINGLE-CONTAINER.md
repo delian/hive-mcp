@@ -61,15 +61,20 @@ az deployment group create -g hive-rg -f deploy/azure/single.bicep -p cookieSecr
 Extra settings (connectors, Slack, retention, SSO) go in `extraSettings`, e.g.
 `-p extraSettings='[{"name":"HIVE_SLACK_TEAM_ID","value":"T0ACME"}]'`; secrets as Container Apps secrets.
 
-**Upgrades.** The platform starts the new revision before stopping the old one; the lease makes that safe (the new
-revision cannot start while the old one runs, so the update reports a failed revision and the old one keeps serving).
-To upgrade, stop first, then deploy, a minute of downtime and no lost data:
+**Upgrades.** The platform starts the new revision before stopping the old one. `single.bicep` therefore sets
+`HIVE_BACKUP_HANDOFF=true`: the starting revision asks the running one (a *different* revision, identified by
+`CONTAINER_APP_REVISION`) to hand over; the old one takes its final backup, releases the lease and exits, and the new one
+restores that backup and serves, usually within seconds, with nothing lost. The revision that yielded is written to a
+retired list in the backup directory, so when the platform restarts that old container it refuses to start instead of
+taking the lease back (it logs "was handed over"). Without hand-off (the default elsewhere) the lease makes an
+overlapping start fail loudly and the old instance keeps serving; then upgrade by stopping first:
 ```bash
 az containerapp update -g hive-rg -n hive-mcp --min-replicas 0 --max-replicas 0   # old instance takes its final backup
 az deployment group create ... -p imageTag=<new>                                  # starts one replica, restores
 ```
 (`scripts/azure_upgrade_single.sh` does both.) Restoring on a new region or subscription is the same command: create the
-share, copy the archives in, deploy.
+share, copy the archives in, deploy. Outside Azure set `HIVE_REVISION` to anything that differs between releases (an
+image tag or digest) together with `HIVE_BACKUP_HANDOFF=true`.
 
 ## What cannot run in one container
 - **Several replicas**: SQLite is single-process (`HIVE_REPLICAS > 1` needs Postgres).

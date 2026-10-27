@@ -64,6 +64,7 @@ def test_a_garbled_lease_file_counts_as_free_and_release_never_removes_someone_e
 
 def test_the_heartbeat_keeps_the_lease_fresh_and_stops_when_taken_over(tmp_path, monkeypatch):
     monkeypatch.setattr(lease_module, "HEARTBEAT_SECONDS", 0.05)
+    monkeypatch.setattr(lease_module, "WATCH_SECONDS", 0.05)
     mine = Lease(tmp_path, "me")
     mine.acquire(0)
     try:
@@ -76,3 +77,73 @@ def test_the_heartbeat_keeps_the_lease_fresh_and_stops_when_taken_over(tmp_path,
         assert json.loads((tmp_path / FILE).read_text())["owner"] == "other"  # we did not fight
     finally:
         mine.release()
+
+
+# ---------------------------------------------------------------- hand-off between revisions
+def fast(monkeypatch):
+    monkeypatch.setattr(lease_module, "WATCH_SECONDS", 0.05)
+    monkeypatch.setattr(lease_module, "POLL_SECONDS", 0.05)
+
+
+def test_a_newer_revision_asks_the_holder_to_yield_and_the_holder_retires_itself(
+    tmp_path, monkeypatch
+):
+    import threading
+
+    fast(monkeypatch)
+    yielded = threading.Event()
+    old = Lease(tmp_path, "old", revision="r1", on_handoff=yielded.set)
+    old.acquire(0)
+    threading.Timer(
+        0.3, lambda: (yielded.wait(5), old.release())
+    ).start()  # what the server does on SIGTERM
+    new = Lease(tmp_path, "new", revision="r2")
+    new.acquire(10)
+    try:
+        assert yielded.is_set()
+        assert json.loads((tmp_path / FILE).read_text())["owner"] == "new"
+        assert "r1" in json.loads((tmp_path / lease_module.RETIRED_FILE).read_text())
+        assert not (tmp_path / lease_module.HANDOFF_FILE).exists()  # answered requests are cleared
+    finally:
+        new.release()
+    # the platform restarts the old container: it must not take the lease back
+    with pytest.raises(ValidationError, match="handed over"):
+        Lease(tmp_path, "old-again", revision="r1").acquire(0)
+
+
+def test_the_same_revision_or_no_revision_never_yields(tmp_path, monkeypatch):
+    fast(monkeypatch)
+    calls = []
+    holder = Lease(tmp_path, "a", revision="r1", on_handoff=lambda: calls.append(1))
+    holder.acquire(0)
+    try:
+        for rival in (Lease(tmp_path, "b", revision="r1"), Lease(tmp_path, "c")):
+            with pytest.raises(ValidationError, match="another instance"):
+                rival.acquire(0.4)
+        time.sleep(0.2)
+        assert calls == [] and json.loads((tmp_path / FILE).read_text())["owner"] == "a"
+        assert not (tmp_path / lease_module.HANDOFF_FILE).exists()
+    finally:
+        holder.release()
+
+
+def test_a_holder_without_a_handoff_callback_ignores_requests(tmp_path, monkeypatch):
+    fast(monkeypatch)
+    holder = Lease(tmp_path, "a", revision="r1")  # hand-off not enabled for it
+    holder.acquire(0)
+    try:
+        with pytest.raises(ValidationError):
+            Lease(tmp_path, "b", revision="r2").acquire(0.4)
+        assert json.loads((tmp_path / FILE).read_text())["owner"] == "a"
+        assert not (tmp_path / lease_module.RETIRED_FILE).exists()
+    finally:
+        holder.release()
+
+
+def test_old_retirements_are_forgotten_after_a_day(tmp_path):
+    (tmp_path / lease_module.RETIRED_FILE).write_text(
+        json.dumps({"r-old": time.time() - 2 * 86_400, "r-new": time.time()})
+    )
+    Lease(tmp_path, "x", revision="r-old").acquire(0)  # long forgotten: allowed again
+    with pytest.raises(ValidationError, match="handed over"):
+        Lease(tmp_path, "y", revision="r-new").acquire(0)

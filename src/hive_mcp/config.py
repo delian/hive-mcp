@@ -75,6 +75,13 @@ class Settings(BaseSettings):
     retention_rules: list[dict[str, Any]] = Field(default_factory=list)
     # Scheduled imports from URLs, GitHub or Google Drive, run in this process (docs/CONNECTORS.md).
     connectors: list[dict[str, Any]] = Field(default_factory=list)
+    # Slack: the /hive command and a "Save to Hive" message shortcut (docs/SLACK.md). Needs the
+    # app's signing secret and the workspace id; people are matched by their Slack email through
+    # the bot token (users:read.email), or by the fixed map {"U123": "ann@acme.com"} without one.
+    slack_signing_secret: SecretStr | None = None
+    slack_team_id: str | None = None
+    slack_bot_token: SecretStr | None = None
+    slack_users: dict[str, str] = Field(default_factory=dict)
     # Fetching documents from URLs on users' behalf (kb_ingest_url): off unless enabled.
     ingest_urls_enabled: bool = False
     ingest_url_hosts: list[str] = Field(default_factory=list)  # empty = any public host
@@ -168,6 +175,20 @@ class Settings(BaseSettings):
             parse_specs(self.connectors)
         except ValidationError as exc:
             raise ValueError(f"HIVE_CONNECTORS: {exc}") from exc
+        return self
+
+    @model_validator(mode="after")
+    def _check_slack(self) -> Settings:
+        if self.slack_signing_secret is None:
+            return self
+        if not self.slack_team_id:
+            raise ValueError(
+                "HIVE_SLACK_SIGNING_SECRET needs HIVE_SLACK_TEAM_ID (the workspace id)"
+            )
+        if not (self.slack_bot_token or self.slack_users):
+            raise ValueError(
+                "Slack needs HIVE_SLACK_BOT_TOKEN or HIVE_SLACK_USERS to know who asks"
+            )
         return self
 
     @model_validator(mode="after")

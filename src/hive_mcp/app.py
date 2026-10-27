@@ -31,6 +31,9 @@ from hive_mcp.security.oauth.provider import HiveOAuthProvider
 from hive_mcp.security.oauth.routes import oauth_routes
 from hive_mcp.security.oauth.upstream import GoogleOidc
 from hive_mcp.security.tokens import StaticTokenVerifier, TokenStore
+from hive_mcp.slack.handlers import SlackBot
+from hive_mcp.slack.identity import SlackIdentity
+from hive_mcp.slack.routes import SlackRoutes
 from hive_mcp.webui.account_routes import AccountPages
 from hive_mcp.webui.accounts import AccountAdmin
 from hive_mcp.webui.auth import AdminAuth
@@ -81,7 +84,9 @@ def rate_limit_rules(
         )
     if settings.rate_limit_auth:
         per_min = settings.rate_limit_auth
-        auth_paths = ("/authorize", "/token", "/revoke", "/oauth", "/admin/login", "/admin/google")
+        auth_paths = (
+            "/authorize", "/token", "/revoke", "/oauth", "/admin/login", "/admin/google", "/slack",
+        )  # fmt: skip
         rules.append(Rule(auth_paths, make(per_min, max(per_min // 2, 5))))
     if settings.rate_limit_mcp:
         per_min = settings.rate_limit_mcp
@@ -151,6 +156,28 @@ def build_oauth(
     key = settings.secret_key.get_secret_value() if settings.secret_key else None
     signer = CookieSigner(load_secret_key(key, settings.data_dir / "secret.key"))
     return provider, oauth_routes(provider, upstream, signer, settings.google_allowed_domains)
+
+
+def build_slack(
+    settings: Settings, directory: UserDirectory, get_services: Callable[[], Services]
+) -> list[Route]:
+    """The Slack command and shortcut routes (only when the app's signing secret is set)."""
+    assert settings.slack_signing_secret and settings.slack_team_id  # noqa: S101 - validated
+    token = settings.slack_bot_token.get_secret_value() if settings.slack_bot_token else None
+
+    def kv() -> KeyValueStore:
+        return get_services().backend.kv
+
+    identity = SlackIdentity(
+        directory,
+        kv,
+        team_id=settings.slack_team_id,
+        bot_token=token,
+        pinned=settings.slack_users,
+    )
+    bot = SlackBot(get_services, identity)
+    secret = settings.slack_signing_secret.get_secret_value()
+    return SlackRoutes(bot, secret, kv).routes()
 
 
 def build_admin_ui(
@@ -231,6 +258,8 @@ def create_app(
         provider, extra_routes = build_oauth(settings, static, lambda: get_services().backend.kv)
     if settings.admin_ui:
         extra_routes += build_admin_ui(settings, tokens, get_services)
+    if settings.slack_signing_secret:
+        extra_routes += build_slack(settings, directory, get_services)
     auth = AuthSettings(
         issuer_url=settings.public_url,
         resource_server_url=settings.resource_url,

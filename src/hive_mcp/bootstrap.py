@@ -243,7 +243,15 @@ async def build_services(settings: Settings) -> Services:
         sender,
         DuplicateFinder(backend.items, curation),
         stale,
-        RetentionService(backend.maintenance, purge, parse_rules(settings.retention_rules), clock),
+        RetentionService(
+            backend.maintenance,
+            purge,
+            parse_rules(settings.retention_rules),
+            clock,
+            backend.items,
+            indexing,
+            backend.audit,
+        ),
         ActivityReport(backend.audit, backend.maintenance, clock, _teams_of(settings)),
         ConnectorSync(ingest, knowledge, backend.kv, backend.audit, clock),
     )

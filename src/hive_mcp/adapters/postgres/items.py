@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 import psycopg
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
 
     from hive_mcp.adapters.postgres.db import PgDatabase
     from hive_mcp.domain.clock import Clock
-    from hive_mcp.domain.item import Item, ItemPatch, ItemQuery, Page
+    from hive_mcp.domain.item import Item, ItemPatch, ItemQuery, Page, Status
     from hive_mcp.domain.principal import Principal
     from hive_mcp.domain.scope import Scope, Visibility
 
@@ -205,6 +206,25 @@ class PgItems:
             moved = relocate_item(current, scope, visibility, self._clock.now())
             await _store_update(conn, current, moved, "system")
             return moved
+
+    async def set_status_system(
+        self, org_id: str, item_id: str, status: Status, expected_revision: int
+    ) -> Item:
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                f"SELECT {ITEM_COLS} FROM items WHERE id = %s AND org_id = %s FOR UPDATE",  # noqa: S608
+                (item_id, org_id),
+            )
+            row = await cur.fetchone()
+            if row is None:
+                raise NotFound(item_id)
+            current = row_to_item(row)
+            check_revision(current, expected_revision)
+            changed = replace(
+                current, status=status, revision=current.revision + 1, updated_at=self._clock.now()
+            )
+            await _store_update(conn, current, changed, "system")
+            return changed
 
     async def list(self, principal: Principal, query: ItemQuery) -> Page:
         async with self._db.tx() as conn:

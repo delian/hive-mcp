@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from hive_mcp.domain.item import Item, ItemPatch, ItemQuery, ItemView, Page
+    from hive_mcp.domain.item import Item, ItemPatch, ItemQuery, ItemView, Page, Status
     from hive_mcp.domain.principal import Principal
     from hive_mcp.domain.scope import Scope, Visibility
 
@@ -74,6 +74,12 @@ class ItemRepository(Protocol):
     ) -> Item:
         """Move on behalf of an approved promotion: no user ACL, never across orgs, and still
         guarded by `expected_revision`. The approval service has already done the authorising."""
+
+    async def set_status_system(
+        self, org_id: str, item_id: str, status: Status, expected_revision: int
+    ) -> Item:
+        """Change the status on behalf of a system rule (retention): no user ACL, never across
+        orgs, still guarded by `expected_revision`, and recorded as a new revision by "system"."""
 
     async def list(self, principal: Principal, query: ItemQuery) -> Page:
         """Newest first, keyset-paginated: no repeats or skips, even with equal timestamps."""

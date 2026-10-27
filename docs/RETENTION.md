@@ -25,8 +25,11 @@ promotion requests, stored files) with the same crash-safe cleanup as `kb_purge`
 without a kind or a scope is refused, as is any unknown key, and a bad rule stops the server at startup. A run purges
 at most 500 items, so a first run on a large base is spread over several 10-minute sweeps.
 
-Rules delete for good. The reversible path for stale knowledge is the owner's review (`kb_review_stale`, `kb_confirm`,
-archive). Preview what the rules would remove with `hive retention`, apply them at once with `hive retention --yes`.
+Each rule has an `action`: `purge` (the default, deletes for good) or `archive` (hides the item from search and lists but
+keeps it and its history; a person can restore it with `kb_update status=active`). An archive counts as a change, so an item
+is archived once. Example: `[{"scope":"private","days":365,"action":"archive"},{"scope":"private","days":1095}]` archives
+private notes after a year and deletes them after three. The owner's own review (`kb_review_stale`, `kb_confirm`) is the
+gentler path. Preview what the rules would remove with `hive retention`, apply them at once with `hive retention --yes`.
 
 ## Erasing a person
 

@@ -1,6 +1,8 @@
 from dataclasses import replace
 from datetime import timedelta
 
+import pytest
+
 from hive_mcp.domain.edge import Edge
 from hive_mcp.domain.item import ItemPatch, Kind, Status
 from hive_mcp.domain.scope import ScopeLevel
@@ -128,3 +130,20 @@ async def test_usage_per_author_excludes_archived_and_other_orgs(backend):
     assert [u.author_id for u in await backend.maintenance.usage("org1", "alice")] == ["alice"]
     assert await backend.maintenance.usage("org1", "nobody") == []
     assert await backend.maintenance.usage("org2") == []
+
+
+async def test_set_status_system_bumps_the_revision_and_respects_the_org_and_revision(backend):
+    from hive_mcp.domain.errors import Conflict, NotFound
+
+    await seed(backend)
+    changed = await backend.items.set_status_system("org1", "i2", Status.ARCHIVED, 1)
+    assert changed.status is Status.ARCHIVED and changed.revision == 2
+    assert (await backend.items.get_system("org1", "i2")).status is Status.ARCHIVED
+    with pytest.raises(Conflict):
+        await backend.items.set_status_system("org1", "i2", Status.ACTIVE, 1)  # stale revision
+    with pytest.raises(NotFound):
+        await backend.items.set_status_system("org2", "i1", Status.ARCHIVED, 1)  # other tenant
+    with pytest.raises(NotFound):
+        await backend.items.set_status_system("org1", "nope", Status.ARCHIVED, 1)
+    flt = ItemFilter(exclude_archived=True)
+    assert [i.id for i in await backend.maintenance.find_system(flt)] == ["i1", "i3", "i4"]

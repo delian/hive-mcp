@@ -39,6 +39,7 @@ class MemoryMaintenance:
             and (flt.created_before is None or i.created_at < flt.created_before)
             and (not flt.private_only or i.scope.level.name == "PRIVATE")
             and (flt.scope_level is None or i.scope.level == flt.scope_level)
+            and (not flt.exclude_archived or i.status.value != "archived")
             and (flt.updated_before is None or i.updated_at < flt.updated_before)
             and (after_id is None or i.id > after_id)
         ]

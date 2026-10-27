@@ -148,6 +148,20 @@ class MemoryItems:
         self._items[item_id] = moved
         return moved
 
+    async def set_status_system(
+        self, org_id: str, item_id: str, status: Status, expected_revision: int
+    ) -> Item:
+        current = self._items.get(item_id)
+        if current is None or current.org_id != org_id:
+            raise NotFound(item_id)
+        check_revision(current, expected_revision)
+        changed = replace(
+            current, status=status, revision=current.revision + 1, updated_at=self._clock.now()
+        )
+        self._archive(current, "system", changed.updated_at)
+        self._items[item_id] = changed
+        return changed
+
     async def list(self, principal: Principal, query: ItemQuery) -> Page:
         flt = access.read_filter(principal)
         rows = []

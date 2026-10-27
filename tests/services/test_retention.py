@@ -1,5 +1,6 @@
 import pytest
 
+from hive_mcp.domain.access import read_filter
 from hive_mcp.domain.errors import ValidationError
 from hive_mcp.domain.item import ItemPatch, Kind
 from hive_mcp.domain.retention import RetentionRule, parse_rules
@@ -15,8 +16,9 @@ async def add(stack, who, title, **kw):
 
 
 def service(stack, rules):
+    b = stack.backend
     return RetentionService(
-        stack.backend.maintenance, stack.purge, parse_rules(rules), stack.backend.clock
+        b.maintenance, stack.purge, parse_rules(rules), b.clock, b.items, stack.indexing, b.audit
     )
 
 
@@ -34,7 +36,8 @@ def test_rules_parse_and_refuse_dangerous_or_unknown_input():
         [{"kind": "note", "days": 0}],
         [{"kind": "nonsense", "days": 5}],
         [{"scope": "galaxy", "days": 5}],
-        [{"kind": "note", "days": 5, "action": "archive"}],  # unknown key
+        [{"kind": "note", "days": 5, "action": "shred"}],  # unknown action
+        [{"kind": "note", "days": 5, "colour": "red"}],  # unknown key
         ["x"],
     ):
         with pytest.raises(ValidationError):
@@ -104,3 +107,28 @@ def test_bad_rules_in_settings_stop_the_server_at_startup():
     with pytest.raises(ValueError, match="HIVE_RETENTION_RULES"):
         Settings(retention_rules=[{"days": 5}])
     assert Settings(retention_rules=[{"kind": "session", "days": 5}]).retention_rules
+
+
+async def test_an_archive_rule_hides_items_keeps_them_and_does_not_repeat(stack):
+    from hive_mcp.domain.item import ItemQuery, Status
+
+    note = await add(stack, ALICE, "old note about archiving rules")
+    keeper = await add(stack, ALICE, "recent note")
+    stack.backend.clock.advance(days=100)
+    await stack.knowledge.update(ALICE, keeper.id, ItemPatch(body="touched"), keeper.revision)
+    svc = service(stack, [{"scope": "private", "days": 60, "action": "archive"}])
+    assert "archive" in next(iter((await svc.run(dry_run=True)).keys()))
+    assert list((await svc.run(dry_run=True)).values()) == [1]
+    assert await alive(stack, note) == [True]  # a dry run changes nothing
+    assert list((await svc.run()).values()) == [1]
+    stored = await stack.backend.items.get_system("org1", note.id)
+    assert stored is not None and stored.status is Status.ARCHIVED and stored.revision == 2
+    hidden = await stack.knowledge.browse(ALICE, ItemQuery(include_referenced=False, limit=10))
+    assert [v.item.id for v in hidden.items] == [keeper.id]  # gone from lists...
+    assert (
+        await stack.backend.text.search(read_filter(ALICE), "archiving", 5) == []
+    )  # ...and search
+    stack.backend.clock.advance(days=100)
+    assert list((await svc.run()).values()) == [1]  # only the other note is next; this one is done
+    actions = [r.event.action for r in await stack.backend.audit.list("org1")]
+    assert actions.count("item.archive") == 2

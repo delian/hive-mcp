@@ -57,6 +57,8 @@ class SqliteMaintenance:
         if flt.scope_level is not None:
             conds.append("scope_level = ?")
             params.append(int(flt.scope_level))
+        if flt.exclude_archived:
+            conds.append("status != 'archived'")
         if flt.updated_before is not None:
             conds.append("updated_at < ?")
             params.append(ts(flt.updated_before))

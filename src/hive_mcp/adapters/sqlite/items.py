@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from hive_mcp.adapters.sqlite.acl import acl_where
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
 
     from hive_mcp.adapters.sqlite.db import Database
     from hive_mcp.domain.clock import Clock
-    from hive_mcp.domain.item import Item, ItemPatch, ItemQuery, ItemView, Page
+    from hive_mcp.domain.item import Item, ItemPatch, ItemQuery, ItemView, Page, Status
     from hive_mcp.domain.principal import Principal
     from hive_mcp.domain.scope import Scope, Visibility
 
@@ -218,6 +219,22 @@ class SqliteItems:
             moved = relocate_item(current, scope, visibility, self._clock.now())
             _store_update(conn, current, moved, "system")
             return moved
+
+        return await self._db.run(tx, write=True)
+
+    async def set_status_system(
+        self, org_id: str, item_id: str, status: Status, expected_revision: int
+    ) -> Item:
+        def tx(conn: sqlite3.Connection) -> Item:
+            current = fetch_item(conn, item_id)
+            if current is None or current.org_id != org_id:
+                raise NotFound(item_id)
+            check_revision(current, expected_revision)
+            changed = replace(
+                current, status=status, revision=current.revision + 1, updated_at=self._clock.now()
+            )
+            _store_update(conn, current, changed, "system")
+            return changed
 
         return await self._db.run(tx, write=True)
 

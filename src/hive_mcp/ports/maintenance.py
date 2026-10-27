@@ -21,6 +21,7 @@ class ItemFilter:
     created_before: datetime | None = None
     private_only: bool = False
     scope_level: ScopeLevel | None = None  # only items at this level
+    exclude_archived: bool = False  # for rules that archive: skip what is already archived
     updated_before: datetime | None = None  # last changed before (rules count from the last edit)
 
 

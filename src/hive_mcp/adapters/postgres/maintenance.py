@@ -44,6 +44,7 @@ class PgMaintenance:
                 "AND (%s::timestamptz IS NULL OR created_at < %s) "
                 "AND (NOT %s OR scope_level = %s) "
                 "AND (%s::smallint IS NULL OR scope_level = %s) "
+                "AND (NOT %s OR status != 'archived') "
                 "AND (%s::timestamptz IS NULL OR updated_at < %s) ORDER BY id LIMIT %s",
                 (
                     after_id or "",
@@ -54,6 +55,7 @@ class PgMaintenance:
                     flt.private_only, int(ScopeLevel.PRIVATE),
                     None if flt.scope_level is None else int(flt.scope_level),
                     None if flt.scope_level is None else int(flt.scope_level),
+                    flt.exclude_archived,
                     flt.updated_before, flt.updated_before,
                     limit,
                 ),

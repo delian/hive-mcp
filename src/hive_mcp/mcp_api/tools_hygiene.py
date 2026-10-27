@@ -158,11 +158,9 @@ def register_hygiene_tools(mcp: MCPServer, get_services: Callable[[], Services])
         svc = get_services()
         principal = current_principal()
         await svc.knowledge.get(principal, id)  # you can only rate what you can see
-        if svc.signals is not None:  # counts only: one vote per person and note
-            await svc.signals.record_vote(principal.org_id, principal.id, id, useful)
         if svc.feedback is not None:
             await svc.feedback.rated(principal, id, useful, query)
-        return RateOut(recorded=svc.signals is not None or svc.feedback is not None)
+        return RateOut(recorded=svc.feedback is not None)
 
     @mcp.tool(annotations=READ)
     @guarded

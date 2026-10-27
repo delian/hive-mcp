@@ -139,15 +139,15 @@ def feedback_report(
 def eval_assist(
     what: str = typer.Argument(..., help="conflicts, merges or ranking."),
     file: Path = typer.Argument(  # noqa: B008
-        ..., help="evals/conflicts.json, evals/merges.json or a retrieval set."
+        ..., help="evals/conflicts.json or evals/merges.json."
     ),
 ) -> None:
-    """Score contradiction checks, merge proposals or ranking nudges (a model: HIVE_LLM_*)."""
+    """Score contradiction checks or merge proposals (a model: HIVE_LLM_*)."""
     from hive_mcp.evaluation import assist_eval  # noqa: PLC0415
     from hive_mcp.llm.factory import make_llm  # noqa: PLC0415
 
-    if what not in {"conflicts", "merges", "ranking"}:
-        raise typer.BadParameter("what must be conflicts, merges or ranking")
+    if what not in {"conflicts", "merges"}:
+        raise typer.BadParameter("what must be conflicts or merges")
     settings = Settings()
     llm = make_llm(settings)
     raw = json.loads(file.read_text())
@@ -161,7 +161,7 @@ def eval_assist(
                 )
             if llm is None:
                 typer.echo("(no model configured: set HIVE_LLM_PROVIDER to score it too)")
-        elif what == "merges":
+        else:
             if llm is None:
                 raise typer.BadParameter("merges need a model: set HIVE_LLM_PROVIDER")
             for m in await assist_eval.evaluate_merges(raw, llm):
@@ -169,10 +169,5 @@ def eval_assist(
                 typer.echo(
                     f"group {m.group}: {m.kept}/{m.total} facts kept{note} {m.error}".rstrip()
                 )
-        else:
-            from hive_mcp.embeddings.factory import make_embedder  # noqa: PLC0415
-
-            for p in await assist_eval.replay_votes(dataset.parse(raw), make_embedder(settings)):
-                typer.echo(f"{p.label:<30} MRR {p.mrr:.3f}  R@1 {p.recall_at_1:.3f}")
 
     run_cli(run)

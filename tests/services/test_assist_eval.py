@@ -6,12 +6,9 @@ from pathlib import Path
 import pytest
 
 from hive_mcp.domain.errors import ValidationError
-from hive_mcp.embeddings.hashing import HashingEmbedder
-from hive_mcp.evaluation import dataset
 from hive_mcp.evaluation.assist_eval import (
     evaluate_conflicts,
     evaluate_merges,
-    replay_votes,
 )
 from hive_mcp.llm.providers import LlmError
 
@@ -66,18 +63,3 @@ async def test_merge_scores_count_the_facts_that_survive():
     assert all(s.kept == 0 and s.error for s in failed)
     lossy = {"groups": [{"notes": [{"title": "a", "body": "alpha beta"}], "facts": ["gamma"]}]}
     assert (await evaluate_merges(lossy, Scripted()))[0].missing == ["gamma"]
-
-
-async def test_the_vote_replay_reports_a_baseline_each_accuracy_and_an_attack():
-    ds = dataset.parse(json.loads((EVALS / "core.json").read_text()))
-    points = await replay_votes(ds, HashingEmbedder(), accuracies=(1.0, 0.5), voters=2)
-    labels = [p.label for p in points]
-    assert labels == [
-        "no nudges",
-        "votes 100% right",
-        "votes 50% right",
-        "40 votes for one wrong note",
-    ]
-    base = points[0]
-    # the nudge is bounded, so even forty votes for a wrong note cannot move results much
-    assert all(abs(p.mrr - base.mrr) < 0.06 for p in points)

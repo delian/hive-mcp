@@ -42,7 +42,7 @@ class ExtrasSettings(BaseSettings):
     llm_model: str | None = None
     llm_azure: bool = False  # openai: send the key as an `api-key` header (Azure OpenAI)
     llm_min_scope: str = "project"
-    # Small bounded ranking nudges from votes (kb_rate) and age; off by default.
+    # A small bounded ranking nudge for recently confirmed notes (kb_confirm); off by default.
     rank_signals: bool = False
     # Delete-by-age rules: [{"kind": "session", "days": 90}, {"scope": "private", "days": 730}].
     # Each needs a kind or a scope; age counts from the last change. See docs/RETENTION.md.

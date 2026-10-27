@@ -103,7 +103,7 @@ async def test_merge_proposal_needs_a_model_and_conflicts_work_without_one(live:
     assert bad.is_error
 
 
-async def test_votes_are_recorded_when_rank_signals_are_on(tmp_path):
+async def test_rank_signals_do_not_turn_ratings_into_votes(tmp_path):
     srv = Live(tmp_path / "data", rank_signals=True)
     srv.start()
     try:
@@ -112,7 +112,7 @@ async def test_votes_are_recorded_when_rank_signals_are_on(tmp_path):
                 await alice.call_tool("kb_remember", {"title": "Plan", "body": "Some plan text."})
             ).structured_content
             ok = await alice.call_tool("kb_rate", {"id": made["id"], "useful": True})
-        assert ok.structured_content["recorded"] is True
+        assert ok.structured_content["recorded"] is False  # no search feedback configured
     finally:
         srv.stop()
 

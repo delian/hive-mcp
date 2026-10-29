@@ -41,6 +41,13 @@ class PgMaintenance:
                 "UPDATE item_revisions SET replaced_by = %s WHERE org_id = %s AND replaced_by = %s",
             ):
                 changed += (await conn.execute(sql, (alias, org_id, person_id))).rowcount
+            changed += (  # a private note's owner is a person
+                await conn.execute(
+                    "UPDATE item_revisions SET scope_owner = %s "
+                    "WHERE org_id = %s AND scope_owner = %s AND scope_level = %s",
+                    (alias, org_id, person_id, int(ScopeLevel.PRIVATE)),
+                )
+            ).rowcount
             await conn.execute(
                 "DELETE FROM idempotency WHERE org_id = %s AND author_id = %s", (org_id, person_id)
             )

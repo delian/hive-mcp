@@ -43,6 +43,11 @@ class SqliteMaintenance:
                 "UPDATE item_revisions SET replaced_by = ? WHERE org_id = ? AND replaced_by = ?",
             ):
                 changed += conn.execute(sql, (alias, org_id, person_id)).rowcount
+            changed += conn.execute(  # a private note's owner is a person
+                "UPDATE item_revisions SET scope_owner = ? "
+                "WHERE org_id = ? AND scope_owner = ? AND scope_level = ?",
+                (alias, org_id, person_id, int(ScopeLevel.PRIVATE)),
+            ).rowcount
             conn.execute(
                 "DELETE FROM idempotency WHERE org_id = ? AND author_id = ?", (org_id, person_id)
             )

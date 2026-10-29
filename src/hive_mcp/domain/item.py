@@ -18,6 +18,7 @@ from hive_mcp.domain.text import check_text, has_bad_text
 
 MAX_TITLE = 200
 MAX_BODY = 200_000
+MAX_SOURCE = 2000
 MAX_PAGE = 100
 
 
@@ -76,6 +77,8 @@ class Item:
             raise ValidationError(f"title must be 1-{MAX_TITLE} characters")
         if not self.body.strip() or len(self.body) > MAX_BODY:
             raise ValidationError(f"body must be 1-{MAX_BODY} characters")
+        if len(self.source or "") > MAX_SOURCE:
+            raise ValidationError(f"source must be at most {MAX_SOURCE} characters")
         texts = (
             self.id,
             self.org_id,

@@ -115,3 +115,21 @@ def test_the_requirements_documents_exist_and_are_linked_from_the_readme() -> No
     readme = (ROOT / "README.md").read_text()
     for name in ("REQUIREMENTS.md", "REQUIREMENTS-ANNEX.md", "ARCHITECTURE.md", "USAGE.md"):
         assert (ROOT / "docs" / name).is_file() and f"docs/{name}" in readme
+
+
+ANNEX = (ROOT / "docs" / "REQUIREMENTS-ANNEX.md").read_text() if (ROOT / "docs").is_dir() else ""
+
+
+def test_the_annex_lists_every_tool_and_setting_and_command_the_code_has() -> None:
+    missing_tools = sorted(t for t in tool_names() if f"`{t}`" not in ANNEX and t not in ANNEX)
+    missing_settings = sorted(s for s in known_settings() if s not in ANNEX)
+    root = typer.main.get_command(cli)
+    missing_commands = sorted(
+        f"hive {name}"
+        for name in root.commands
+        if f"hive {name}" not in ANNEX  # type: ignore[attr-defined]
+    )
+    assert not (missing_tools or missing_settings or missing_commands), (
+        f"the annex lacks tools {missing_tools}, settings {missing_settings}, "
+        f"commands {missing_commands}"
+    )

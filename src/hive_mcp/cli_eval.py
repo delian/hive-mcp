@@ -138,7 +138,7 @@ def feedback_report(
 
 @app.command("eval-assist")
 def eval_assist(
-    what: str = typer.Argument(..., help="conflicts, merges or ranking."),
+    what: str = typer.Argument(..., help="conflicts or merges."),
     file: Path = typer.Argument(  # noqa: B008
         ..., help="evals/conflicts.json or evals/merges.json."
     ),

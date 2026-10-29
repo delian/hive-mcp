@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
+from hive_mcp.domain.scope import Scope, ScopeLevel
 from hive_mcp.ports.maintenance import AuthorUsage
 
 if TYPE_CHECKING:
@@ -40,8 +41,10 @@ class MemoryMaintenance:
                     continue
                 author = alias if v.item_author == person_id else v.item_author
                 by = alias if v.replaced_by == person_id else v.replaced_by
-                if (author, by) != (v.item_author, v.replaced_by):
-                    versions[i] = replace(v, item_author=author, replaced_by=by)
+                private = v.scope.level is ScopeLevel.PRIVATE and v.scope.owner == person_id
+                scope = Scope(ScopeLevel.PRIVATE, alias) if private else v.scope
+                if (author, by, scope) != (v.item_author, v.replaced_by, v.scope):
+                    versions[i] = replace(v, item_author=author, replaced_by=by, scope=scope)
                     changed += 1
         for key in [k for k in store._idem if k[0] == org_id and k[1] == person_id]:
             del store._idem[key]

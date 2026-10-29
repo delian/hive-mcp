@@ -62,8 +62,8 @@ uses them).
 - Every request must carry a Bot Framework JWT: signature checked against the published keys (RS256 only; refetched on an
   unknown key), issuer `https://api.botframework.com`, audience = your application id, expiry, and the `serviceurl` claim
   must equal the activity's `serviceUrl`. Anything else gets 401. Activities are accepted once (redelivery is ignored).
-- Replies carry your bot's access token, so they go only to `https` hosts under `botframework.com`, `botframework.us` or
-  `trafficmanager.net`, and the URL path parts are escaped.
+- Replies carry your bot's access token, so they go only to `https` hosts under `botframework.com` or `botframework.us`, or
+  exactly `smba.trafficmanager.net`, and the URL path parts are escaped.
 - Only your tenant's activities are answered; the sender must be in the user directory and not disabled. Bodies over 256 KB
   are refused.
 

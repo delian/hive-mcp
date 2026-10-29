@@ -56,14 +56,68 @@ def test_bug_stress_6_query_terms_are_capped() -> None:
     assert len(query_terms(" ".join(f"w{i}" for i in range(30_000)))) == MAX_QUERY_TERMS
 
 
-async def test_bug_stress_3_oversized_body_is_refused_before_sanitising() -> None:
+def test_bug_stress_3_scanning_a_megabyte_of_image_openers_is_bounded() -> None:
     import time
 
-    from hive_mcp.domain.errors import ValidationError
-    from hive_mcp.domain.item import MAX_BODY
     from hive_mcp.security.injection import scan
 
     started = time.perf_counter()
     scan("![a](http://x?" * 100_000)
     assert time.perf_counter() - started < 2
-    assert MAX_BODY == 200_000 and ValidationError
+
+
+async def test_bug_priv_1_erasing_a_person_removes_their_id_from_old_private_revisions(
+    stack,
+) -> None:
+    """A private note's earlier revisions kept the person's id as scope owner after erasure."""
+    from hive_mcp.domain.item import ItemPatch
+    from hive_mcp.services.models import RememberRequest
+    from tests.conformance.factory import ALICE
+
+    item = (await stack.knowledge.remember(ALICE, RememberRequest("Private", "first draft"))).item
+    await stack.backend.items.update(ALICE, item.id, ItemPatch(body="second draft"), 1)
+    assert len(await stack.backend.history.versions(ALICE, item.id)) == 2
+    changed = await stack.backend.maintenance.pseudonymise_person("org1", ALICE.id, "erased-1")
+    assert changed >= 1
+    # the old revision no longer names alice as its owner, so even alice cannot read it as hers
+    assert [v.revision for v in await stack.backend.history.versions(ALICE, item.id)] == [2]
+
+
+def test_bug_src_1_item_source_is_length_limited() -> None:
+    from datetime import UTC, datetime
+
+    import pytest
+
+    from hive_mcp.domain.errors import ValidationError
+    from hive_mcp.domain.item import MAX_SOURCE, Item
+    from hive_mcp.domain.scope import Scope, ScopeLevel
+
+    now = datetime.now(UTC)
+
+    def make(source: str) -> Item:
+        return Item(
+            id="i1", org_id="o", kind="howto", title="t", body="b",  # type: ignore[arg-type]
+            scope=Scope(ScopeLevel.PRIVATE, "a"), author_id="a", created_at=now, updated_at=now,
+            source=source,
+        )  # fmt: skip
+
+    assert make("x" * MAX_SOURCE).source
+    with pytest.raises(ValidationError, match="source must be at most"):
+        make("x" * (MAX_SOURCE + 1))
+
+
+async def test_bug_stress_3_an_oversized_body_is_refused_before_sanitising(stack, monkeypatch):
+    import pytest
+
+    from hive_mcp.domain.errors import ValidationError
+    from hive_mcp.domain.item import MAX_BODY
+    from hive_mcp.services import knowledge
+    from hive_mcp.services.models import RememberRequest
+    from tests.conformance.factory import ALICE
+
+    def boom(*a, **k):
+        raise AssertionError("sanitize ran on an oversized body")
+
+    monkeypatch.setattr(knowledge, "sanitize", boom)
+    with pytest.raises(ValidationError, match="body must be"):
+        await stack.knowledge.remember(ALICE, RememberRequest("t", "x" * (MAX_BODY + 1)))

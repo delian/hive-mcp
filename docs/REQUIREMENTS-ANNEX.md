@@ -1105,7 +1105,7 @@ Score contradiction checks or merge proposals (a model: HIVE_LLM_*).
 
 | Argument / option | Type / default | Meaning |
 |---|---|---|
-| `ARG WHAT` | str,required | conflicts, merges or ranking. |
+| `ARG WHAT` | str,required | conflicts or merges. |
 | `ARG FILE` | path,required | evals/conflicts.json or evals/merges.json. |
 
 ### `hive eval-build`
@@ -1354,7 +1354,7 @@ Print the installed version.
 
 ### D.1 Notes on the commands
 
-- `hive eval-assist`: the help text still lists `ranking` as a mode; the ranking replay was removed when votes were dropped from ranking (REQ-SRCH-15), so only `conflicts` and `merges` are supported.
+- `hive eval-assist` supports only `conflicts` and `merges`; the ranking replay was removed when votes were dropped from ranking (REQ-SRCH-15).
 - `hive token create` and `hive user add` default `--role` to `member`; `hive ingest --role` defaults to `member`. Editing a user with `hive user add` clears the pinned provider account.
 - `hive forget` without `--yes` only reports; `hive retention` without `--yes` only counts; `hive purge` is an unconditional operator override.
 - `hive models fetch` with no name fetches `bge-small-en-v1.5-int8`; names: `bge-small-en-v1.5-int8`, `multilingual-e5-small-int8`, `ms-marco-minilm-l6-int8`.
@@ -1415,7 +1415,9 @@ Print the installed version.
 
 | Limit | Value |
 |---|---|
-| title / body | 200 / 200,000 characters |
+| title / body / source | 200 / 200,000 / 2,000 characters (a body over the limit is refused before the content screen runs) |
+| search query | at most 64 terms are used (stopwords removed first) |
+| injection scan | the first 250,000 characters of a text |
 | tags | 64 characters each, 32 per item |
 | idempotency key | 1-200 characters |
 | `kb_get` body | 20,000 characters |
@@ -1458,6 +1460,7 @@ Print the installed version.
 | job lease / poll / backoff | 120 s / 2 s / `min(30 x 2^(n-1), 3600)` s; max attempts 5; purge/apply job delay 60 s |
 | housekeeping | purge/retention every 600 s; usage flush 300 s; digest check 600 s; connector check 60 s; backup every `HIVE_BACKUP_EVERY_MINUTES` |
 | lease | heartbeat 10 s; watch 1 s; stale after 45 s; poll 2 s; wait up to 90 s; retired list kept 24 h |
+| lease file writes | written to `.hive-lease.<pid>.<object id>` then renamed (unique per instance); a waiting instance re-checks the retired list on every poll and stops if its revision was handed over; the hand-off callback runs once |
 | digest claim | 14 d |
 | ID token leeway | 60 s; JWKS refetch >= 60 s |
 | Google service-account token | assertion `exp` = iat + 3,600 s; cached until 60 s before expiry |
@@ -1540,7 +1543,7 @@ Already-masked text is never matched again (idempotent). Findings are counted pe
 | `role-markers` | `<|im_start|>`, `<|im_end|>`, `<|system|>`, `<|assistant|>`, `[INST]`, `[/INST]`, `<<SYS>>` |
 | `fake-system-turn` | a line starting (spaces/tabs only) with `system:` or `assistant:` (optionally `prompt`/`message`) followed by `you are/must/will/should` |
 | `exfiltration` | send/post/upload/forward/exfiltrate/leak/curl ... secrets/tokens/credentials/api keys/passwords/private keys/.env ... `to`/`at` ... an `http(s)://` URL or an email address (bounded gaps) |
-| `markdown-image-exfil` | an image whose URL is `http://host?...` or `https://host?...` with `{`, `%7B`, `data=` or `q=` in the query (bounded lengths) |
+| `markdown-image-exfil` | an image whose URL is `http://host?...` or `https://host?...` with `{`, `%7B`, `data=` or `q=` in the query (alt text up to 300, host/path up to 500, query up to 500 characters) |
 | `conceal-from-user` | do not/don't/never ... tell/inform/mention/reveal/show ... (the) user |
 
 Hidden characters removed (REQ-ING-12): `U+E0000-U+E007F`, `U+200B-U+200F`, `U+202A-U+202E`, `U+2060-U+206F`, `U+FEFF`, `U+00AD`, `U+034F`, `U+061C`, `U+180E`.

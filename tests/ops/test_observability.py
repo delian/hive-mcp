@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 import httpx
 import pytest
@@ -150,7 +151,13 @@ def test_access_log_line_has_the_request_facts_and_no_secrets(live: Live, caplog
         json={},
         headers={"Authorization": "Bearer hive_supersecrettoken", "X-Request-ID": "req-123456"},
     )
-    (record,) = [r for r in caplog.records if r.name == "hive.access" and r.path == "/mcp"]
+    found: list[logging.LogRecord] = []
+    for _ in range(100):  # the line is written just after the response is sent
+        found = [r for r in caplog.records if r.name == "hive.access" and r.path == "/mcp"]
+        if found:
+            break
+        time.sleep(0.05)
+    (record,) = found
     assert (record.method, record.status, record.group) == ("POST", 401, "mcp")
     assert record.ms >= 0
     blob = json.dumps(record.__dict__, default=str)

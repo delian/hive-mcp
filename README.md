@@ -58,7 +58,7 @@ restores from it ([deploy/azure/single.bicep](deploy/azure/single.bicep) is a re
 | **[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)** | the requirements accumulated over development (what was asked, decided, assumed), with acceptance criteria and traceability; written so the system could be regenerated from it |
 | **[docs/REQUIREMENTS-ANNEX.md](docs/REQUIREMENTS-ANNEX.md)** | exact catalogue: tools, routes, CLI, settings, schemas, constants, formats |
 | Agent setup | [AGENTS](docs/AGENTS.md), [MCP](docs/MCP.md), [OAUTH](docs/OAUTH.md) |
-| Deploy and operate | [DEPLOY](docs/DEPLOY.md), [SINGLE-CONTAINER](docs/SINGLE-CONTAINER.md), [BACKUP](docs/BACKUP.md), [MIGRATE](docs/MIGRATE.md), [HARDENING](docs/HARDENING.md), [OBSERVABILITY](docs/OBSERVABILITY.md), [ADMIN](docs/ADMIN.md), [GROUPS](docs/GROUPS.md) |
+| Deploy and operate | [DEPLOY](docs/DEPLOY.md), [SINGLE-CONTAINER](docs/SINGLE-CONTAINER.md), [BACKUP](docs/BACKUP.md), [SIZING](docs/SIZING.md), [MIGRATE](docs/MIGRATE.md), [HARDENING](docs/HARDENING.md), [OBSERVABILITY](docs/OBSERVABILITY.md), [ADMIN](docs/ADMIN.md), [GROUPS](docs/GROUPS.md) |
 | Chat and imports | [SLACK](docs/SLACK.md), [TEAMS](docs/TEAMS.md), [CONNECTORS](docs/CONNECTORS.md), [INGEST](docs/INGEST.md) |
 | Knowledge work | [PROMOTION](docs/PROMOTION.md), [CURATION](docs/CURATION.md), [DIGEST](docs/DIGEST.md), [RETENTION](docs/RETENTION.md), [GRAPH](docs/GRAPH.md), [ENTITIES](docs/ENTITIES.md), [HISTORY](docs/HISTORY.md), [LLM](docs/LLM.md) |
 | Search quality | [EVALUATION](docs/EVALUATION.md), [EMBEDDINGS](docs/EMBEDDINGS.md), [BENCHMARK](docs/BENCHMARK.md) |
@@ -86,7 +86,8 @@ uv run python scripts/check_file_size.py src clients/hooks/src   # target 8 KB, 
 uv run pytest                                    # all tests (Postgres variants run when HIVE_TEST_PG_DSN is set)
 uv run pytest -m stress                          # only the stress tests; HIVE_STRESS_SCALE=5 makes them bigger
 uv run pytest tests/regression                   # one test per bug found in review (BUG-<area>-<n>)
-scripts/mutation.sh                              # mutation testing of the security-critical modules (minutes)
+scripts/mutation.sh                              # mutation testing of the security-critical modules (about 25 minutes)
+scripts/mutation_changed.sh origin/main          # only the modules your change touched
 ```
 
 A Postgres server with pgvector for the tests: `scripts/start_test_postgres.sh`, then

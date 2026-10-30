@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from hive_mcp.adapters.lance.ann import INDEX_MIN_ROWS, NPROBE_FRACTION, AnnIndex
@@ -31,6 +32,10 @@ INDEX_INFO_SECONDS = 30.0  # how long a table's index size is remembered
 MIN_FETCH = 30
 MAX_FETCH = 8192  # chunks examined to find `limit` distinct items
 OPTIMIZE_EVERY = 100  # writes between compactions: every write adds a tiny file and a version
+# Old versions are what compaction leaves behind; the library default keeps them for 7 days,
+# which cost ~170 KB per single-item write (3.5 GB for 20k notes). Readers only need the version
+# they opened, for the length of one search.
+KEEP_VERSIONS = timedelta(seconds=30)
 
 
 def quote(text: str) -> str:
@@ -113,7 +118,7 @@ class LanceVectors:
         """Merge the small files writes leave behind, or every search has to open all of them."""
         self._writes += 1
         if self._writes % OPTIMIZE_EVERY == 0:
-            table.optimize()
+            table.optimize(cleanup_older_than=KEEP_VERSIONS)
             self._ann.maybe_build(table)
 
     def _replace(

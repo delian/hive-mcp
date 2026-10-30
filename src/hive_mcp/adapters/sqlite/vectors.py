@@ -73,25 +73,36 @@ class SqliteVectors:
 
         def tx(conn: sqlite3.Connection) -> list[Hit]:
             dim = _model_dim(conn, model_id)
-            if dim is None:
+            if dim is None or limit <= 0:
                 return []
             if q.shape[0] != dim:
                 raise ValidationError(f"model {model_id} has dimension {dim}, got {q.shape[0]}")
-            cur = conn.execute(
+            cur = conn.cursor()
+            cur.row_factory = (
+                None  # plain tuples: a scan reads every row of the access-filtered set
+            )
+            cur.execute(
                 f"SELECT item_id, ord, vec FROM vec_chunks WHERE model_id = ? AND {where}",  # noqa: S608
                 [model_id, *params],
             )
             best: dict[str, tuple[float, int]] = {}
+            # A chunk scoring below the `limit`-th best item so far can never reach the result
+            # (the floor only rises), so only chunks at or above it need Python-level work. Equal
+            # scores stay in: they are ordered by item id below.
+            floor = -np.inf
             while rows := cur.fetchmany(BATCH):
-                mat = np.frombuffer(b"".join(r["vec"] for r in rows), dtype="<f4").reshape(
+                mat = np.frombuffer(b"".join([r[2] for r in rows]), dtype="<f4").reshape(
                     len(rows), dim
                 )
-                for row, sim in zip(rows, (mat @ q).tolist(), strict=True):
-                    if row["item_id"] not in best or sim > best[row["item_id"]][0]:
-                        best[row["item_id"]] = (sim, row["ord"])
-            hits = [Hit(item, score, ordinal) for item, (score, ordinal) in best.items()]
-            hits.sort(key=lambda h: (-h.score, h.item_id))
-            return hits[: max(limit, 0)]
+                sims = mat @ q
+                for i in np.flatnonzero(sims >= floor).tolist():
+                    item_id, ordinal, sim = rows[i][0], rows[i][1], float(sims[i])
+                    if item_id not in best or sim > best[item_id][0]:
+                        best[item_id] = (sim, ordinal)
+                if len(best) >= limit:
+                    floor = sorted((v[0] for v in best.values()), reverse=True)[limit - 1]
+            ranked = sorted(best.items(), key=lambda kv: (-kv[1][0], kv[0]))[:limit]
+            return [Hit(item, score, ordinal) for item, (score, ordinal) in ranked]
 
         return await self._db.run(tx)
 

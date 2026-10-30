@@ -15,7 +15,7 @@ Restore: stop the server, set the same `HIVE_*` settings as the target deploymen
 archives that fail verification, contain unexpected or unsafe entries, or come from the other profile
 (embedded vs external). It never overwrites an existing database without `--force`; for Postgres, `--force` is
 always required because the dump replaces the database's tables. The embedding model files are not part of the
-backup (`hive models fetch`); search indexes live in the database and come back with it.
+backup (`hive models fetch`); search indexes live in the database and come back with it. The exception is the optional LanceDB vector store (`HIVE_VECTOR_STORE=lance`): its `lance/` directory is derived data and is not archived, so run `hive reindex` after a restore.
 
 Routine: run `hive backup` from a scheduled job (Azure Container Apps job, cron, or Kubernetes CronJob) writing to
 durable storage, keep several generations, and **practise a restore** into a scratch environment now and then.

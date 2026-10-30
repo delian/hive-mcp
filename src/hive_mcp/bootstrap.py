@@ -28,12 +28,15 @@ from hive_mcp.security.oauth.cookies import load_secret_key
 from hive_mcp.services.activity import ActivityReport
 from hive_mcp.services.admin import AdminService
 from hive_mcp.services.assist import CurationAssist
+from hive_mcp.services.bulk_ingest import INGEST_JOB, BulkIngest
 from hive_mcp.services.consult import ConsultService
 from hive_mcp.services.curation import CurationService
 from hive_mcp.services.digest import DigestSender, DigestService
 from hive_mcp.services.duplicates import DuplicateFinder
 from hive_mcp.services.entities import EntityService
 from hive_mcp.services.feedback import SearchFeedback
+from hive_mcp.services.foreign import ForeignService
+from hive_mcp.services.foreign_records import HiddenNotes
 from hive_mcp.services.graph import GraphService
 from hive_mcp.services.indexing import INDEX_JOB, IndexService
 from hive_mcp.services.ingest import IngestService
@@ -84,6 +87,8 @@ class Services:
     signals: RankSignals | None = None
     integrations: IntegrationStore | None = None
     session_sources: SessionSources | None = None
+    bulk_ingest: BulkIngest | None = None
+    foreign: ForeignService | None = None
 
     async def close(self) -> None:
         await close_backend(self.backend)
@@ -162,6 +167,7 @@ async def build_services(settings: Settings) -> Services:
         reranker=make_reranker(settings),
         rerank_depth=settings.rerank_depth,
         signals=signals,
+        hidden=HiddenNotes(backend.kv),
     )
     sessions = SessionService(knowledge, backend.blobs)
     integrations = IntegrationStore(
@@ -206,6 +212,7 @@ async def build_services(settings: Settings) -> Services:
         jobs=backend.jobs,
         audit=backend.audit,
         clock=clock,
+        kv=backend.kv,
     )
     handlers[PURGE_JOB] = purge.handle_cleanup
     runner = JobRunner(
@@ -228,6 +235,8 @@ async def build_services(settings: Settings) -> Services:
         check_available()
         ocr = OcrConfig(settings.ocr_languages, settings.ocr_max_pages)
     ingest = IngestService(knowledge, graph, entities=entities, url_policy=url_policy, ocr=ocr)
+    bulk = BulkIngest(ingest, backend.jobs, backend.kv, clock, allowed_root=settings.ingest_root)
+    handlers[INGEST_JOB] = bulk.handle_step  # the runner reads this mapping when it claims
     curation = CurationService(
         items=backend.items,
         vectors=backend.vectors,
@@ -284,4 +293,6 @@ async def build_services(settings: Settings) -> Services:
         signals,
         integrations,
         SessionSources(backend.items, backend.kv, graph),
+        bulk,
+        ForeignService(knowledge, graph, backend.kv, backend.audit, clock),
     )

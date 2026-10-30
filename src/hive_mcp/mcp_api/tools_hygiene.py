@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field
 
 from hive_mcp.mcp_api.errors import guarded
-from hive_mcp.mcp_api.tools import READ, WRITE, current_principal, scope_label
+from hive_mcp.mcp_api.outputs import scope_label
+from hive_mcp.mcp_api.tools import READ, WRITE, current_principal
 from hive_mcp.services.staleness import age_days
 
 if TYPE_CHECKING:

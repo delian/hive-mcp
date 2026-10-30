@@ -41,3 +41,24 @@ async def test_incident_covers_both_directions_filters_relations_and_orgs(backen
     assert len(await backend.edges.incident("org1", ["a"], limit=1)) == 1
     assert await backend.edges.incident("org1", []) == []
     assert [e.dst for e in await backend.edges.incident("org2", ["a"])] == ["z"]
+
+
+async def test_list_page_is_ordered_keyset_paged_and_per_org(backend):
+    keys = [("b", "a"), ("a", "c"), ("a", "b"), ("c", "a")]
+    for src, dst in keys:
+        await backend.edges.add(edge(backend, src, dst))
+    await backend.edges.add(edge(backend, "a", "b", "part_of"))
+    await backend.edges.add(edge(backend, "z", "y", org="org2"))
+    seen, after = [], None
+    while page := await backend.edges.list_page("org1", after=after, limit=2):
+        assert len(page) <= 2
+        seen += [(e.src, e.dst, e.relation) for e in page]
+        after = page[-1].key
+    assert seen == [
+        ("a", "b", "part_of"),
+        ("a", "b", "related"),
+        ("a", "c", "related"),
+        ("b", "a", "related"),
+        ("c", "a", "related"),
+    ]
+    assert await backend.edges.list_page("org3") == []

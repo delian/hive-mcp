@@ -78,6 +78,9 @@ class Settings(ExtrasSettings):
     ingest_urls_enabled: bool = False
     ingest_url_hosts: list[str] = Field(default_factory=list)  # empty = any public host
     ingest_url_allow_private: bool = False  # let the server reach private/internal addresses
+    # Background folder ingestion (`hive ingest --background`) accepts only folders below this one;
+    # unset = any folder the operator names (docs/INGEST.md).
+    ingest_root: Path | None = None
     # Teams, projects, approvers from Google Workspace groups (docs/GROUPS.md); off without the map.
     group_map_file: Path | None = None
     group_sync_key_file: Path | None = None  # service account key (domain-wide delegation)

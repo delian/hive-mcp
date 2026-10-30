@@ -89,6 +89,21 @@ class SqliteKv:
             write=True,
         )
 
+    async def scan(
+        self, namespace: str, prefix: str = "", limit: int = 100
+    ) -> list[tuple[str, JsonObject]]:
+        now = ts(self._clock.now())
+
+        def tx(conn: sqlite3.Connection) -> list[tuple[str, JsonObject]]:
+            rows = conn.execute(
+                "SELECT key, value FROM kv WHERE namespace = ? AND substr(key, 1, ?) = ? "
+                "AND (expires_at IS NULL OR expires_at > ?) ORDER BY key LIMIT ?",
+                (namespace, len(prefix), prefix, now, limit),
+            ).fetchall()
+            return [(r["key"], json.loads(r["value"])) for r in rows]
+
+        return await self._db.run(tx)
+
     async def purge_expired(self) -> int:
         now = ts(self._clock.now())
 

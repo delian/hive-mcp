@@ -15,7 +15,7 @@ Transport: Streamable HTTP at `POST /mcp` (path `HIVE_MCP_PATH`), `stateless_htt
 the SDK wrapped as `{"result": [...]}`. Every tool is wrapped by `guarded` (error mapping, metrics, meter). Annotation sets: READ = `readOnlyHint=true, openWorldHint=false`; WRITE = `readOnlyHint=false, destructiveHint=false, idempotentHint=false, openWorldHint=false`;
 `kb_purge` = WRITE with `destructiveHint=true, idempotentHint=true`.
 
-### A.1 Tools (44)
+### A.1 Tools (50)
 
 The table of arguments is exact (names, types, defaults). "Who may call" restates the access rules of REQUIREMENTS section 3.2. Descriptions are the text agents see.
 
@@ -373,6 +373,90 @@ List the tags in use (with item counts) among items you can see, most used first
 | `limit` | integer | 100 |
 
 *Returns:* `result`: list of TagOut
+
+
+#### `kb_fork`  (WRITE)
+
+Adopt another group's note: copy it into your own scope (private, or a project you belong to) and link it `derived_from` the original. Use this when you want to build on a note marked external instead of relying on it as it is. The copy is yours to edit; kb_diff_upstream shows how the original moves on.
+
+*Who may call:* any member who can read the note; the copy's scope follows the sharing rules of `kb_remember`.  *Idempotency:* key `fork:<id>@<revision>:<scope key>`, so the same fork twice is one note. The copy's `source` is `fork:<id>@<revision>`.
+
+| Argument | Type | Default |
+|---|---|---|
+| `id` | string | **required** |
+| `share_with_project` | string or null | None |
+
+*Returns:* `RememberOut` (as `kb_remember`).
+
+
+#### `kb_diff_upstream`  (read-only)
+
+For a note made with kb_fork: what differs between your copy and the original as it is now.
+
+*Who may call:* any caller who can read the fork.  *Limits:* the diff shows at most 200 lines (`truncated`); a fork whose original is gone or hidden returns `upstream_revision: null`.
+
+| Argument | Type | Default |
+|---|---|---|
+| `id` | string | **required** |
+
+*Returns:* `DiffOut`: `upstream_id`, `forked_revision`, `upstream_revision` (integer or null), `identical`: boolean, `diff`: string (unified), `truncated`: boolean
+
+
+#### `kb_ignore`  (WRITE)
+
+Stop another group's note from showing up in YOUR search results (hide=false brings it back). Only for notes marked external; nobody else's results change. To retire a note of your own use kb_update with status=archived.
+
+*Who may call:* any caller who can read the note and sees it as external (tier referenced); un-hiding needs no check.  *Limits:* at most 1,000 hidden notes per person.
+
+| Argument | Type | Default |
+|---|---|---|
+| `id` | string | **required** |
+| `hide` | boolean | True |
+
+*Returns:* `id`: string, `hidden`: boolean
+
+
+#### `kb_suggest_edit`  (WRITE)
+
+Propose a better title and/or body for a note you cannot edit; the people who can edit it review it (kb_list_suggestions). Give the full replacement text, and `note` saying why. Secrets are masked. Suggesting again replaces your earlier open suggestion for the same note.
+
+*Who may call:* any caller who can read the note but may not edit it (an editor of the note is told to use `kb_update`).  *Limits:* title or body required and different from the current text; `note` at most 1,000 characters; at most 20 open suggestions per person; an open suggestion lives 180 days.
+
+| Argument | Type | Default |
+|---|---|---|
+| `id` | string | **required** |
+| `new_title` | string or null | None |
+| `new_body` | string or null | None |
+| `note` | string | '' |
+
+*Returns:* `SuggestionOut`: `id` (first 16 hex of SHA-256 of `<item id>:<proposer>`), `item_id`, `item_title`, `item_revision`, `proposed_by`, `new_title`, `new_body`, `note`, `status` (open, accepted, rejected), `created_at`
+
+
+#### `kb_list_suggestions`  (read-only)
+
+Edit suggestions waiting for you, on notes you may edit. Newest first.
+
+*Who may call:* any caller; only suggestions for notes the caller may edit are returned.  *Limits:* 50 returned from the 500 newest keys.
+
+| Argument | Type | Default |
+|---|---|---|
+| `include_decided` | boolean | False |
+
+*Returns:* list of `SuggestionOut`
+
+
+#### `kb_decide_suggestion`  (WRITE)
+
+Accept (applies the proposed text to the note) or reject an edit suggestion. Accepting only works while the note is still at the revision the proposer saw.
+
+*Who may call:* anyone who may edit the note (its author, or an editor or admin of a scope they belong to); others get "no such suggestion".  *Limits:* a decided suggestion is kept 30 days; accepting a stale one is refused.
+
+| Argument | Type | Default |
+|---|---|---|
+| `id` | string | **required** |
+| `decision` | accept or reject | **required** |
+
+*Returns:* `SuggestionOut`
 
 
 #### `kb_purge`  (WRITE, destructive+idempotent)
@@ -912,6 +996,8 @@ Transport security allow-lists: hosts `localhost:*`, `127.0.0.1:*`, `[::1]:*`, t
 | `hive_admin_next` | note links | same attributes, Max-Age 600 | a path matching `/admin/n/[0-9a-f]{32}` only |
 | `X-Request-ID` | every response | | kept if matching `^[A-Za-z0-9._-]{8,64}$`, else random 32 hex |
 | `Retry-After` | 429 responses | | seconds (integer, at least 1) |
+| `X-RateLimit-Limit` / `X-RateLimit-Remaining` | every response of a rate-limited route served by the in-process limiter | | the bucket's burst size; whole requests left now (`0` on a 429) |
+| `X-RateLimit-Reset` | 429 responses | | seconds until a request would be allowed (equals `Retry-After`) |
 
 Standard security headers on all HTML pages: `Cache-Control: no-store`, `Pragma: no-cache`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` (admin pages: `same-origin`), CSP as in REQ-ADM-01.
 OAuth/consent pages use CSP `default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'`.
@@ -986,6 +1072,7 @@ Cross-field validation (all at startup, failing the process with a clear message
 | `HIVE_INGEST_URLS_ENABLED` | bool | False |  | Allow `kb_ingest_url` and `urls` connectors. |
 | `HIVE_INGEST_URL_HOSTS` | list[str] | [] |  | JSON list host allow-list (subdomains included). |
 | `HIVE_INGEST_URL_ALLOW_PRIVATE` | bool | False |  | Allow private addresses. |
+| `HIVE_INGEST_ROOT` | Path | None | None |  | Background folder ingestion accepts only folders below it (unset = any). |
 | `HIVE_GROUP_MAP_FILE` | Path | None | None |  | Group-to-membership map (enables sync). |
 | `HIVE_GROUP_SYNC_KEY_FILE` | Path | None | None |  | Service account key JSON. |
 | `HIVE_GROUP_SYNC_ADMIN` | str | None | None |  | Workspace admin to impersonate. |
@@ -1090,6 +1177,19 @@ Show what is new for a person, or send this week's digest emails right away.
 | `--days` | int, default=7 | How many days back. |
 | `--send` | flag | Email everyone's digest now (needs SMTP). |
 
+### `hive export`
+Write an organisation's items and links as JSONL or Parquet for analytics (REQ-OPS-17). Private notes are left out unless `--include-private`, which prints a warning: protect the output like the database.
+
+| Argument / option | Type / default | Meaning |
+|---|---|---|
+| `--org` | str,required | Organisation id. |
+| `--out` | path,required | Directory to create (absent or empty). |
+| `--format` | str, default=jsonl | `jsonl`, or `parquet` (needs `hive-mcp[parquet]`). |
+| `--include-private/--no-include-private` | flag, default off | Also export PRIVATE notes. |
+| `--include-archived` | flag, default off | Also export archived items. |
+| `--since` | str | ISO date/time: items changed (links created) on or after it. |
+| `--pseudonymise` | flag | Replace person ids with salted hashes, stable within this export. |
+
 ### `hive eval`
 Score keyword, vector and hybrid retrieval with the configured embedder (HIVE_EMBEDDER).
 
@@ -1184,6 +1284,22 @@ Ingest files (recursively for directories) as the given user. Safe to re-run.
 | `--role` | str, default='member' | Role of that user. |
 | `--project` | str | Share into this project (user must be in it). |
 | `--tag` | str,repeatable | Tag for every file (repeatable). |
+| `--background` | flag | Queue ONE server-side folder as a resumable job and return. |
+
+### `hive ingest-status`
+Progress of background folder ingests: state, files done/failed/skipped, bytes, errors.
+
+| Argument / option | Type / default | Meaning |
+|---|---|---|
+| `ARG JOB_ID` | str | One bulk ingest (default: list them). |
+| `--org` | str | Organisation id (needed to list). |
+
+### `hive ingest-cancel`
+Stop a background folder ingest after the file in progress (what is stored stays).
+
+| Argument / option | Type / default | Meaning |
+|---|---|---|
+| `ARG JOB_ID` | str,required | Bulk ingest id. |
 
 ### `hive ingest-git`
 Read a repository's documents and code as knowledge (shallow clone; nothing is executed).
@@ -1361,6 +1477,16 @@ Print the installed version.
 - `hive hooks install --scope` accepts `user`, `project`, `local`; `hive-hooks init --editor` accepts `claude`, `vscode`, `cursor`, a comma list, or `all`.
 - `hive serve` honours SIGTERM/SIGINT as in REQ-OPS-01. `hive demo` ends in `serve`.
 
+### D.2 Export formats
+
+Directory `DIR` holds `items.<ext>`, `edges.<ext>` (`ext` = `jsonl` or `parquet`) and `manifest.json`.
+
+- `items` columns: `id, org, kind, title, body, tags (list of strings), status, scope_level (private|project|team|org), scope_owner, visibility, author, created_at, updated_at (UTC; ISO text in JSONL, timestamp[us, UTC] in Parquet), revision, supersedes, source`. Ordered by id.
+- `edges` columns: `org, src, dst, relation, author, created_at`. Ordered by (src, dst, relation). Only links whose both ends are in the export's rules (privacy and archive flags; `--since` filters by the link's creation time).
+- JSONL: one UTF-8 object per line. Parquet: zstd, one row group per page.
+- `manifest.json`: `{"schema_version": 1, "org", "created_at", "format", "flags": {include_private, include_archived, since, pseudonymise}, "counts": {items, edges}, "files": {"<name>": {"rows", "bytes", "sha256"}}}`.
+- Files mode 0600, directory 0700, atomic rename from a staging directory. Audit action `export.run`.
+
 ## E. Algorithms, constants and formats
 
 ### E.1 Identifiers and secrets
@@ -1428,6 +1554,7 @@ Print the installed version.
 | graph | depth 1-3, nodes 1-100 (default 30) |
 | history | keep 50 previous versions; `kb_history` limit 1-51; diff output 20,000 characters |
 | session log | 5 MiB; blob store limit 512 MiB per blob |
+| bulk ingest | 25 files per step; 20 errors kept per run; text files up to 2 GiB in 4 MiB pieces (other formats 50 MiB); 50 runs listed per org |
 | ingest | 10 MiB via tool, 50 MiB via CLI; section 40,000 characters; 200 sections; PDF 2,000 pages; Office 5,000 members / 16 MiB each / 64 MiB total / 10,000,000 characters; 20,000 xlsx rows |
 | URL fetch | 20 MiB, 5 redirects, 15 s per operation, 60 s total |
 | git ingest | 1 MiB per file, clone timeout 300 s |
@@ -1500,6 +1627,7 @@ Audit pagination: by `seq` (`after_seq` ascending; `before_seq` + `newest_first`
 | `apply_promotion` | `{promotion_id}` | `apply:<id>` | complete an approved move |
 | `notify` | `{channel, event, promotion_id}` | `notify:<event>:<promotion>:<channel>:<status>` | deliver one channel |
 | `purge_cleanup` | `{item_id, source}` | `purge:<id>` | finish a purge |
+| `ingest_folder` | `{run_id, step}` | `bulk:<run>:<step>` | ingest up to 25 files after the saved cursor, save progress, queue the next step |
 
 ### E.9 Text rendering of notifications
 
@@ -1805,9 +1933,12 @@ Scope level integers: private 0, project 1, team 2, org 3. Statuses and kinds ar
 | `slack:seen` / `slack:event` | signature / event id | `{seen}` | 600 s / 3600 s |
 | `slack:email`, `teams:email` | `<workspace>:<user>` | `{email}` | 3600 s (miss 60 s) |
 | `notify:slack:user` | `<workspace>:<email>` | `{id}` | 24 h |
+| `foreign:ignored` | `<org>:<user>:<item id>` | `{at}` | none |
+| `foreign:suggest` | `<org>:<suggestion id>` | `{id, item_id, item_title, item_revision, proposer, title, body, note, status, created_at, decided_by?, decided_at?}` | 180 d open, 30 d decided |
 | `teams:activity` | activity id | `{seen}` | 3600 s |
 | `teams:ref` | user id | `{serviceUrl, conversation}` | none |
 | `teams:save` | token | `{user, payload}` | 600 s |
+| `bulk_ingest` | `run:<id>` / `index:<org>` / `cancel:<id>` / `step:<id>:<n>` | `{run_id, org, user, project, tags, root, started, step, progress}` / `{ids[<=50]}` / `{at}` / progress `{state, cursor, done, failed, skipped, bytes, created, errors[<=20]}` (step records are written with `put_if_absent`) | 90 d |
 
 ### G.5 Audit actions (`audit(seq, org_id, actor_id, action, target_id, at, details)`)
 
@@ -1821,6 +1952,9 @@ Scope level integers: private 0, project 1, team 2, org 3. Statuses and kinds ar
 | `item.confirm` | item id | none |
 | `promotion.request`, `promotion.approved`, `promotion.rejected`, `promotion.withdrawn`, `promotion.stale` | item id | promotion, scope |
 | `edge.add`, `edge.remove` | source id | dst, relation |
+| `item.fork` | the copy's id | upstream, scope |
+| `item.ignore`, `item.unignore` | item id | none |
+| `suggestion.create`, `suggestion.accept`, `suggestion.reject` | item id | suggestion |
 | `user.forget` | none | user (or alias), items |
 | `integration.update` | integration name | changed, enabled |
 | `connector.sync` (actor `connector:<name>`) | none | connector, result |
@@ -1831,6 +1965,7 @@ Scope level integers: private 0, project 1, team 2, org 3. Statuses and kinds ar
 | `search.open` | item id | none |
 | `search.rating` | item id | useful (1/0), q |
 | `usage.tools` | none | calls, tools (`tool=count,...`) |
+| `export.run` (actor `cli:<user>`) | none | format, include_private, include_archived, since, pseudonymise, items, edges |
 
 Security log events (logger `hive.security`, not audit): `oauth.login`, `oauth.login_denied`, `oauth.code_issued`, `oauth.code_replay`, `oauth.refresh_reuse`, `oauth.consent`, `oauth.revoked`, `admin.login_denied`, `groups.sync`.
 

@@ -8,30 +8,24 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.types import ToolAnnotations
 
 from hive_mcp.domain.errors import PermissionDenied, ValidationError
-from hive_mcp.domain.item import Item, ItemPatch, Kind, Status
+from hive_mcp.domain.item import ItemPatch, Kind, Status
 from hive_mcp.domain.scope import Scope, ScopeLevel, Visibility
 from hive_mcp.domain.tags import normalize_tags
 from hive_mcp.mcp_api.errors import guarded
+from hive_mcp.mcp_api.outputs import _change_out, _item_out, _match_out, _remember_out
 from hive_mcp.mcp_api.schemas import (
     ChangeOut,
     ConsultOut,
     ItemOut,
-    LinkOut,
-    LogOut,
-    MatchOut,
     RememberOut,
 )
 from hive_mcp.security.principals import principal_from_claims
 from hive_mcp.services.models import (
     ConsultRequest,
     ForeignPolicy,
-    Match,
     RememberRequest,
-    RememberResult,
-    provenance,
 )
 from hive_mcp.services.session_sources import LABEL as SESSION_LABEL
-from hive_mcp.services.sessions import SessionReport
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -39,10 +33,8 @@ if TYPE_CHECKING:
     from mcp.server import MCPServer
 
     from hive_mcp.bootstrap import Services
-    from hive_mcp.domain.access import Tier
     from hive_mcp.domain.principal import Principal
 
-BODY_LIMIT = 20_000
 READ = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 WRITE = ToolAnnotations(
     readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
@@ -55,10 +47,6 @@ def current_principal() -> Principal:
     if token is None:
         raise PermissionDenied("authentication required")
     return principal_from_claims(token.subject, token.claims)
-
-
-def scope_label(scope: Scope) -> str:
-    return f"{scope.level.name.lower()}:{scope.owner}"
 
 
 def check_session_label(session: str | None) -> None:
@@ -80,86 +68,6 @@ def _kinds(values: list[str] | None) -> frozenset[Kind]:
 def _kind(value: str) -> Kind:
     (kind,) = _kinds([value])
     return kind
-
-
-def _match_out(m: Match) -> MatchOut:
-    return MatchOut(
-        id=m.item_id,
-        title=m.title,
-        snippet=m.snippet,
-        kind=str(m.kind),
-        tags=sorted(m.tags),
-        status=str(m.status),
-        score=round(m.score, 5),
-        origin=m.provenance,
-        external=m.tier.value == "referenced",
-        scope=scope_label(m.scope),
-        author=m.author_id,
-        updated_at=m.updated_at.isoformat(),
-        revision=m.revision,
-        links=[
-            LinkOut(
-                relation=lk.relation,
-                direction=lk.direction,
-                id=lk.item_id,
-                title=lk.title,
-                external=lk.external,
-            )
-            for lk in m.links
-        ],
-    )
-
-
-def _item_out(item: Item, tier: Tier) -> ItemOut:
-    truncated = len(item.body) > BODY_LIMIT
-    return ItemOut(
-        id=item.id,
-        title=item.title,
-        body=item.body[:BODY_LIMIT],
-        truncated=truncated,
-        kind=str(item.kind),
-        tags=sorted(item.tags),
-        status=str(item.status),
-        scope=scope_label(item.scope),
-        visibility=str(item.visibility),
-        author=item.author_id,
-        created_at=item.created_at.isoformat(),
-        updated_at=item.updated_at.isoformat(),
-        revision=item.revision,
-        origin=provenance(item.scope, tier, item.author_id),
-        external=tier.value == "referenced",
-        has_log=bool(item.source and item.source.startswith("blob:")),
-    )
-
-
-def _change_out(item: Item) -> ChangeOut:
-    return ChangeOut(
-        id=item.id,
-        revision=item.revision,
-        scope=scope_label(item.scope),
-        visibility=str(item.visibility),
-        tags=sorted(item.tags),
-        status=str(item.status),
-    )
-
-
-def _remember_out(r: RememberResult) -> RememberOut:
-    notes = []
-    if not r.created:
-        notes.append("An identical earlier request was replayed; nothing new was stored.")
-    if not r.indexed:
-        notes.append("Stored. Search indexing is queued and will complete shortly.")
-    if r.redactions:
-        notes.append("Secrets were masked before storing: " + ", ".join(sorted(r.redactions)) + ".")
-    return RememberOut(
-        id=r.item.id,
-        revision=r.item.revision,
-        created=r.created,
-        indexed=r.indexed,
-        scope=scope_label(r.item.scope),
-        redactions=r.redactions,
-        message=" ".join(notes) or "Stored privately.",
-    )
 
 
 def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None:
@@ -297,77 +205,3 @@ def register_tools(mcp: MCPServer, get_services: Callable[[], Services]) -> None
             expected_revision,
         )
         return _change_out(item)
-
-    async def _report(  # one implementation for session and compaction reports
-        kind: Literal["session", "compaction"],
-        summary: str,
-        log: str | None,
-        outcomes: list[str] | None,
-        project: str | None,
-        idempotency_key: str | None,
-    ) -> RememberOut:
-        report = SessionReport(
-            summary=summary,
-            log=log,
-            outcomes=tuple(outcomes or ()),
-            project=project,
-            idempotency_key=idempotency_key,
-        )
-        sessions = get_services().sessions
-        send = sessions.report_session if kind == "session" else sessions.report_compaction
-        return _remember_out(await send(current_principal(), report))
-
-    @mcp.tool(annotations=WRITE)
-    @guarded
-    async def kb_report_session(
-        summary: str,
-        log: str | None = None,
-        outcomes: list[str] | None = None,
-        project: str | None = None,
-        idempotency_key: str | None = None,
-        session: str | None = None,
-    ) -> RememberOut:
-        """Record what happened in this work session: a short summary (searchable) and optionally the full log.
-
-        Call at the end of a session. Stored privately. Secrets in the log are masked. With the
-        `session` label used in kb_consult/kb_get, the stored note is linked `derived_from` the notes
-        the work opened, so reviewers can see what it was built on (kb_graph).
-        """
-        check_session_label(session)
-        out = await _report(
-            "session",
-            summary=summary,
-            log=log,
-            outcomes=outcomes,
-            project=project,
-            idempotency_key=idempotency_key,
-        )
-        if session and (trail := get_services().session_sources):
-            await trail.link(current_principal(), session, out.id)
-        return out
-
-    @mcp.tool(annotations=WRITE)
-    @guarded
-    async def kb_report_compaction(
-        summary: str,
-        log: str | None = None,
-        outcomes: list[str] | None = None,
-        project: str | None = None,
-        idempotency_key: str | None = None,
-    ) -> RememberOut:
-        """Save the summary your context is being compacted into, so it can be recovered later."""
-        return await _report(
-            "compaction",
-            summary=summary,
-            log=log,
-            outcomes=outcomes,
-            project=project,
-            idempotency_key=idempotency_key,
-        )
-
-    @mcp.tool(annotations=READ)
-    @guarded
-    async def kb_get_log(id: str) -> LogOut:
-        """Read the full stored log of a session report you can see."""
-        text = await get_services().sessions.get_log(current_principal(), id)
-        return LogOut(id=id, log=text)

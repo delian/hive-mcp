@@ -94,6 +94,8 @@ what the tests above exercise, and anything that needs real Slack, Teams, Google
 A passing test suite only says the tests agree with the code. `scripts/mutation.sh` (mutmut) changes
 the code in small ways (flips a comparison, drops a check, alters a constant) and runs the fast tests
 against each change; a change that no test notices is a *surviving mutant* and fails the script.
+CI runs everything weekly, and on every pull request and push to main only the modules the change touched
+(`scripts/mutation_changed.sh [base-commit]`).
 It covers the code where a silent change would matter most:
 - sign-in and tokens: static bearer tokens, the OAuth token service (issue, rotation, reuse detection, family
   revocation), the login cookie and its key, token revocation;

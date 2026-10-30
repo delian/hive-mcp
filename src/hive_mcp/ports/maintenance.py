@@ -23,6 +23,8 @@ class ItemFilter:
     scope_level: ScopeLevel | None = None  # only items at this level
     exclude_archived: bool = False  # for rules that archive: skip what is already archived
     updated_before: datetime | None = None  # last changed before (rules count from the last edit)
+    exclude_private: bool = False  # only shared scopes (project/team/org)
+    updated_since: datetime | None = None  # last changed at or after (incremental exports)
 
 
 @dataclass(frozen=True, slots=True)

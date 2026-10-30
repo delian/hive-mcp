@@ -10,7 +10,8 @@ from hive_mcp.domain.errors import ValidationError
 from hive_mcp.domain.promotion import Promotion, PromotionStatus
 from hive_mcp.domain.scope import Scope, ScopeLevel, Visibility
 from hive_mcp.mcp_api.errors import guarded
-from hive_mcp.mcp_api.tools import READ, WRITE, current_principal, scope_label
+from hive_mcp.mcp_api.outputs import scope_label
+from hive_mcp.mcp_api.tools import READ, WRITE, current_principal
 
 if TYPE_CHECKING:
     from collections.abc import Callable

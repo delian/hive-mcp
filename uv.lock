@@ -725,6 +725,9 @@ local-embeddings = [
     { name = "onnxruntime" },
     { name = "tokenizers" },
 ]
+parquet = [
+    { name = "pyarrow" },
+]
 postgres = [
     { name = "psycopg", extra = ["binary", "pool"] },
 ]
@@ -773,6 +776,7 @@ requires-dist = [
     { name = "onnxruntime", marker = "extra == 'local-embeddings'", specifier = ">=1.31.0" },
     { name = "prometheus-client", specifier = ">=0.26.0" },
     { name = "psycopg", extras = ["binary", "pool"], marker = "extra == 'postgres'", specifier = ">=3.3.6" },
+    { name = "pyarrow", marker = "extra == 'parquet'", specifier = ">=26.0.0" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pydantic-settings", specifier = ">=2.16.1" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.15.1" },
@@ -781,7 +785,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.27.3" },
     { name = "uvicorn", specifier = ">=0.54.0" },
 ]
-provides-extras = ["postgres", "documents", "local-embeddings", "lancedb"]
+provides-extras = ["postgres", "documents", "local-embeddings", "lancedb", "parquet"]
 
 [package.metadata.requires-dev]
 bench = [

@@ -12,6 +12,7 @@ from hive_mcp.cli_connectors import app as connectors_app
 from hive_mcp.cli_demo import app as demo_app
 from hive_mcp.cli_digest import app as digest_app
 from hive_mcp.cli_eval import app as eval_app
+from hive_mcp.cli_export import app as export_app
 from hive_mcp.cli_groups import app as groups_app
 from hive_mcp.cli_ingest import app as ingest_app
 from hive_mcp.cli_maint import app as maint_app
@@ -43,12 +44,13 @@ cli.add_typer(connectors_app, name="connectors")
 cli.add_typer(migrate_app, name="migrate")
 cli.add_typer(demo_app)  # demo
 cli.add_typer(ops_app)  # reindex, forget, purge, eval
-cli.add_typer(ingest_app)  # ingest, ingest-git
+cli.add_typer(ingest_app)  # ingest, ingest-git, ingest-status, ingest-cancel
 cli.add_typer(maint_app)  # vectors, backup, restore
 cli.add_typer(groups_app)  # sync-groups
 cli.add_typer(eval_app)  # eval-build
 cli.add_typer(client_app)  # hook, hooks
 cli.add_typer(digest_app)  # digest
+cli.add_typer(export_app)  # export
 cli.add_typer(teams_app)  # teams-package
 
 

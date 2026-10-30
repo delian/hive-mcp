@@ -7,15 +7,9 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field
 
 from hive_mcp.mcp_api.errors import guarded
+from hive_mcp.mcp_api.outputs import BODY_LIMIT, _change_out, scope_label
 from hive_mcp.mcp_api.schemas import ChangeOut  # noqa: TC001 - the tool output model, resolved at runtime
-from hive_mcp.mcp_api.tools import (
-    BODY_LIMIT,
-    READ,
-    WRITE,
-    _change_out,
-    current_principal,
-    scope_label,
-)
+from hive_mcp.mcp_api.tools import READ, WRITE, current_principal
 
 if TYPE_CHECKING:
     from collections.abc import Callable

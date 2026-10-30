@@ -1,7 +1,7 @@
 # Ingestion
 
 `kb_ingest` (MCP, up to 10 MB, text or base64) and `hive ingest PATH... --org O --user U [--project P] [--tag T]`
-(CLI, directories recursively, up to 50 MB per file) add documents as searchable, linked knowledge.
+(CLI, directories recursively, up to 50 MB per file; big folders in the background, see below) add documents as searchable, linked knowledge.
 
 - **Formats:** text and source code, markdown, HTML (scripts/styles dropped, headings kept), Word `.docx`
   (headings, paragraphs, tables), Excel `.xlsx` (every sheet in workbook order, rows as `a | b | c`, capped at
@@ -17,6 +17,33 @@
 - **Idempotent:** the same bytes with the same name, tags and scope store nothing new, so a failed bulk run
   can simply be repeated. Changing any of them stores new items (old ones are kept; archive them with `kb_update`).
 - Each item records `source = file:<name>`; the original file is not kept.
+
+## Big folders in the background: `hive ingest PATH --background`
+`hive ingest ./team-share --org O --user U [--project P] [--tag T] --background` does not read anything itself: it checks that
+the folder exists **now**, resolves it, queues one durable job (`ingest_folder`) and returns an id. The in-process job runner
+of the **server** then reads the folder, so the path must exist inside the server's container (mount it read-only; the CLI
+says so). Each job step walks 25 files in a fixed order (depth first, names sorted; hidden entries skipped; symlinks are never
+followed, and files are opened without following links), stores them exactly as the synchronous path does, saves the progress
+and queues the next step. Restarts, crashes and several replicas are safe: one worker wins each step, a repeated step stores
+nothing new (same bytes, name, tags and scope are idempotent), and a step that died is repeated from the last saved cursor.
+A file that fails (unreadable, legacy format, empty, over a limit) is counted and its reason kept (the first 20 only); the run
+goes on.
+
+| Command | Meaning |
+|---|---|
+| `hive ingest-status [ID] [--org O]` | list runs of an organisation, or show one with its recorded errors: state (`running`, `cancelling`, `done`, `cancelled`, `failed`), files done / failed / skipped, new items, bytes, last path |
+| `hive ingest-cancel ID` | stop after the file in progress; what was stored stays |
+
+`HIVE_INGEST_ROOT` (unset by default): when set, background runs accept only folders below it (after resolving links; checked
+again before every step). Unset, the operator running the CLI is trusted, as with `hive ingest` today.
+
+**Size limits.** The synchronous path and the tool keep 50 MiB per file. A background run keeps 50 MiB for PDF, Office, HTML
+and every other format, which are parsed whole in memory (a larger one is *skipped* with the reason in the status). Only plain
+text, markdown and source code (the text extensions above) may be up to 2 GiB: such a file is read in 4 MiB pieces cut at line ends and stored as
+documents `name.partNNNN.ext`, one piece in memory at a time. Reason: a single document is limited to 200 parts (about 8 MB of text), so a
+huge text file could not be one document anyway. Binary content in such a file (NUL bytes, `%PDF-`) is refused. The zip/XML-bomb guards,
+secrets masking and the other safeguards are the same code path. A run's records live 90 days in the key-value store;
+the 50 most recent runs per organisation are listed.
 
 ## From a URL: `kb_ingest_url`
 Off by default (`HIVE_INGEST_URLS_ENABLED=true`) because a server that fetches addresses for its users can be

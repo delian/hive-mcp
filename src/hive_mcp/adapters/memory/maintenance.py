@@ -64,6 +64,8 @@ class MemoryMaintenance:
             and (flt.scope_level is None or i.scope.level == flt.scope_level)
             and (not flt.exclude_archived or i.status.value != "archived")
             and (flt.updated_before is None or i.updated_at < flt.updated_before)
+            and (not flt.exclude_private or i.scope.level.name != "PRIVATE")
+            and (flt.updated_since is None or i.updated_at >= flt.updated_since)
             and (after_id is None or i.id > after_id)
         ]
         return sorted(rows, key=lambda i: i.id)[:limit]

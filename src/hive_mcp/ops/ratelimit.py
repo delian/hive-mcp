@@ -9,12 +9,12 @@ from __future__ import annotations
 import hashlib
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from starlette.responses import JSONResponse
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, MutableMapping
 
     from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -48,6 +48,12 @@ class RateLimiter:
 
     async def ahit(self, key: str) -> float:
         return self.hit(key)
+
+    def snapshot(self, key: str) -> tuple[int, int]:
+        """(requests allowed at once, whole requests left right now) for the headers."""
+        tokens, seen = self._buckets.get(key, (self._burst, self._now()))
+        left = min(self._burst, tokens + (self._now() - seen) * self._rate)
+        return int(self._burst), max(0, int(left))
 
     def _trim(self, now: float) -> None:
         if len(self._buckets) <= MAX_KEYS:
@@ -99,16 +105,44 @@ class RateLimitMiddleware:
                 if path.startswith(rule.prefixes) and (not rule.methods or method in rule.methods):
                     key = (token_key(scope) if rule.by_token else None) or client_key(scope)
                     limiter = (rule.per_key and rule.per_key(key)) or rule.limiter
-                    wait = await limiter.ahit(f"{rule.prefixes[0]}|{key}")
+                    bucket = f"{rule.prefixes[0]}|{key}"
+                    wait = await limiter.ahit(bucket)
                     if wait <= 0 and rule.backstop is not None and key.startswith("tok:"):
                         wait = await rule.backstop.ahit(f"{rule.prefixes[0]}|{client_key(scope)}")
+                    snapshot = getattr(limiter, "snapshot", None)  # the shared limiter has none
+                    info = snapshot(bucket) if snapshot else None
                     if wait > 0:
                         response = JSONResponse(
                             {"error": "rate_limited", "error_description": "slow down and retry"},
                             status_code=429,
-                            headers={"Retry-After": str(int(wait) + 1)},
+                            headers={
+                                "Retry-After": str(int(wait) + 1),
+                                **_headers(info[0] if info else None, 0, int(wait) + 1),
+                            },
                         )
                         await response(scope, receive, send)
                         return
+                    if info:
+                        send = _with_headers(send, _headers(info[0], info[1]))
                     break
         await self.app(scope, receive, send)
+
+
+def _headers(limit: int | None, remaining: int, reset: int | None = None) -> dict[str, str]:
+    out = {"X-RateLimit-Remaining": str(remaining)}
+    if limit is not None:
+        out["X-RateLimit-Limit"] = str(limit)
+    if reset is not None:
+        out["X-RateLimit-Reset"] = str(reset)  # seconds until a request would be allowed
+    return out
+
+
+def _with_headers(send: Send, extra: dict[str, str]) -> Send:
+    async def wrapped(message: MutableMapping[str, Any]) -> None:
+        if message["type"] == "http.response.start":
+            headers = list(message.get("headers", []))
+            headers += [(k.lower().encode(), v.encode()) for k, v in extra.items()]
+            message = {**message, "headers": headers}
+        await send(message)
+
+    return wrapped

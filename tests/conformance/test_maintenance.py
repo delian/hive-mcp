@@ -147,3 +147,21 @@ async def test_set_status_system_bumps_the_revision_and_respects_the_org_and_rev
         await backend.items.set_status_system("org1", "nope", Status.ARCHIVED, 1)
     flt = ItemFilter(exclude_archived=True)
     assert [i.id for i in await backend.maintenance.find_system(flt)] == ["i1", "i3", "i4"]
+
+
+async def test_find_system_can_exclude_private_and_start_at_a_change_time(backend):
+    await seed(backend)
+    ids = lambda rows: [i.id for i in rows]  # noqa: E731
+    shared = ItemFilter(exclude_private=True)
+    assert ids(await backend.maintenance.find_system(shared)) == ["i2", "i3", "i4"]
+    assert ids(await backend.maintenance.find_system(shared, after_id="i2", limit=1)) == ["i3"]
+    cutoff = backend.clock.now() - timedelta(seconds=50)  # i1 is 100 s older than the rest
+    assert ids(await backend.maintenance.find_system(ItemFilter(updated_since=cutoff))) == [
+        "i2",
+        "i3",
+        "i4",
+    ]
+    both = ItemFilter(updated_since=cutoff, exclude_private=True, org_id="org1")
+    assert ids(await backend.maintenance.find_system(both)) == ["i2", "i3", "i4"]
+    late = ItemFilter(updated_since=backend.clock.now() + timedelta(seconds=1))
+    assert await backend.maintenance.find_system(late) == []

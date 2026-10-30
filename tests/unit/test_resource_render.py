@@ -3,8 +3,8 @@ from datetime import UTC, datetime
 from hive_mcp.domain.access import Tier
 from hive_mcp.domain.item import Item, ItemView
 from hive_mcp.domain.scope import Scope, ScopeLevel, Visibility
+from hive_mcp.mcp_api.outputs import BODY_LIMIT
 from hive_mcp.mcp_api.resources import render_item
-from hive_mcp.mcp_api.tools import BODY_LIMIT
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 

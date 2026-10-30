@@ -77,3 +77,20 @@ async def test_unicode_and_large_values(backend):
     value = {"name": "Радар 雷达 🛰️", "blob": "x" * 200_000}
     await backend.kv.put(NS, "big", value)
     assert await backend.kv.get(NS, "big") == value
+
+
+async def test_scan_lists_live_records_by_prefix_in_key_order(backend):
+    for key in ("b:2", "a:9", "a:1", "a%_:x", "c:1"):
+        await backend.kv.put(NS, key, {"key": key})
+    await backend.kv.put(NS, "a:short", {"key": "a:short"}, ttl_seconds=5)
+    await backend.kv.put("other", "a:1", {"key": "other"})
+    assert [k for k, _ in await backend.kv.scan(NS, "a:")] == ["a:1", "a:9", "a:short"]
+    assert [v for _, v in await backend.kv.scan(NS, "a:1")] == [{"key": "a:1"}]
+    assert [k for k, _ in await backend.kv.scan(NS, "a%_")] == ["a%_:x"]  # not a pattern
+    assert len(await backend.kv.scan(NS, "", limit=2)) == 2
+    assert [k for k, _ in await backend.kv.scan(NS, "zzz")] == []
+    backend.clock.advance(seconds=6)
+    assert [k for k, _ in await backend.kv.scan(NS, "a:")] == ["a:1", "a:9"]  # expired: gone
+    first = (await backend.kv.scan(NS, "b:"))[0][1]
+    first["key"] = "mutated"
+    assert (await backend.kv.get(NS, "b:2")) == {"key": "b:2"}

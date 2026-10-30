@@ -63,6 +63,19 @@ class PgEdges:
             )
             return cur.rowcount
 
+    async def list_page(
+        self, org_id: str, *, after: tuple[str, str, str] | None = None, limit: int = 500
+    ) -> list[Edge]:
+        key = after or ("", "", "")
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                f"SELECT {COLS} FROM edges WHERE org_id = %s "  # noqa: S608
+                "AND (%s OR (src, dst, relation) > (%s, %s, %s)) "
+                "ORDER BY src, dst, relation LIMIT %s",
+                (org_id, after is None, *key, limit),
+            )
+            return [_edge(r) for r in await cur.fetchall()]
+
     async def incident(
         self,
         org_id: str,

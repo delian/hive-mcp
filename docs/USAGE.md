@@ -125,11 +125,13 @@ Google Workspace/Entra groups ([GROUPS](GROUPS.md)).
 | see approvals waiting | admin UI `/admin/promotions` (needs `HIVE_ADMIN_UI=true`) or `kb_list_promotions` |
 | see who did what | `/admin/audit`, `kb_admin_audit` |
 | see usage and quotas | `/admin/usage`, `/admin/activity` |
+| import a big shared folder in the background | `hive ingest /data/share --org acme --user ann@acme.com --project eng --background`; follow with `hive ingest-status --org acme`; stop with `hive ingest-cancel ID` |
 | import a handbook/wiki/repo | `HIVE_CONNECTORS=[...]` ([CONNECTORS](CONNECTORS.md)); `hive connectors run`; `hive ingest-git`; `hive ingest ./docs` |
 | catch up | `kb_digest`, weekly email (`HIVE_DIGEST_WEEKDAY`, SMTP), `hive digest --user ann@acme.com` |
 | find old or duplicate notes | admin UI `/admin/stale`, `/admin/duplicates`; tools `kb_review_stale`, `kb_similar`, `kb_merge` |
 | delete old things automatically | `HIVE_RETENTION_RULES=[{"kind":"session","days":90,"action":"archive"}]`; preview with `hive retention` |
 | erase a person | `hive forget ann@acme.com --include-shared --erase-audit --yes` |
+| export for analytics (JSONL / Parquet) | `hive export --org acme --out ./dump [--format parquet] [--since 2026-01-01] [--pseudonymise]`; private notes only with `--include-private` |
 | back up / restore | `hive backup`, `hive backup-verify`, `hive restore --force` (server stopped) |
 | move between SQLite and Postgres | `hive migrate to-postgres --database-url ...` / `--embedded` / `hive migrate to-sqlite --data-dir ...` ([MIGRATE](MIGRATE.md)) |
 | change the embedder | change `HIVE_EMBEDDER`, run `hive reindex --org acme`, then `hive vectors prune` |
@@ -179,15 +181,36 @@ Set `HIVE_CONNECTORS='[{"name":"handbook","type":"confluence","base_url":"https:
 Pages become notes in project `eng`, are re-imported when they change (old versions archived), and archived when
 they vanish — unless more than half disappear at once, which pauses the sync until an admin runs `hive connectors run --force`.
 
+### 7.7a Importing a team's shared folder
+Mount the folder read-only into the server container (for example `-v /srv/team-share:/data/share:ro`) and, optionally, set
+`HIVE_INGEST_ROOT=/data/share` so that only that tree can be read. Then run
+`hive ingest /data/share --org acme --user ann@acme.com --project eng --background`. The command returns an id at once; the
+server works through the folder 25 files at a time while it keeps serving. `hive ingest-status --org acme` shows the counts;
+`hive ingest-status ID` also lists the first failures and skipped files (too big, legacy formats). A restart or a second replica
+simply continues; running the same command again stores nothing twice; `hive ingest-cancel ID` stops it.
+
 ### 7.8 Keeping the knowledge trustworthy
 Turn on the weekly digest and `HIVE_STALE_REVIEW_DAYS=180`. Each Monday people get "what's new for you" and "still true?" for
 their old notes; `kb_confirm` refreshes a note, `kb_update` fixes it, `kb_conflicts` shows near-identical notes that
 disagree, `kb_merge_propose` drafts a merged note with an optional language model (only notes at or above `HIVE_LLM_MIN_SCOPE`
 are ever sent to it).
 
+### 7.8a Building on another team's note
+Search shows other groups' notes marked **external**. Three things you can do with one (ask your agent, or call the tool):
+`kb_fork` copies it into your own scope (private, or a project of yours) linked `derived_from`, and `kb_diff_upstream` later
+shows how the original moved on; `kb_ignore` hides it from your own results (`hide=false` brings it back; nobody else is
+affected); `kb_suggest_edit` sends the owner a full replacement title/body with a reason. The people who may edit the note see
+suggestions with `kb_list_suggestions` and answer with `kb_decide_suggestion` (accepting works only while the note is still at
+the revision the proposer saw). A person who can edit the note directly uses `kb_update` instead.
+
 ### 7.9 Privacy request or offboarding
 `hive forget ann@acme.com --yes` (private notes), add `--include-shared` for everything she wrote, `--erase-audit` to replace her id
 in the audit trail with a random alias; her tokens stop working at once if she is removed from the directory.
+
+### 7.9a Analysis in a notebook or warehouse
+`hive export --org acme --out ./dump --pseudonymise` writes `items`, `edges` and a `manifest.json` (counts, flags, SHA-256 of each
+file). Shared notes only: private ones need `--include-private`, archived ones `--include-archived`. `--format parquet` needs
+`pip install 'hive-mcp[parquet]'`. The files are mode 0600 in a 0700 directory; text is exported as stored (secrets already masked).
 
 ### 7.10 Moving up from SQLite to PostgreSQL
 Stop the server, `hive backup`, then `hive migrate to-postgres --embedded` (inside the Postgres image) or `--database-url ...`.

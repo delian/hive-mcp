@@ -21,6 +21,7 @@ from hive_mcp.domain.scope import ScopeLevel
 from hive_mcp.ports.audit import AuditEvent
 from hive_mcp.ports.blobs import BlobRef
 from hive_mcp.ports.maintenance import ItemFilter
+from hive_mcp.services.foreign_records import erase_person
 
 if TYPE_CHECKING:
     from hive_mcp.domain.clock import Clock
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from hive_mcp.ports.indexes import TextIndex, VectorIndex
     from hive_mcp.ports.items import ItemRepository
     from hive_mcp.ports.jobs import Job, JobQueue
+    from hive_mcp.ports.kv import KeyValueStore
     from hive_mcp.ports.maintenance import ItemMaintenance
     from hive_mcp.ports.promotions import PromotionRepository
 
@@ -65,7 +67,9 @@ class PurgeService:
         jobs: JobQueue,
         audit: AuditLog,
         clock: Clock,
+        kv: KeyValueStore | None = None,
     ) -> None:
+        self._kv = kv
         self._items, self._maintenance = items, maintenance
         self._text, self._vectors, self._edges = text, vectors, edges
         self._promotions, self._blobs, self._jobs = promotions, blobs, jobs
@@ -145,10 +149,15 @@ class PurgeService:
                 else:
                     result.kept_shared.append(item.id)
         if not dry_run:
-            who = user_id
-            if erase_audit:  # a random alias, so the id cannot be recovered by guessing emails
-                who = f"erased-{uuid.uuid4().hex[:12]}"
-                records = 0
+            # a random alias, so the id cannot be recovered by guessing emails
+            alias = f"erased-{uuid.uuid4().hex[:12]}" if erase_audit else None
+            who = alias or user_id
+            kv_records = 0
+            if self._kv is not None:  # hidden-note list and open edit suggestions are personal
+                kv_records = await erase_person(self._kv, admin.org_id, user_id, alias)
+                result = replace(result, records=kv_records)
+            if alias:
+                records = kv_records
                 for eraser in (self._maintenance, self._promotions, self._edges):
                     records += await eraser.pseudonymise_person(admin.org_id, user_id, who)
                 result = replace(

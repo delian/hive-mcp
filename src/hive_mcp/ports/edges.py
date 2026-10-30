@@ -24,6 +24,12 @@ class EdgeRepository(Protocol):
     async def remove_item(self, org_id: str, item_id: str) -> int:
         """Delete every edge that starts or ends at the item; returns how many."""
 
+    async def list_page(
+        self, org_id: str, *, after: tuple[str, str, str] | None = None, limit: int = 500
+    ) -> list[Edge]:
+        """Every edge of the org, ascending by (src, dst, relation), strictly after the `after`
+        key. System-level (no visibility filter): for export and maintenance only."""
+
     async def incident(
         self,
         org_id: str,

@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 from hive_mcp import __version__
 from hive_mcp.config import Profile
 from hive_mcp.domain.errors import ValidationError
+from hive_mcp.ops.pgclient import check_client
 
 if TYPE_CHECKING:
     from hive_mcp.config import Settings
@@ -120,7 +121,9 @@ def create_backup(settings: Settings, dest: Path) -> Summary:
         else:
             if not settings.database_url:
                 raise ValidationError("HIVE_DATABASE_URL is required for the external profile")
-            dump = [_tool("pg_dump"), "--format=custom", f"--file={stage / 'hive.pgdump'}"]
+            tool = _tool("pg_dump")
+            check_client(tool, settings.database_url)
+            dump = [tool, "--format=custom", f"--file={stage / 'hive.pgdump'}"]
             _run(dump, _pg_env(settings.database_url))
             members["db/hive.pgdump"] = stage / "hive.pgdump"
         blobs = settings.data_dir / "blobs"
@@ -233,7 +236,9 @@ def restore_backup(settings: Settings, archive: Path, *, force: bool = False) ->
                 raise ValidationError(
                     "restoring replaces the database contents; pass --force to confirm"
                 )
-            restore = [_tool("pg_restore"), "--clean", "--if-exists", "--no-owner"]
+            tool = _tool("pg_restore")
+            check_client(tool, settings.database_url)
+            restore = [tool, "--clean", "--if-exists", "--no-owner"]
             env = _pg_env(settings.database_url)
             restore += ["--dbname=" + env.get("PGDATABASE", "postgres")]
             _run([*restore, str(stage / "db" / "hive.pgdump")], env)

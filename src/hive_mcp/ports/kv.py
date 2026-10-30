@@ -30,5 +30,10 @@ class KeyValueStore(Protocol):
 
     async def delete(self, namespace: str, key: str) -> None: ...
 
+    async def scan(
+        self, namespace: str, prefix: str = "", limit: int = 100
+    ) -> list[tuple[str, JsonObject]]:
+        """Live records whose key starts with `prefix`, in key order, at most `limit`."""
+
     async def purge_expired(self) -> int:
         """Physically remove expired records (maintenance); returns how many."""

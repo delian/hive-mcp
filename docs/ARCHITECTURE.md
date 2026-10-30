@@ -94,8 +94,8 @@ src/hive_mcp/
   adapters/      memory/ · sqlite/ (+fs/ blobs) · postgres/ · lance/ (optional vectors)
   search/        ranking (RRF fusion, weights, freshness), tokenizer, snippets, vector math
   services/      behaviour: knowledge, consult, promotions, sessions, graph, entities, curation, duplicates, assist, staleness,
-                 digest, retention, purge, activity, quota, signals, feedback, indexing, ingest, notifications, runner, admin
-  ingest/        extraction (PDF, Office, HTML, CSV, JSON, text, code, OCR), chunker, URL fetch (SSRF-safe), git reader
+                 digest, retention, purge, activity, quota, signals, feedback, indexing, ingest, bulk_ingest (resumable folder jobs), notifications, runner, admin
+  ingest/        extraction (PDF, Office, HTML, CSV, JSON, text, code, OCR), chunker, URL fetch (SSRF-safe), git reader, folder walker
   embeddings/    hashing (dev), ONNX local, OpenAI-compatible hosted, reranker, model registry
   llm/           optional language model providers (OpenAI-compatible, Anthropic)
   connectors/    scheduled imports: urls, github, drive, confluence, jira, notion, sharepoint + the sync loop
@@ -106,6 +106,7 @@ src/hive_mcp/
   notify/        email / webhook / Slack DM / Teams DM notifiers
   ops/           serve, lease, backup, autobackup, embedded_pg, migrate/, drain, health, metrics, observe, ratelimit, usage, loops
   evaluation/    retrieval and assist evaluation harnesses
+  export/        `hive export`: paged JSONL / Parquet dump of items and links with a checksummed manifest
   app.py app_front.py bootstrap.py config.py config_extras.py legal.py cli*.py
 clients/hooks/  the slim `hive-hooks` package: Claude Code hooks, editor MCP entries, `init`, session summaries
 ```
@@ -185,7 +186,7 @@ first, then embeddings; any failure queues a durable job and the call still succ
 4. Multiply by `scope_weight × (referenced 0.6) × status_weight × (0.5 + 0.5 × freshness)` and, if enabled, a +2% nudge for
    notes confirmed in the last 90 days; freshness halves every `half_life_days[kind]` (sessions 30 d … formulas never).
 5. Optional cross-encoder rerank of the top candidates; snippets; origin labels; graph links (supersedes/contradicts).
-6. Results split into primary and referenced (EXTERNAL); referenced are added in AUTO mode only when too few primary matched.
+6. Results split into primary and referenced (EXTERNAL); referenced are added in AUTO mode only when too few primary matched, minus the ones the caller hid with `kb_ignore` (`services/foreign_records.py`). `services/foreign.py` holds fork / diff-upstream / suggest-edit; its records live in the key-value store (`foreign:*` namespaces, listed with `KeyValueStore.scan`).
 
 ### 7.3 Promotion
 `kb_request_promotion` stores a request bound to the item's current revision. `kb_decide_promotion` by an approver is

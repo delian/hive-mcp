@@ -8,7 +8,8 @@ from hive_mcp.domain.item import ItemQuery
 from hive_mcp.domain.scope import Scope, ScopeLevel
 from hive_mcp.mcp_api.errors import guarded
 from hive_mcp.mcp_api.instructions import INSTRUCTIONS
-from hive_mcp.mcp_api.tools import BODY_LIMIT, current_principal, scope_label
+from hive_mcp.mcp_api.outputs import BODY_LIMIT, scope_label
+from hive_mcp.mcp_api.tools import current_principal
 from hive_mcp.services.digest import render_text
 from hive_mcp.services.models import provenance
 

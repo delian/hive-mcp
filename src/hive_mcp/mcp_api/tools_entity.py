@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 from hive_mcp.domain.entity import aliases_of
 from hive_mcp.domain.scope import Scope, ScopeLevel
 from hive_mcp.mcp_api.errors import guarded
-from hive_mcp.mcp_api.tools import READ, WRITE, current_principal, scope_label
+from hive_mcp.mcp_api.outputs import scope_label
+from hive_mcp.mcp_api.tools import READ, WRITE, current_principal
 from hive_mcp.services.models import provenance
 
 if TYPE_CHECKING:

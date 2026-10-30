@@ -44,6 +44,16 @@ class MemoryEdges:
             del self._rows[key]
         return len(doomed)
 
+    async def list_page(
+        self, org_id: str, *, after: tuple[str, str, str] | None = None, limit: int = 500
+    ) -> list[Edge]:
+        rows = [
+            e
+            for e in self._rows.values()
+            if e.org_id == org_id and (after is None or e.key > after)
+        ]
+        return sorted(rows, key=lambda e: e.key)[:limit]
+
     async def incident(
         self,
         org_id: str,

@@ -83,6 +83,12 @@ class SqliteMaintenance:
         if flt.updated_before is not None:
             conds.append("updated_at < ?")
             params.append(ts(flt.updated_before))
+        if flt.exclude_private:
+            conds.append("scope_level != ?")
+            params.append(int(ScopeLevel.PRIVATE))
+        if flt.updated_since is not None:
+            conds.append("updated_at >= ?")
+            params.append(ts(flt.updated_since))
 
         def tx(conn: sqlite3.Connection) -> list[Item]:
             rows = conn.execute(

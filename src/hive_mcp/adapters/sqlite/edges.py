@@ -76,6 +76,20 @@ class SqliteEdges:
 
         return await self._db.run(tx, write=True)
 
+    async def list_page(
+        self, org_id: str, *, after: tuple[str, str, str] | None = None, limit: int = 500
+    ) -> list[Edge]:
+        def tx(conn: sqlite3.Connection) -> list[Edge]:
+            sql = f"SELECT {COLS} FROM edges WHERE org_id = ?"  # noqa: S608
+            params: list[object] = [org_id]
+            if after is not None:
+                sql += " AND (src, dst, relation) > (?, ?, ?)"
+                params += after
+            rows = conn.execute(sql + " ORDER BY src, dst, relation LIMIT ?", [*params, limit])
+            return [_edge(r) for r in rows.fetchall()]
+
+        return await self._db.run(tx)
+
     async def incident(
         self,
         org_id: str,

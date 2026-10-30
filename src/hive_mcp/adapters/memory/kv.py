@@ -56,6 +56,13 @@ class MemoryKv:
     async def delete(self, namespace: str, key: str) -> None:
         self._rows.pop((namespace, key), None)
 
+    async def scan(
+        self, namespace: str, prefix: str = "", limit: int = 100
+    ) -> list[tuple[str, JsonObject]]:
+        keys = sorted(k for ns, k in self._rows if ns == namespace and k.startswith(prefix))
+        found = [(k, self._live(namespace, k)) for k in keys]
+        return [(k, copy.deepcopy(v)) for k, v in found if v is not None][:limit]
+
     async def purge_expired(self) -> int:
         now = self._clock.now()
         dead = [k for k, (_, exp) in self._rows.items() if exp is not None and exp <= now]

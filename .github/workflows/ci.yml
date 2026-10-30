@@ -103,6 +103,16 @@ jobs:
       - run: az bicep build --file deploy/azure/main.bicep --stdout > /dev/null
       - run: az bicep build --file deploy/azure/single.bicep --stdout > /dev/null
       - run: az bicep build-params --file deploy/azure/main.bicepparam --stdout > /dev/null
+  mutation-changed:
+    # Only the security-critical modules this change touched (usually a few minutes).
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v7
+      - run: scripts/mutation_changed.sh "${{ github.event.pull_request.base.sha || github.event.before }}"
   mutation:
     # Slow and only for the weekly run (or by hand): a surviving mutant is a change to the
     # security-critical code that no test notices. See docs/HARDENING.md.

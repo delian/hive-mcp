@@ -16,12 +16,14 @@ from hive_mcp.mcp_api.tools_browse import register_browse_tools
 from hive_mcp.mcp_api.tools_curation import register_curation_tools
 from hive_mcp.mcp_api.tools_digest import register_digest_tools
 from hive_mcp.mcp_api.tools_entity import register_entity_tools
+from hive_mcp.mcp_api.tools_foreign import register_foreign_tools
 from hive_mcp.mcp_api.tools_graph import register_graph_tools
 from hive_mcp.mcp_api.tools_history import register_history_tools
 from hive_mcp.mcp_api.tools_hygiene import register_hygiene_tools
 from hive_mcp.mcp_api.tools_ingest import register_ingest_tools
 from hive_mcp.mcp_api.tools_promotion import register_promotion_tools
 from hive_mcp.mcp_api.tools_purge import register_purge_tools
+from hive_mcp.mcp_api.tools_session import register_session_tools
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
@@ -52,8 +54,10 @@ def build_mcp(
         lifespan=lifespan,
     )
     register_tools(mcp, get_services)
+    register_session_tools(mcp, get_services)
     register_promotion_tools(mcp, get_services)
     register_graph_tools(mcp, get_services)
+    register_foreign_tools(mcp, get_services)
     register_ingest_tools(mcp, get_services)
     register_curation_tools(mcp, get_services)
     register_browse_tools(mcp, get_services)

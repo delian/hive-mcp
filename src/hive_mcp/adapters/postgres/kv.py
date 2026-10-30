@@ -73,6 +73,17 @@ class PgKv:
         async with self._db.tx() as conn:
             await conn.execute("DELETE FROM kv WHERE namespace = %s AND key = %s", (namespace, key))
 
+    async def scan(
+        self, namespace: str, prefix: str = "", limit: int = 100
+    ) -> list[tuple[str, JsonObject]]:
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                "SELECT key, value FROM kv WHERE namespace = %s AND starts_with(key, %s) "
+                'AND (expires_at IS NULL OR expires_at > %s) ORDER BY key COLLATE "C" LIMIT %s',
+                (namespace, prefix, self._clock.now(), limit),
+            )
+            return [(row["key"], dict(row["value"])) for row in await cur.fetchall()]
+
     async def purge_expired(self) -> int:
         async with self._db.tx() as conn:
             cur = await conn.execute(

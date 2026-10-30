@@ -1,4 +1,5 @@
-"""Operator commands that read files into the knowledge base: ingest, ingest-git."""
+"""Operator commands that read files into the knowledge base: ingest, ingest-git and the
+background bulk ingest (ingest --background, ingest-status, ingest-cancel)."""
 
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ from urllib.parse import urlsplit, urlunsplit
 import typer
 
 from hive_mcp.bootstrap import build_services
+from hive_mcp.cli_common import run_cli
 from hive_mcp.config import Settings
 from hive_mcp.domain.errors import HiveError
 from hive_mcp.domain.principal import Principal, Role
@@ -34,8 +36,14 @@ def ingest(  # noqa: PLR0913, PLR0917 - one option per identity claim
     role: str = typer.Option("member", help="Role of that user."),
     project: str | None = typer.Option(None, help="Share into this project (user must be in it)."),
     tag: list[str] = typer.Option([], help="Tag for every file (repeatable)."),  # noqa: B008
+    background: bool = typer.Option(
+        False, "--background", help="Queue ONE server-side folder as a resumable job and return."
+    ),
 ) -> None:
     """Ingest files (recursively for directories) as the given user. Safe to re-run."""
+    if background:
+        run_cli(lambda: _enqueue(paths, org, user, project, tag))
+        return
 
     async def run() -> int:
         services = await build_services(Settings())
@@ -119,3 +127,76 @@ def ingest_git(  # noqa: PLR0913, PLR0917 - one option per identity claim
         raise typer.Exit(1) from exc
     if failed:
         raise typer.Exit(1)
+
+
+async def _enqueue(
+    paths: list[Path], org: str, user: str, project: str | None, tag: list[str]
+) -> None:
+    if len(paths) != 1 or not paths[0].is_dir():
+        raise HiveError("--background takes exactly one folder")
+    services = await build_services(Settings())
+    try:
+        assert services.bulk_ingest  # noqa: S101 - always built
+        folder = services.bulk_ingest.check_root(paths[0])
+        run_id = await services.bulk_ingest.start(
+            folder, org, user, project=project, tags=tuple(tag)
+        )
+    finally:
+        await services.close()
+    typer.echo(f"queued bulk ingest {run_id} for {folder}")
+    typer.echo("The server reads this path itself: it must exist inside the server's container.")
+    typer.echo(f"The running server works through it; follow with: hive ingest-status {run_id}")
+
+
+@app.command("ingest-status")
+def ingest_status(
+    job_id: str | None = typer.Argument(None, help="One bulk ingest (default: list them)."),
+    org: str | None = typer.Option(None, help="Organisation id (needed to list)."),
+) -> None:
+    """Progress of background folder ingests: state, files done/failed/skipped, bytes, errors."""
+
+    async def run() -> None:
+        services = await build_services(Settings())
+        try:
+            assert services.bulk_ingest  # noqa: S101 - always built
+            if job_id:
+                found = await services.bulk_ingest.status(job_id)
+                runs = [found] if found else []
+            elif org:
+                runs = await services.bulk_ingest.list_runs(org)
+            else:
+                raise HiveError("give a JOB_ID or --org")
+        finally:
+            await services.close()
+        if not runs:
+            typer.echo("no such bulk ingest" if job_id else "no bulk ingests")
+        for r in runs:
+            p = r.progress
+            typer.echo(
+                f"{r.run_id}  {r.state:<10} {r.root}  files {p.done} done, {p.failed} failed, "
+                f"{p.skipped} skipped, {p.created} new items, {p.bytes} bytes  "
+                f"last: {p.cursor or '-'}  started {r.started}"
+            )
+            if job_id:
+                for line in p.errors:
+                    typer.echo(f"  {line}")
+
+    run_cli(run)
+
+
+@app.command("ingest-cancel")
+def ingest_cancel(job_id: str = typer.Argument(..., help="Bulk ingest id.")) -> None:
+    """Stop a background folder ingest after the file in progress (what is stored stays)."""
+
+    async def run() -> None:
+        services = await build_services(Settings())
+        try:
+            assert services.bulk_ingest  # noqa: S101 - always built
+            stopped = await services.bulk_ingest.cancel(job_id)
+        finally:
+            await services.close()
+        if not stopped:
+            raise HiveError("unknown or already finished")
+        typer.echo(f"cancelling {job_id}")
+
+    run_cli(run)

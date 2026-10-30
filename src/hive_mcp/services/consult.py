@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from hive_mcp.ports.indexes import TextIndex, VectorIndex
     from hive_mcp.ports.items import ItemRepository
     from hive_mcp.ports.rerank import Reranker
+    from hive_mcp.services.foreign_records import HiddenNotes
     from hive_mcp.services.models import ConsultRequest
     from hive_mcp.services.signals import RankSignals
 
@@ -43,8 +44,9 @@ class ConsultService:
         reranker: Reranker | None = None,
         rerank_depth: int = 15,
         signals: RankSignals | None = None,
+        hidden: HiddenNotes | None = None,
     ) -> None:
-        self._signals = signals
+        self._signals, self._hidden = signals, hidden
         self._edges = edges
         self._reranker, self._rerank_depth = reranker, rerank_depth
         self._items, self._text, self._vectors = items, text, vectors
@@ -94,8 +96,11 @@ class ConsultService:
         primary = [
             self._match(s, v, chunk_of, req.query) for s, v in scored if v.tier is Tier.PRIMARY
         ]
+        hidden = await self._hidden.ids(principal) if self._hidden else frozenset()
         foreign = [
-            self._match(s, v, chunk_of, req.query) for s, v in scored if v.tier is Tier.REFERENCED
+            self._match(s, v, chunk_of, req.query)
+            for s, v in scored
+            if v.tier is Tier.REFERENCED and v.item.id not in hidden
         ]
         shown = primary[: req.limit]
         extra = self._foreign_slice(req, len(primary), len(shown), foreign)

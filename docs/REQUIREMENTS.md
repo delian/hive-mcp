@@ -288,6 +288,14 @@ Question-tool answers: **note links: "New read-only note page /n/<id> (Recommend
 
 Produces: REQ-NFR-QA-05/06, REQ-NFR-DOC-02, REQ-CI-08 and this document (with its Annex). While this specification was written, other agents were fixing bugs in `src/`; this specification describes documented intent, not accidental behaviour.
 
+**U45** - 2026-10-29 - *"do 1, 2, 3, 5"* (go-ahead for the assistant's list of open review items: 1 `source` length validation, 2 erasing `scope_owner` of old private revisions, 3 recheck the Annex, 5 a weak regression test).
+Produces: the 2,000-character `source` limit (Annex E.3), REQ-RET-04 extension, Annex refresh.
+
+**U46** - 2026-10-30 - *"what more work we could do?"* The assistant listed: verification against real services, search quality on real data, load measurement, smaller product gaps, release and ops.
+
+**U47** - 2026-10-30 - *"do 2,do 3, do 4 now"* (search quality at scale, load and soak measurement, smaller product gaps). The assistant asked the open-question decisions through the question tool; the answers were: **OQ-01 "Accept 15 min (Recommended)"**; **OQ-14 "Add all three"** (fork, ignore, suggest-edit); **OQ-11 "Fail with a clear message (Recommended)"**; **OQ-13/OQ-15 "Build a Parquet/JSONL export" and "Build background bulk ingest"**.
+Produces: REQ-ACC-18 (foreign-note tools), `ops/pgclient.py` (REQ-OPS-04), `hive export` (REQ-OPS-17/18), background bulk ingest (REQ-ING-15), `X-RateLimit-*` headers (REQ-USE-03), `scripts/mutation_changed.sh` (REQ-CI-06), the search evaluation at scale (docs/EVALUATION.md) and sizing (docs/SIZING.md).
+
 ### 2.3 Go-ahead lists in one table (what each number meant)
 
 | Message | Numbers | What they mean (the assistant's list at that moment) |
@@ -524,6 +532,9 @@ user/token change write an audit event (Annex G.5) containing ids and short fact
 **REQ-ACC-17** MUST `[D]` **Merge and import placement.** A merged or consolidated item stays in the sources' shared scope only
 when all sources are in the same place and the caller may publish there directly; otherwise it is created private.
 *Accept:* merging a project note with a private note yields a private result.
+
+**REQ-ACC-18** MUST `[U45]` **Working with other groups' notes.** Six tools (Annex A.1): `kb_fork` copies a readable note into the caller's own scope (private by default, or a project they belong to) linked `derived_from`, with `source` `fork:<id>@<revision>` and an idempotency key so the same fork twice is one note; `kb_diff_upstream` shows a unified diff of the fork against the original now (at most 200 lines; the original gone or hidden is reported, not an error); `kb_ignore` hides one *external* note from the caller's own results only (at most 1,000 per person; hiding one's own or a project mate's note is refused; un-hiding needs no check); `kb_suggest_edit` leaves the full replacement title and/or body (secrets masked, same size rules as an edit, a note of at most 1,000 characters) for people who may edit the note, one open suggestion per person and note (a new one replaces it), at most 20 open per person, kept 180 days; `kb_list_suggestions` shows open (optionally decided) suggestions only for notes the caller may edit, newest first, at most 50; `kb_decide_suggestion` accepts (applies the text with the same revision check as an approval: refused if the note moved on since) or rejects, and a decided record is kept 30 days. A person who can edit a note is told to use `kb_update` instead of suggesting. Forgetting a person deletes their hidden list and open suggestions; with `--erase-audit` the decided ones are renamed to the alias. Audit actions: `item.fork`, `item.ignore`, `item.unignore`, `suggestion.create/accept/reject`.
+*Accept:* a hidden external note stays out of the hider's results and remains in everyone else's; accepting a suggestion made against revision 2 after a third revision is refused.
 
 ### 3.3 Search and ranking (SRCH)
 
@@ -942,7 +953,21 @@ bulk path that bypasses the assistant-facing endpoint.
 
 **REQ-ING-11** MUST `[D]` **Linking to entities and sources** see REQ-ENT-06 and REQ-KNO-11.
 
-**REQ-ING-12** MUST `[U34][D]` **Hidden characters are removed.** Unicode tag characters (U+E0000-E007F), bidi overrides and isolates (U+202A-202E, U+2060-206F),
+**REQ-ING-15** SHOULD `[D]` **Resumable background folder ingestion (resolves OQ-15).** `hive ingest PATH --org O --user U [--project P] [--tag T] --background`
+takes exactly one folder, requires that it exists now and is a directory, resolves it, refuses it if `HIVE_INGEST_ROOT` is set and the folder is not below it, queues a
+durable job of kind `ingest_folder` (payload `{run_id, step}`, dedupe key `bulk:<run>:<step>`) and prints the run id and that the path must exist in the server's
+container. Not an MCP tool. Each step walks up to 25 files after the saved cursor in a fixed order (depth first, names sorted; hidden entries and symlinks skipped, files
+opened without following links), ingests them through the normal ingest service (REQ-ING-04 idempotency), writes the cumulative progress `{state, cursor, done, failed, skipped, bytes,
+created, errors[<=20]}` under a key only one worker can create (`put_if_absent`), and queues the next step. A failing file is counted and noted; the run continues.
+Plain-text, markdown and code files over 50 MiB (up to 2 GiB) are stored in 4 MiB pieces `name.partNNNN.ext`; every other format over 50 MiB is skipped with a reason.
+`hive ingest-status [ID] [--org O]` shows runs and counts; `hive ingest-cancel ID` stops a run after the current file.
+*Accept:* a folder is fully ingested over several steps with exact counts and cursor; stopping the runner after two steps and continuing with a new service instance ends with
+the same items and counts; a second run over the same folder reports `created = 0`; a failing file is counted and listed while the others are stored; cancel yields state
+`cancelled` with what was stored kept; two workers handling the same step, and three racing runners, count every file once and queue one next step; a crash between saving
+a step and queueing the next is repaired when the job is retried; symlinks to files or folders outside the root are never read; a missing folder, a file, or a folder outside
+`HIVE_INGEST_ROOT` is refused at once; an over-limit PDF is skipped with its reason while an over-limit text file is stored in pieces without losing a line.
+
+**REQ-ING-12** MUST `[U34][D] **Hidden characters are removed.** Unicode tag characters (U+E0000-E007F), bidi overrides and isolates (U+202A-202E, U+2060-206F),
 zero-width and joiner characters (U+200B-200F, U+FEFF), soft hyphen (U+00AD), U+034F, U+061C and U+180E are removed from titles and bodies on every write and counted as
 `invisible-characters`.
 *Accept:* a note containing a tag-character-encoded instruction is stored without those characters.
@@ -1287,6 +1312,7 @@ A refused write says what to do ("archive or purge items, or ask an admin"). The
 `/authorize /token /revoke /oauth* /admin/login /admin/google /slack /teams` 60 per minute per client address (`HIVE_RATE_LIMIT_AUTH`, burst `max(per_min/2, 5)`); `/mcp` 1,200 per minute per bearer token (hash prefix `tok:` + 32 hex digits of SHA-256), anonymous calls per address, burst = 10 seconds' worth with a minimum of 10
 (`HIVE_RATE_LIMIT_MCP`). Over the limit: HTTP 429, JSON `{"error":"rate_limited","error_description":"slow down and retry"}` and `Retry-After`. Health and discovery endpoints are never limited. The client address comes from `X-Forwarded-For` only for proxies listed in `HIVE_FORWARDED_ALLOW_IPS` (default `127.0.0.1`).
 At most 50,000 bucket keys are kept (fully refilled ones are dropped first). The MCP rule also has a **client-address backstop** 20 times the per-token limit (rate and burst), so minting many tokens from one address cannot multiply the allowance.
+Responses of limited routes carry `X-RateLimit-Limit` and `X-RateLimit-Remaining`; a 429 adds `Retry-After` and `X-RateLimit-Reset` (the shared Postgres limiter, used with several replicas, sends only `Retry-After`).
 *Accept:* the 31st registration within an hour from one address is 429 with `Retry-After`.
 
 **REQ-USE-04** SHOULD `[U34]` **Per-token limit.** A token may carry its own limit (`--rate-per-min`, 1-100,000) replacing the default for that token only; `hive token list` shows it; it is enforced per token on `/mcp`.
@@ -1315,7 +1341,7 @@ ones, else `OTHER`), tool name, job kind/state, outcome), never ids, paths or us
 A restart of a few seconds is acceptable provided no client must be restarted: 2026-era clients are stateless, 2025-era clients are served in stateless mode, every write tool is idempotent (idempotency keys), and long work is a durable job.
 *Accept:* a real-process test sends SIGTERM, observes `/readyz` 503 then exit; the exit code is -15/143 and is accepted as normal.
 
-**REQ-OPS-02** MUST `[U2][D]` **Durable background jobs.** Jobs (kinds `index_item`, `apply_promotion`, `notify`, `purge_cleanup`) are durable with leases and fenced completion: a claim leases a job to one worker (default lease 120 s); an expired lease can be reclaimed; the old worker can no longer complete, fail or heartbeat it; `attempts` increments on claim;
+**REQ-OPS-02** MUST `[U2][D]` **Durable background jobs.** Jobs (kinds `index_item`, `apply_promotion`, `notify`, `purge_cleanup`, `ingest_folder`) are durable with leases and fenced completion: a claim leases a job to one worker (default lease 120 s); an expired lease can be reclaimed; the old worker can no longer complete, fail or heartbeat it; `attempts` increments on claim;
 failure requeues with exponential backoff `min(30 s x 2^(attempts-1), 3600 s)` or marks the job `dead` once `max_attempts` (default 5) is reached; a dedupe key returns the existing job while one is queued or running; claiming is "oldest runnable job first" (`FOR UPDATE SKIP LOCKED` on Postgres). The in-process runner polls every 2 s, survives `StorageBusy`
 (waits and continues), re-raises cancellation (the lease expires and another worker retries), and is switched off with `HIVE_RUN_JOBS=false` on replicas that only serve requests. A crash-looping job ends `dead`, not retrying forever.
 *Accept:* twelve workers claiming five jobs hand out each exactly once (all backends).
@@ -1375,6 +1401,12 @@ Several app instances can start together (the earlier `CREATE SCHEMA` race was f
 **REQ-OPS-16** SHOULD `[U27]` **Image properties.** Multi-stage build on `python:3.12-slim` (arg `PYTHON_IMAGE`), uv 0.13 (`ghcr.io/astral-sh/uv:0.13`), locked install, non-root user `hive` (uid 10001), `/data` volume, port 8080, `STOPSIGNAL SIGTERM`, healthcheck calling `/healthz`, models optionally baked in. Build args and their effects: Annex K.1.
 *Accept:* CI builds and smoke-tests the image; Trivy reports no fixable HIGH/CRITICAL.
 
+**REQ-OPS-17** SHOULD `[D]` **Analytics export.** `hive export --org ORG --out DIR [--format jsonl|parquet] [--include-private] [--include-archived] [--since ISO] [--pseudonymise]` writes `items`, `edges` and `manifest.json` (Annex D, D.2). Reads through the storage ports in pages (items by id with `ItemMaintenance.find_system`, links with `EdgeRepository.list_page`), so memory is bounded by the page size, not the corpus. Private notes are excluded unless `--include-private` (the command then prints a red warning); archived items unless `--include-archived`; a link is exported only if both ends are, so no id of a left-out note appears. Text is exported as stored (never unmasked). Parquet needs the optional `parquet` extra (pyarrow) and fails with a clear message otherwise; JSONL has no dependency.
+*Accept:* a default export contains no private note and no link to one; `--include-private` and `--include-archived` bring them back independently; with `--since` only items changed (links created) on/after it are written; the same results on memory, SQLite and PostgreSQL (`conformance/test_export.py`); more than one page exports completely with every storage read bounded by the page size.
+
+**REQ-OPS-18** MUST `[D]` **Export is private, verifiable and audited.** The directory (0700) and its files (0600) are written to a staging directory and renamed on success; a failure leaves nothing behind and an existing non-empty target is refused. `manifest.json` records schema version, org, creation time, flags, row counts and the SHA-256 and size of each file. `--pseudonymise` replaces author ids (and the owner of private scopes) by `p_` plus a salted hash, stable within the export; the salt is random per run and never stored. Each run appends an `export.run` audit event (actor `cli:<os user>`) with format, flags and counts, never content.
+*Accept:* recomputing each file's SHA-256 equals the manifest; aliases are equal for one person within an export and differ between exports; the audit event holds no note text.
+
 ### 3.22 CI and security tooling (CI)
 
 **REQ-CI-01** MUST `[U2]` **Lint, types, size, tests on every push.** GitHub Actions workflow `ci` (push, pull_request, manual, weekly `17 5 * * 1`): job `test` (Postgres `pgvector/pgvector:pg16` service, Tesseract and Poppler installed, a PG16 client first on PATH) runs `uv sync --frozen`, `ruff format --check .`, `ruff check .`, `mypy src clients/hooks/src`, `scripts/check_file_size.py src clients/hooks/src`
@@ -1391,7 +1423,7 @@ Dependabot proposes updates weekly for `uv`, `docker` and `github-actions` (the 
 **REQ-CI-05** SHOULD `[U36]` **Bicep compile.** Job `bicep` compiles `main.bicep`, `single.bicep` and `main.bicepparam`.
 
 **REQ-CI-06** SHOULD `[U36][U42]` **Mutation testing.** Mutation testing (`mutmut` >= 3.8, dependency group `mutation`, config in `[tool.mutmut]`) covers security-critical modules: Slack signature checks, prompt-injection heuristics, retention rules, lease and hand-off, ranking nudge, Teams verification, connector and message extension (including cards), static tokens, OAuth token service, cookies,
-revocation, connector settings and the sync loop (Annex L.2); the user chose to widen it to "OAuth and token code" and "Teams verification and connector safety rules" (ledger U42). `scripts/mutation.sh` exits non-zero if any mutant survives; CI runs it weekly and on demand (job `mutation`), not on every push. Unobservable mutants carry `# pragma: no mutate` with a reason and must stay rare;
+revocation, connector settings and the sync loop (Annex L.2); the user chose to widen it to "OAuth and token code" and "Teams verification and connector safety rules" (ledger U42). `scripts/mutation.sh` exits non-zero if any mutant survives; CI runs the whole set weekly and on demand (job `mutation`), and on every pull request and push to main only the modules that change touched (`scripts/mutation_changed.sh`, job `mutation-changed`). Unobservable mutants carry `# pragma: no mutate` with a reason and must stay rare;
 mutants in messages that tell a person what to do are killed with exact-text assertions. At the time of writing 2,114 mutants were all killed.
 
 **REQ-CI-07** SHOULD `[U36]` **Fuzzing and adversarial tests.** `tests/fuzz` (Hypothesis plus adversarial inputs) covers the redactor, injection heuristics, tokenizer, extractors (PDF, Office, HTML), the URL checks and parsers with time limits; findings become regression tests (for example the quadratic injection pattern).
@@ -1404,7 +1436,7 @@ mutants in messages that tell a person what to do are killed with exact-text ass
 
 ### 3.23 The MCP interface as a whole (MCP)
 
-**REQ-MCP-01** MUST `[U2][D]` **Tool surface.** The server exposes exactly the tools listed in Annex A.1 (44 at the time of writing) with the stated arguments, defaults, limits, read/write annotations and result shapes. Reads carry `readOnlyHint=true, openWorldHint=false`; writes carry `readOnlyHint=false, destructiveHint=false, idempotentHint=false, openWorldHint=false`;
+**REQ-MCP-01** MUST `[U2][D]` **Tool surface.** The server exposes exactly the tools listed in Annex A.1 (50 at the time of writing) with the stated arguments, defaults, limits, read/write annotations and result shapes. Reads carry `readOnlyHint=true, openWorldHint=false`; writes carry `readOnlyHint=false, destructiveHint=false, idempotentHint=false, openWorldHint=false`;
 `kb_purge` is `destructiveHint=true, idempotentHint=true`. Tool names are stable; optional fields are only ever added.
 *Accept:* a contract test compares the generated tool schema (names, arguments, annotations) against the committed snapshot.
 
@@ -1554,9 +1586,9 @@ Decisions: Postgres + pgvector (`halfvec`, HNSW m=32, ef_construction=200) is th
 
 **NG-08** `[D]` **No Azure Blob/S3 blob adapter, no GCP templates, no cross-store blob sharing.** (Planned in the first design, not built.)
 
-**NG-09** `[D]` **No `hive doctor` command, no bundle export/import of knowledge, no Tailscale-in-container, no terraform.** The first plan listed them; they were not built. (`hive migrate` and `hive backup` cover moving data; compose profiles cover tunnels.)
+**NG-09** `[D]` **No `hive doctor` command, no import of knowledge bundles, no Tailscale-in-container, no terraform.** The first plan listed them; they were not built. (`hive migrate` and `hive backup` cover moving data; compose profiles cover tunnels; `hive export` (REQ-OPS-17) is a one-way analytics dump, not a bundle that can be imported.)
 
-**NG-10** `[D]` **No per-scope hosted-embedding routing beyond the minimum-scope rule,** no per-question vote signal (the user chose to drop votes from ranking), no foreign-item workflow tools from the first design (fork, ignore, suggest-edit and diff-upstream tools): adoption is done by writing a new note linked `derived_from`.
+**NG-10** `[D]` **No per-scope hosted-embedding routing beyond the minimum-scope rule,** no per-question vote signal (the user chose to drop votes from ranking), no automatic merging of an other group's changes into a fork (the person reads `kb_diff_upstream` and decides).
 
 **NG-11** `[D]` **No multi-tenant Teams bot, no Outlook support, no zero-install unfurling, no Slack posting beyond replies** (replies are private; channel posting only for mentions in a thread).
 
@@ -1578,7 +1610,7 @@ Decisions: Postgres + pgvector (`halfvec`, HNSW m=32, ef_construction=200) is th
 
 | ID | Type | Question or assumption | Where used |
 |---|---|---|---|
-| OQ-01 | [A] | Is a lost window of up to 15 minutes (default `HIVE_BACKUP_EVERY_MINUTES`) on a **hard crash** acceptable for the one-container embedded profile? The assistant asked; the user did not answer. If not, use the Postgres profile or lower the interval. | REQ-OPS-05 |
+| OQ-01 | [A] | Is a lost window of up to 15 minutes (default `HIVE_BACKUP_EVERY_MINUTES`) on a **hard crash** acceptable for the one-container embedded profile? The assistant asked; the user did not answer. If not, use the Postgres profile or lower the interval. **Decided (U45):** accepted; it is a documented trade-off of the single-container SQLite profile. | REQ-OPS-05 |
 | OQ-02 | [A] | Real Google Workspace / Entra sign-in has never run; the OAuth flow was tested against a fake IdP with real signatures. A real tenant, OAuth client and public HTTPS URL are needed. | REQ-AUTH-05..08 |
 | OQ-03 | [A] | Real claude.ai, ChatGPT and Gemini connector handshakes have not been tried (vendor-specific redirect URIs and DCR quirks; the first design said to verify against official docs). | REQ-AUTH-05, REQ-AUTH-13 |
 | OQ-04 | [A] | Azure deployment (both Bicep templates) has never been deployed; Azure Files behaviour for backups and for SQLite fsync/locking is untested; Postgres sizing for 100 GB is unmeasured. | REQ-OPS-12 |
@@ -1588,11 +1620,11 @@ Decisions: Postgres + pgvector (`halfvec`, HNSW m=32, ef_construction=200) is th
 | OQ-08 | [A] | Claude Code accepting the generated `settings.json` hook entries and the `SessionStart`/`UserPromptSubmit` JSON output has been tested against a live server but never inside a real Claude Code session. | REQ-SESS-06 |
 | OQ-09 | [A] | The user asked whether Slack/Teams could be "a configurable parameter" managed through the admin interface or an authenticated chat command (U37). The assistant read this as run-time admin-managed integration settings with secrets only on the admin page. Confirm that reading. | REQ-SLK-06 |
 | OQ-10 | [A] | Which chat platform does the team really use, Google Workspace vs Microsoft 365 vs both, and is this for one team or for external customers (multi-tenant)? Asked; not answered. The design assumes one organisation per deployment, with org as the tenant boundary but not a hardened multi-customer SaaS. | REQ-ACC-01, section 6 |
-| OQ-11 | [A] | `pg_dump`/`pg_restore` major version must be at least the server's; the image installs Debian's `postgresql-client`; `hive backup` uses whatever is on `PATH` (CI pins PG16). A mismatch fails with the tool's error. Confirm whether `hive backup` should pick a matching client automatically. | REQ-OPS-04 |
+| OQ-11 | [A] | `pg_dump`/`pg_restore` major version must be at least the server's; the image installs Debian's `postgresql-client`; `hive backup` uses whatever is on `PATH` (CI pins PG16). A mismatch fails with the tool's error. **Decided (U45):** no automatic client selection; `hive backup` and `hive restore` compare the client's major version with the server's before starting and stop with a message naming the version to install (`ops/pgclient.py`). | REQ-OPS-04 |
 | OQ-12 | [A] | The relevance floors (bge 0.58, e5 0.81), the fusion weights and the rerank settings were tuned on developer-written sets. They are defaults until measured on real notes. | REQ-SRCH-04, REQ-EMB-03 |
-| OQ-13 | [A] | The DuckDB option from the first plan was dropped and "lite mode" now means SQLite; confirm no DuckDB analytics/export (Parquet) is wanted. | REQ-TECH-05 |
-| OQ-14 | [A] | The first design promised fork/ignore/suggest-edit tools for foreign items; only "adopt by writing a new linked note" exists. Confirm that is enough. | REQ-ACC-15, NG-10 |
-| OQ-15 | [A] | Bulk ingestion progress as background jobs (large folders) and files over 50 MiB are not supported; confirm the CLI path is enough. | REQ-ING-01 |
+| OQ-13 | [D] | Decided: export added. DuckDB stays dropped ("lite mode" means SQLite), but `hive export` writes JSONL or Parquet for analytics. | REQ-OPS-17, REQ-TECH-05 |
+| OQ-14 | [A] | The first design promised fork/ignore/suggest-edit tools for foreign items; only "adopt by writing a new linked note" exists. **Decided (U45):** not enough; fork, diff-upstream, ignore and suggest-edit (with a review queue) were built, REQ-ACC-18. | REQ-ACC-15, REQ-ACC-18 |
+| OQ-15 | [D] | Decided and built: bulk folder ingestion runs as resumable background jobs with progress, status and cancel (`hive ingest --background`, `ingest-status`, `ingest-cancel`). The 50 MiB cap stays for the synchronous path and for every non-text format (parsed whole in memory); plain-text files may reach 2 GiB in the background path, stored in pieces. | REQ-ING-15 |
 | OQ-16 | [A] | Privacy/terms pages are plain defaults; the operator must supply an organisation name and contact and have the text reviewed before publishing the Teams app outside their own tenant. | REQ-ADM-08 |
 | OQ-17 | [A] | The Teams app's `webApplicationInfo`/SSO and the bot's channel-install flow were not built; people are matched by email through the connector or pinned ids. | REQ-TMS-03 |
 
@@ -1608,6 +1640,7 @@ Paths are relative to `src/hive_mcp/` for modules and to `tests/` for tests. Whe
 | REQ-KNO-09..11, 13..14 | `services/knowledge.py`, `services/sessions.py`, `services/curation.py` | `services/test_knowledge.py`, `services/test_curation.py` | CURATION |
 | REQ-ACC-01..05 | `domain/access.py`, `domain/principal.py`, `domain/rules.py`, `security/principals.py`, adapters' `acl.py` | `unit/test_access.py`, `conformance/test_items.py`, `stress/test_access_load.py` | STORAGE |
 | REQ-ACC-06..13, 16..17 | `domain/promotion.py`, `services/promotions.py`, `services/notifications.py`, `mcp_api/tools_promotion.py`, `adapters/*/promotions.py` | `services/test_promotions.py`, `conformance/test_promotions.py`, `stress/test_promotion_races.py`, `unit/test_approvers.py` | PROMOTION |
+| REQ-ACC-18 | `services/foreign.py`, `services/foreign_records.py`, `mcp_api/tools_foreign.py`, `ports/kv.py` (`scan`) | `services/test_foreign.py`, `integration/test_foreign_tools.py`, `conformance/test_kv.py` | MCP |
 | REQ-ACC-14..15 | `security/principals.py`, `mcp_api/tools.py`, `services/models.py` | `unit/test_tool_errors.py`, `integration/test_mcp_e2e.py` | MCP |
 | REQ-SRCH-01..10, 13, 16 | `services/consult.py`, `services/consult_links.py`, `search/{ranking,tokenize,snippets}.py`, adapters' `text.py`/`vectors.py` | `unit/test_ranking.py`, `unit/test_snippets.py`, `conformance/test_text.py`, `conformance/test_vectors.py`, `services/test_consult_links.py` | EVALUATION, SERVICES |
 | REQ-SRCH-11, 12, 14, 15 | `embeddings/rerank.py`, `evaluation/*`, `services/feedback.py`, `services/signals.py`, `cli_eval.py` | `services/test_rerank.py`, `unit/test_evaluation.py`, `unit/test_search_feedback.py`, `unit/test_rank_signals.py`, `ops/test_feedback_tools.py` | EVALUATION, LLM |
@@ -1619,6 +1652,7 @@ Paths are relative to `src/hive_mcp/` for modules and to `tests/` for tests. Whe
 | REQ-ENT-01..06 | `domain/entity.py`, `services/entities.py`, `mcp_api/tools_entity.py` | `services/test_entities.py`, `unit/test_entity_slug.py` | ENTITIES |
 | REQ-HIST-01..04 | `domain/history.py`, `adapters/*/history.py`, `mcp_api/tools_history.py`, `services/knowledge.py` | `services/test_item_history.py`, `conformance/test_history.py` | HISTORY |
 | REQ-ING-01..11 | `ingest/*`, `services/ingest.py`, `cli_ingest.py`, `mcp_api/tools_ingest.py` | `services/test_ingest.py`, `services/test_ingest_url.py`, `unit/test_extract_and_sections.py`, `unit/test_office.py`, `unit/test_fetch.py`, `unit/test_ocr.py`, `integration/test_ingest_git.py`, `integration/test_cli_ingest.py`, `fuzz/` | INGEST, HARDENING |
+| REQ-ING-15 | `ingest/walk.py`, `services/bulk_{ingest,files,state}.py`, `cli_ingest.py` | `unit/test_walk.py`, `services/test_bulk_ingest.py`, `integration/test_cli_ingest_background.py` | INGEST |
 | REQ-ING-12..14 | `security/{redact,injection,sanitize}.py` | `unit/test_redact.py`, `unit/test_injection.py`, `fuzz/test_fuzz.py` | HARDENING |
 | REQ-CUR-01..04 | `services/curation.py`, `mcp_api/tools_curation.py` | `services/test_curation.py` | CURATION |
 | REQ-CUR-05..07, 09..10 | `services/duplicates.py`, `services/staleness.py`, `services/assist.py`, `mcp_api/tools_hygiene.py` | `services/test_duplicates.py`, `services/test_staleness.py`, `services/test_assist.py`, `ops/test_hygiene_tools.py` | CURATION, LLM |
@@ -1639,6 +1673,7 @@ Paths are relative to `src/hive_mcp/` for modules and to `tests/` for tests. Whe
 | REQ-OPS-04..07 | `ops/{backup,autobackup,lease}.py` | `integration/test_backup.py`, `ops/test_autobackup.py`, `ops/test_lease.py`, `integration/test_single_container.py` | BACKUP, SINGLE-CONTAINER |
 | REQ-OPS-08..09 | `ops/embedded_pg.py`, `ops/migrate/*`, `cli_migrate.py` | `ops/test_embedded_pg.py`, `ops/test_migrate.py` | MIGRATE, SINGLE-CONTAINER |
 | REQ-OPS-10..16 | `Dockerfile`, `docker-compose.yml`, `deploy/*`, `cli_demo.py`, `scripts/*` | `ops/test_demo.py`, CI jobs `image`, `bicep` | DEPLOY, SINGLE-CONTAINER |
+| REQ-OPS-17..18 | `export/*`, `cli_export.py`, `ports/{edges,maintenance}.py` (`list_page`, `ItemFilter`) | `conformance/test_export.py`, `conformance/test_edges.py`, `conformance/test_maintenance.py`, `ops/test_export_cli.py` | USAGE |
 | REQ-OPS-14..15 | `adapters/postgres/*`, `adapters/sqlite/schema.py` | `adapters/test_replicas.py`, `adapters/test_postgres.py`, `adapters/test_sqlite.py` | STORAGE, DEPLOY |
 | REQ-CI-01..10 | `.github/workflows/*`, `scripts/{check_file_size,mutation}.py/sh`, `pyproject.toml` | `unit/test_file_size_guard.py`, `fuzz/`, `stress/`, `unit/test_docs_drift.py` | HARDENING |
 | REQ-MCP-01..05 | `mcp_api/*`, `app.py`, `bootstrap.py` | `unit/test_tool_errors.py`, `integration/test_mcp_e2e.py`, `integration/test_protocols.py`, `integration/test_app.py` | MCP |

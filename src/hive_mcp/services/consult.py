@@ -65,7 +65,10 @@ class ConsultService:
             except EmbeddingUnavailable:
                 notes.append("semantic search unavailable; showing keyword matches only")
         fused = fuse(
-            [h.item_id for h in text_hits], [h.item_id for h in vector_hits], self._ranking
+            [h.item_id for h in text_hits],
+            [h.item_id for h in vector_hits],
+            self._ranking,
+            [h.score for h in text_hits],
         )
         chunk_of = {h.item_id: h.chunk_ord for h in vector_hits}
         views = await self._items.get_many(principal, list(fused))  # authoritative access re-check

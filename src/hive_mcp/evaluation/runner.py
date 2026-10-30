@@ -66,17 +66,22 @@ async def build(dataset: Dataset, embedder: Embedder) -> tuple[MemoryBackend, In
 
 
 async def _rankings(
-    dataset: Dataset, backend: MemoryBackend, embedder: Embedder, floor: float
+    dataset: Dataset,
+    backend: MemoryBackend,
+    embedder: Embedder,
+    floor: float,
+    ranking: RankingConfig,
 ) -> dict[str, list[list[str]]]:
     flt = read_filter(OWNER)
     out: dict[str, list[list[str]]] = {"keyword": [], "vector": [], "hybrid": []}
     for q in dataset.queries:
-        text = [h.item_id for h in await backend.text.search(flt, q.text, POOL)]
+        text_hits = await backend.text.search(flt, q.text, POOL)
+        text = [h.item_id for h in text_hits]
         vec_hits = await backend.vectors.search(
             flt, embedder.model_id, await embedder.embed_query(q.text), POOL
         )
         vec = [h.item_id for h in vec_hits if h.score >= floor]
-        fused = fuse(text, vec, RankingConfig())
+        fused = fuse(text, vec, ranking, [h.score for h in text_hits])
         out["keyword"].append(text)
         out["vector"].append(vec)
         out["hybrid"].append(sorted(fused, key=lambda i: -fused[i]))
@@ -95,10 +100,11 @@ async def evaluate(
     *,
     floor: float | None = None,
     sweep: tuple[float, ...] = (),
+    ranking: RankingConfig | None = None,
 ) -> Report:
     backend, _ = await build(dataset, embedder)
     use_floor = embedder.min_similarity if floor is None else floor
-    ranked = await _rankings(dataset, backend, embedder, use_floor)
+    ranked = await _rankings(dataset, backend, embedder, use_floor, ranking or RankingConfig())
     modes = [_report(dataset, ranked[m], m) for m in ("keyword", "vector", "hybrid")]
     points = []
     if sweep:
@@ -135,13 +141,16 @@ def recommend_floor(
 
 
 async def consult_check(
-    dataset: Dataset, embedder: Embedder, reranker: Reranker | None = None
+    dataset: Dataset,
+    embedder: Embedder,
+    reranker: Reranker | None = None,
+    ranking: RankingConfig | None = None,
 ) -> ModeReport:
     """The same questions through the real ConsultService (adds filtering, weighting, snippets)."""
     backend, _ = await build(dataset, embedder)
     service = ConsultService(
         items=backend.items, text=backend.text, vectors=backend.vectors,
-        embedder=embedder, clock=backend.clock, reranker=reranker,
+        embedder=embedder, clock=backend.clock, reranker=reranker, ranking=ranking,
     )  # fmt: skip
     ranked = []
     for q in dataset.queries:

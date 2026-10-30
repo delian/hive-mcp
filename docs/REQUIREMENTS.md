@@ -562,8 +562,12 @@ cut, so a caller who may see 0.3% of the data still gets full recall (REQ-NFR-PE
 
 **REQ-SRCH-04** MUST `[D]` **Fusion.** Keyword and vector rankings are fused by weighted reciprocal rank fusion with `k=60`:
 the keyword list contributes `1/(60+rank)` for its first 5 hits only (`keyword_depth=5`); the vector list contributes
-`2/(60+rank)` (`vector_weight=2.0`). Repeats within a list count once.
-*Accept:* unit tests on `rrf` and `fuse` with these constants; on `evals/core.json` hybrid R@3 is at least 0.95 with the bge model.
+`2/(60+rank)` (`vector_weight=2.0`). Repeats within a list count once. Optional, off by default
+(`keyword_lead_ratio=0`, setting `HIVE_KEYWORD_LEAD_RATIO`): when the best keyword hit scores at least that many times the
+second best (and there are two or more hits) and the vector list does not contain it, its fused score is raised just above the
+best one, so an exact id or error code that only the keyword index can find is ranked first. `hive eval` honours the setting.
+*Accept:* unit tests on `rrf` and `fuse` with these constants, and on the lead (lifted only when clearly ahead, not when the
+vector list has it, not when it is a lone hit, never when off); on `evals/core.json` hybrid R@3 is at least 0.95 with the bge model.
 
 **REQ-SRCH-05** MUST `[D]` **The repository is the authority.** Every hit is re-read through the item repository with the
 caller's identity (`get_many`); a stale or wrong index can never reveal an item. Invisible and missing ids are dropped.

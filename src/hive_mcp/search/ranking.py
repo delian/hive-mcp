@@ -10,6 +10,7 @@ from hive_mcp.domain.item import Kind, Status
 from hive_mcp.domain.scope import ScopeLevel
 
 RRF_K = 60
+MIN_LEAD_HITS = 2  # a lone keyword hit is as likely a coincidence as an exact match
 
 
 def rrf(
@@ -42,6 +43,11 @@ class RankingConfig:
     # the stronger signal, and keyword hits beyond the first few are mostly noise.
     vector_weight: float = 2.0
     keyword_depth: int = 5
+    # Opt-in (0 = off). An exact-token query ("OPS-48213", a rare error code) is found by the
+    # keyword index alone, yet fusion ranks every vector hit above a keyword-only hit. If the best
+    # keyword hit scores at least this many times the second best and vector search did not return
+    # it, it is lifted to rank 1. Measured in docs/EVALUATION.md ("Scale").
+    keyword_lead_ratio: float = 0.0
     referenced_weight: float = 0.6  # knowledge from groups the caller does not belong to
     status_weight: dict[Status, float] = field(
         default_factory=lambda: {
@@ -92,6 +98,24 @@ def weight(  # noqa: PLR0913 - one weight per ranking signal
     return float(scope * cfg.status_weight[status] * (0.5 + 0.5 * fresh))
 
 
-def fuse(text_ids: list[str], vector_ids: list[str], config: RankingConfig) -> dict[str, float]:
-    """The hybrid ranking: weighted reciprocal rank fusion of keyword and vector results."""
-    return rrf([text_ids[: config.keyword_depth], vector_ids], weights=[1.0, config.vector_weight])
+def fuse(
+    text_ids: list[str],
+    vector_ids: list[str],
+    config: RankingConfig,
+    text_scores: list[float] | None = None,
+) -> dict[str, float]:
+    """The hybrid ranking: weighted reciprocal rank fusion of keyword and vector results.
+
+    `text_scores` (the keyword hits' scores, best first) are only read for `keyword_lead_ratio`."""
+    scores = rrf(
+        [text_ids[: config.keyword_depth], vector_ids], weights=[1.0, config.vector_weight]
+    )
+    if config.keyword_lead_ratio > 0 and text_scores and len(text_ids) >= MIN_LEAD_HITS:
+        lead = text_ids[0]
+        if (
+            lead not in vector_ids
+            and text_scores[0] > 0
+            and text_scores[0] >= config.keyword_lead_ratio * text_scores[1]
+        ):
+            scores[lead] = max(scores.values()) * (1 + 1e-9)
+    return scores

@@ -22,6 +22,7 @@ from hive_mcp.llm.factory import llm_min_level, make_llm
 from hive_mcp.notify.chat import SlackDmNotifier, TeamsDmNotifier
 from hive_mcp.notify.factory import make_channels
 from hive_mcp.ports.backend import Backend, close_backend
+from hive_mcp.search.ranking import RankingConfig
 from hive_mcp.security.directory import UserDirectory
 from hive_mcp.security.jsonfile import AtomicJsonFile
 from hive_mcp.security.oauth.cookies import load_secret_key
@@ -168,6 +169,7 @@ async def build_services(settings: Settings) -> Services:
         rerank_depth=settings.rerank_depth,
         signals=signals,
         hidden=HiddenNotes(backend.kv),
+        ranking=RankingConfig(keyword_lead_ratio=settings.keyword_lead_ratio),
     )
     sessions = SessionService(knowledge, backend.blobs)
     integrations = IntegrationStore(

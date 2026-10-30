@@ -1065,6 +1065,7 @@ Cross-field validation (all at startup, failing the process with a clear message
 | `HIVE_EMBEDDING_MIN_SCOPE` | str | None | None | one of private, project, team, org | Narrowest scope sent to the embedder (unset: private for local, project for hosted). |
 | `HIVE_EMBEDDING_AZURE` | bool | False |  | openai: `api-key` header. |
 | `HIVE_RELEVANCE_FLOOR` | float | None | None | ge=0 le=1 | Override the embedder floor. |
+| `HIVE_KEYWORD_LEAD_RATIO` | float | 0.0 | ge=0 le=100 | 0 = off. Lift a keyword hit that scores this many times the runner-up and that vector search missed to rank 1 (exact ids, error codes). |
 | `HIVE_EMBEDDING_MIN_SIMILARITY` | float | 0.3 | ge=0 le=1 | openai embedder floor. |
 | `HIVE_QUOTA_ITEMS_PER_USER` | int | 0 | ge=0 | 0 = unlimited; admins exempt. |
 | `HIVE_QUOTA_CHARS_PER_USER` | int | 0 | ge=0 | 0 = unlimited. |
@@ -1519,6 +1520,7 @@ Directory `DIR` holds `items.<ext>`, `edges.<ext>` (`ext` = `jsonl` or `parquet`
 | RRF `k` | 60 |
 | keyword list depth in fusion | 5 |
 | vector list weight / keyword list weight | 2.0 / 1.0 |
+| keyword lead ratio (`HIVE_KEYWORD_LEAD_RATIO`) | 0 = off; with a value `r`: best keyword hit >= `r` x second best, >= 2 hits, not in the vector list -> fused score just above the best |
 | candidate pool per index | `max(limit x 5, 40)` |
 | `kb_consult` limit | 1-25, default 8; `min_primary` 3 |
 | scope weight | private 1.0, project 1.0, team 0.85, org 0.7 |

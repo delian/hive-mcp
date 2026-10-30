@@ -161,14 +161,17 @@ def evaluate_command(
     """Score keyword, vector and hybrid retrieval with the configured embedder (HIVE_EMBEDDER)."""
     from hive_mcp.embeddings.factory import make_embedder, make_reranker  # noqa: PLC0415
     from hive_mcp.evaluation import dataset, runner  # noqa: PLC0415
+    from hive_mcp.search.ranking import RankingConfig  # noqa: PLC0415
 
     async def run() -> None:
-        embedder = make_embedder(Settings())
+        settings = Settings()
+        embedder = make_embedder(settings)
+        ranking = RankingConfig(keyword_lead_ratio=settings.keyword_lead_ratio)
         data = dataset.load(path)
         points = tuple(x / 100 for x in range(0, 100, 5)) if sweep else ()
         if recommend:
             points = tuple(x / 100 for x in range(20, 96))
-        report = await runner.evaluate(data, embedder, floor=floor, sweep=points)
+        report = await runner.evaluate(data, embedder, floor=floor, sweep=points, ranking=ranking)
         typer.echo(
             runner.format_report(report)
             if not recommend
@@ -177,9 +180,9 @@ def evaluate_command(
         if recommend:
             _recommend(data, report)
         reranker = make_reranker(Settings())
-        extra = [await runner.consult_check(data, embedder)]
+        extra = [await runner.consult_check(data, embedder, ranking=ranking)]
         if reranker:
-            extra.append(await runner.consult_check(data, embedder, reranker))
+            extra.append(await runner.consult_check(data, embedder, reranker, ranking))
         for m in extra:  # the full search path, without and with the reranker
             r = m.positives.recall
             typer.echo(

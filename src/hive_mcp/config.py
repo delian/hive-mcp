@@ -66,6 +66,9 @@ class Settings(ExtrasSettings):
     embedding_azure: bool = False  # openai: send `api-key` header (Azure OpenAI)
     # Overrides the embedder's relevance floor; `hive eval --recommend` suggests one for your data.
     relevance_floor: float | None = Field(default=None, ge=0, le=1)
+    # Opt-in (0 = off): lift a keyword hit that clearly leads the keyword list and that vector
+    # search missed to rank 1 (exact ids, error codes). 1.5 is a start; see docs/EVALUATION.md.
+    keyword_lead_ratio: float = Field(default=0.0, ge=0, le=100)
     embedding_min_similarity: float = Field(default=0.3, ge=0, le=1)  # openai relevance floor
     quota_items_per_user: int = Field(default=0, ge=0)  # 0 = unlimited; admins are exempt
     quota_chars_per_user: int = Field(

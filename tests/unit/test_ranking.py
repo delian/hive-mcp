@@ -5,7 +5,7 @@ import pytest
 from hive_mcp.domain.access import Tier
 from hive_mcp.domain.item import Kind, Status
 from hive_mcp.domain.scope import ScopeLevel
-from hive_mcp.search.ranking import RankingConfig, freshness, rrf, weight
+from hive_mcp.search.ranking import RankingConfig, freshness, fuse, rrf, weight
 
 NOW = datetime(2026, 6, 1, tzinfo=UTC)
 CFG = RankingConfig()
@@ -60,3 +60,19 @@ def test_freshness_halves_per_half_life_and_reference_material_never_ages():
 
 def test_future_timestamps_never_boost():
     assert freshness(Kind.SESSION, NOW + timedelta(days=10), NOW, CFG) == 1.0
+
+
+def test_keyword_lead_lifts_only_a_clear_unseen_leader():
+    ids, scores = ["lead", "b", "c"], [9.0, 3.0, 2.0]
+    crowd = [f"v{n}" for n in range(30)]
+    off = fuse(ids, crowd, RankingConfig(), scores)
+    assert off["lead"] < min(off[v] for v in crowd)  # keyword-only hits sit below every vector hit
+    on = RankingConfig(keyword_lead_ratio=1.5)
+    assert max(fuse(ids, crowd, on, scores).items(), key=lambda kv: kv[1])[0] == "lead"
+    assert fuse(ids, crowd, on, None) == off  # no scores, no lead
+    assert fuse(ids, crowd, on, [4.0, 3.0, 2.0]) == off  # 4 < 1.5 x 3: not clearly ahead
+    assert fuse(["lead"], crowd, on, [9.0]) == fuse(
+        ["lead"], crowd, RankingConfig(), [9.0]
+    )  # lone hit
+    seen = fuse(ids, ["lead", *crowd], on, scores)  # vector search found it too: plain fusion
+    assert seen == fuse(ids, ["lead", *crowd], RankingConfig(), scores)

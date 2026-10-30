@@ -27,7 +27,7 @@ postgres = [
     "psycopg[binary,pool]>=3.3.6",
 ]
 documents = [
-    "pypdf>=5.0",
+    "pypdf>=6.21.3",
 ]
 local-embeddings = [
     "onnxruntime>=1.31.0",
@@ -63,7 +63,7 @@ bench = [
 ]
 dev = [
     "httpx>=0.28.1",
-    "pypdf>=5.0",
+    "pypdf>=6.21.3",
     "onnxruntime>=1.31.0",
     "tokenizers>=0.23.3",
     "hypothesis>=6.170.8",

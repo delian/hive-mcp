@@ -46,7 +46,8 @@ def test_a_read_does_not_wait_for_a_long_write(db):
     assert rows == 0 and waited < 1.0  # the uncommitted row is invisible and nothing blocked
 
 
-def test_readers_run_at_the_same_time(db):
+def test_readers_run_at_the_same_time(tmp_path):
+    db = Database(tmp_path / "many.db", readers=3)
     inside, gate = [], threading.Barrier(3, timeout=5)
 
     def read(conn):

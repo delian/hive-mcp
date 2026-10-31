@@ -73,11 +73,26 @@ Notes on the table:
 ### Where the first cliff is
 
 **SQLite, at about 20k notes with many concurrent agents.** Search is an exact scan over the caller's access-filtered
-vectors, run while holding the single database connection, so every other request (even a `kb_get`) waits behind it.
+vectors, which is CPU work in the server process (numpy plus Python row handling), so searches compete with every other
+request for the same cores.
 Throughput falls with size (117, 55 and 27 calls/s at 5k, 20k and 50k) and a saturated `kb_get` goes from 41 to 195 ms.
 Nothing breaks: there were **no errors in any run**; it just queues. Up to 20k notes a 24-agent fleet at a normal pace
 (10 calls/s) still gets a median search under 40 ms. Past 50k notes one search alone costs 75 ms and about 10 concurrent
 searches already saturate a core.
+
+**Read connections do not move the cliff.** The embedded profile has one writer connection plus
+`HIVE_SQLITE_READERS` read-only connections (default 1: a search no longer makes writes wait). Measured at 20k notes, 24
+saturating agents, 4 vCPU (the load generator shares the cores), 45 s each, two runs for 0 and 4:
+
+| Readers | Calls/s | Search p50 / p95 (ms) | `kb_get` p50 / p95 (ms) | Promotion p50 (ms) |
+|---|---|---|---|---|
+| 0 (one shared connection) | 59 | 480 / 650 | 90 / 180 | 397 |
+| 1 (default) | 59 | 479 / 763 | 85 / 201 | 293 |
+| 2 | 52 | 552 / 850 | 99 / 293 | 360 |
+| 4 | 29 | 965 / 1,600 | 140 to 155 / 550 to 580 | 620 to 690 |
+
+More readers make it worse here: parallel scans fight over the interpreter lock and the caches, so one reader is
+the setting. The cure for a saturated SQLite server is PostgreSQL, or fewer notes per server, not more connections.
 
 **PostgreSQL has no cliff up to 50k notes** in these runs, but search still grows with size (17, 42, 61 ms at 10 calls/s,
 pgvector with an HNSW index plus the access filter). For 100k to 1M notes see [BENCHMARK](BENCHMARK.md) (ANN engines at scale).

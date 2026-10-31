@@ -25,7 +25,10 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 BUSY_SECONDS = 10.0
-READERS = 4  # read-only connections; 0 sends reads through the writer as before
+# One read-only connection keeps writes from queueing behind searches. More readers did NOT help
+# on a 4-core machine (the vector scan is CPU-bound and contends for the GIL): 2 readers 13% fewer
+# calls/s, 4 readers half (docs/SIZING.md).
+READERS = 1  # 0 sends reads through the writer as before
 
 
 __all__ = ["BUSY_SECONDS", "Database", "StorageBusy"]

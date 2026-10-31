@@ -48,7 +48,7 @@ class Settings(ExtrasSettings):
     # "lancedb": keep vectors in a LanceDB directory instead of SQLite (embedded profile, extra).
     vector_store: Literal["default", "lancedb"] = "default"
     # read-only SQLite connections beside the writer (embedded profile); 0 = reads share the writer
-    sqlite_readers: int = Field(default=4, ge=0, le=32)
+    sqlite_readers: int = Field(default=1, ge=0, le=32)
     embedding_model: str = "bge-small-en-v1.5-int8"  # onnx: pinned model name; openai: model id
     models_dir: Path | None = None  # onnx model files; default: <data_dir>/models
     embedding_url: str | None = None  # openai: full .../embeddings URL

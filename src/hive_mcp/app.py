@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
 import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
@@ -24,8 +22,8 @@ from hive_mcp.config import Settings
 from hive_mcp.domain.errors import StorageBusy
 from hive_mcp.legal import legal_routes
 from hive_mcp.mcp_api.server import build_mcp
+from hive_mcp.ops.background import start_background
 from hive_mcp.ops.health import health_routes
-from hive_mcp.ops.loops import start_loops
 from hive_mcp.ops.metrics import METRICS, metrics_routes
 from hive_mcp.ops.observe import ObserveMiddleware
 from hive_mcp.ops.ratelimit import Limiter, RateLimiter, RateLimitMiddleware, Rule
@@ -169,21 +167,15 @@ def create_app(
     async def lifespan(_: MCPServer) -> AsyncIterator[None]:
         services = await services_factory(settings)
         holder["services"] = services
-        runner = asyncio.create_task(services.runner.run_forever()) if settings.run_jobs else None
-        background = start_loops(services, settings)
+        background = await start_background(
+            settings, services, services_factory, default_factory=build_services
+        )
         lifecycle.mark_ready()
         try:
             yield
         finally:
             lifecycle.start_draining()
-            if runner:
-                runner.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await runner
-            for task in background:
-                task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await task
+            await background.stop()
             holder.pop("services", None)
             await services.close()
             if on_stop:

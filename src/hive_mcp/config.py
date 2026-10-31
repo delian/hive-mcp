@@ -113,6 +113,9 @@ class Settings(ExtrasSettings):
     ocr_languages: str = "eng"  # Tesseract codes joined with +, e.g. eng+deu
     ocr_max_pages: int = Field(default=50, ge=1, le=500)  # pages OCR may read in one document
     run_jobs: bool = True  # run the background job runner inside the server process
+    # run the runner and the other background loops in a thread of their own (own event loop,
+    # own storage connections) instead of on the request loop; see docs/SIZING.md
+    background_thread: bool = False
     # Interactive sign-in (claude.ai, ChatGPT, Gemini) via Google Workspace; needs id and secret.
     google_client_id: str | None = None
     google_client_secret: SecretStr | None = None

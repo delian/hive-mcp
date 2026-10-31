@@ -1092,6 +1092,7 @@ Cross-field validation (all at startup, failing the process with a clear message
 | `HIVE_OCR_LANGUAGES` | str | 'eng' |  | Tesseract language codes joined by `+`. |
 | `HIVE_OCR_MAX_PAGES` | int | 50 | ge=1 le=500 | Pages OCR may read per document. |
 | `HIVE_RUN_JOBS` | bool | True |  | Run the job runner and connector loop in this process. |
+| `HIVE_BACKGROUND_THREAD` | bool | False |  | Run the job runner and the other background loops in a thread of their own (own event loop, own storage connections) instead of on the request loop; falls back to the request loop if the thread cannot start. |
 | `HIVE_GOOGLE_CLIENT_ID` | str | None | None |  | IdP client id (historical name; any provider). |
 | `HIVE_GOOGLE_CLIENT_SECRET` | SecretStr | None | None |  | IdP client secret. |
 | `HIVE_GOOGLE_ISSUER` | str | 'https://accounts.google.com' |  | Issuer for provider `oidc`. |

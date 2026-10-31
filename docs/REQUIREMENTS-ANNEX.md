@@ -1049,6 +1049,7 @@ Cross-field validation (all at startup, failing the process with a clear message
 | `HIVE_RERANKER` | str | 'none' | `none` or `onnx` | `none` or `onnx`. |
 | `HIVE_RERANK_MODEL` | str | 'ms-marco-minilm-l6-int8' |  | Pinned reranker name. |
 | `HIVE_RERANK_DEPTH` | int | 15 | ge=1 le=50 | Candidates re-scored. |
+| `HIVE_SQLITE_READERS` | int | 4 | 0-32 | Read-only SQLite connections beside the single writer (embedded profile); 0 sends reads through the writer. |
 | `HIVE_VECTOR_STORE` | Literal['default', 'lancedb'] | 'default' | `lancedb` is refused with the external profile | `default` (SQLite/pgvector) or `lancedb` (embedded only). |
 | `HIVE_EMBEDDING_MODEL` | str | 'bge-small-en-v1.5-int8' |  | onnx: pinned model name; openai: model id. |
 | `HIVE_MODELS_DIR` | Path | None | None |  | Model files directory (default `<data_dir>/models`; image: `/models`). |

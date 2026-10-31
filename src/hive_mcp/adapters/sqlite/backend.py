@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from hive_mcp.adapters.fs.blobs import FsBlobs
 from hive_mcp.adapters.sqlite.audit import SqliteAudit
-from hive_mcp.adapters.sqlite.db import BUSY_SECONDS, Database
+from hive_mcp.adapters.sqlite.db import BUSY_SECONDS, READERS, Database
 from hive_mcp.adapters.sqlite.edges import SqliteEdges
 from hive_mcp.adapters.sqlite.history import SqliteHistory
 from hive_mcp.adapters.sqlite.items import SqliteItems
@@ -30,11 +30,12 @@ class SqliteBackend:
         clock: Clock | None = None,
         busy_seconds: float = BUSY_SECONDS,
         vectors: VectorIndex | None = None,
+        readers: int = READERS,
     ) -> None:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.clock: Clock = clock or FixedClock()
-        self.db = Database(self.root / "hive.db", busy_seconds)
+        self.db = Database(self.root / "hive.db", busy_seconds, readers)
         self.items = SqliteItems(self.db, self.clock)
         self.text = SqliteText(self.db)
         self.vectors: VectorIndex = vectors or SqliteVectors(self.db)  # derived data: swappable

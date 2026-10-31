@@ -122,7 +122,12 @@ async def build_services(settings: Settings) -> Services:
     clock = SystemClock()
     backend: Backend
     if settings.profile is Profile.EMBEDDED:
-        backend = SqliteBackend(settings.data_dir, clock, vectors=_vector_store(settings))
+        backend = SqliteBackend(
+            settings.data_dir,
+            clock,
+            vectors=_vector_store(settings),
+            readers=settings.sqlite_readers,
+        )
     else:
         if settings.vector_store != "default":
             raise ValidationError(

@@ -145,8 +145,22 @@ Seconds, from the `hive backup` / `hive restore` code paths (`create_backup`, `v
 Searchable text and vectors are written inline with the note, so **no indexing backlog builds up**; the job queue held
 only promotion work (apply and notification jobs). During the mixed runs it peaked at 3 to 30 open jobs with the oldest due
 job 0.5 to 3 s old. The exception is saturation: with 24 never-pausing clients on SQLite at 5k notes up to **151 jobs were
-queued and the oldest waited 19 s**, because the job runner shares the server's single event loop with the requests. It
-drained within seconds once the clients paused. `/metrics` (needs `HIVE_METRICS_TOKEN`) computes vector coverage when
+queued and the oldest waited 19 s**, before the single-reader change and the faster vector scan (see below). It drained within
+seconds once the clients paused.
+
+**The background thread** (`HIVE_BACKGROUND_THREAD=true`) runs the job runner and the other loops on an event loop and
+storage connections of their own. Measured at 5k notes, 24 saturating agents, one reader, two runs each (4 vCPU, other work
+nearly idle but not controlled):
+
+| Background thread | Calls/s | Search p50 | Peak open jobs | Oldest due job | Server RSS / threads |
+|---|---|---|---|---|---|
+| off (default) | 121 and 112 | 230 and 243 ms | 37 and 30 | 2.7 and 1.7 s | 177 to 184 MB / 12 |
+| on | 115 and 107 | 237 and 255 ms | 18 and 18 | 0.95 and 0.56 s | 184 to 190 MB / 21 |
+
+It roughly halves the backlog and its age, for about 5% fewer calls per second and a second set of storage connections
+(~8 MB). It does not give the jobs a core of their own: it is one process, so the interpreter lock is shared. It stays
+off by default; turn it on when heavy background work (connectors, bulk folder imports, group sync) should not queue behind
+requests. If the thread cannot start, the server logs it and runs the jobs on the request loop. `/metrics` (needs `HIVE_METRICS_TOKEN`) computes vector coverage when
 scraped: 26 to 35 ms idle, up to 0.2 to 1.0 s under saturation at 20k to 50k; scrape no more often than every 15 s.
 
 ### The real embedding model and LanceDB
@@ -242,6 +256,5 @@ Fixed (each has a regression test in `tests/regression/test_bug_load_*.py`):
   calls/s at 50k (55 vs 33 at 20k).
 - LanceDB kept every table version for 7 days: 3.5 GB of disk for 20k notes.
 
-Open: the vector scan and every other query share one SQLite connection (a single large search blocks a `kb_get`);
-`kb_list_promotions` reads each pending request's note one query at a time (up to 100); `hive backup` omits `lance/`;
-the job runner is starved while the server is saturated.
+Open: a saturated SQLite server is limited by the CPU cost of the exact vector scan (more read connections do not help);
+`kb_list_promotions` reads each pending request's note one query at a time (up to 100); `hive backup` omits `lance/`.

@@ -70,7 +70,7 @@ worker, cache or scheduler service to deploy.
 | Health / metrics | `ops/health.py`, `ops/metrics.py` | `/healthz`, `/readyz`, `/metrics` (optional token) |
 | Middleware | outermost `ObserveMiddleware` (request ids, metrics, JSON logs), then `RateLimitMiddleware` | rate rules per path family and per token |
 
-The lifespan creates the `Services` container (`bootstrap.py`), starts the job runner and the background loops, and marks
+The lifespan creates the `Services` container (`bootstrap.py`), starts the job runner and the background loops (on the request loop, or with `HIVE_BACKGROUND_THREAD` in a thread of their own with their own storage connections, `ops/background.py`), and marks
 the process ready.
 
 ### 3.2 Background work (all in-process)

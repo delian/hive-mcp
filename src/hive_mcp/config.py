@@ -49,6 +49,9 @@ class Settings(ExtrasSettings):
     vector_store: Literal["default", "lancedb"] = "default"
     # read-only SQLite connections beside the writer (embedded profile); 0 = reads share the writer
     sqlite_readers: int = Field(default=1, ge=0, le=32)
+    # the vectors of the embedded profile kept in memory for exact, much faster search: the cap in
+    # MiB for one model's matrix (about 1.5 KB per chunk); above it the database is scanned instead
+    vector_cache_mb: int = Field(default=512, ge=0)
     embedding_model: str = "bge-small-en-v1.5-int8"  # onnx: pinned model name; openai: model id
     models_dir: Path | None = None  # onnx model files; default: <data_dir>/models
     embedding_url: str | None = None  # openai: full .../embeddings URL

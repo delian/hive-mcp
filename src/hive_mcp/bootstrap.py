@@ -127,6 +127,7 @@ async def build_services(settings: Settings) -> Services:
             clock,
             vectors=_vector_store(settings),
             readers=settings.sqlite_readers,
+            vector_cache_mb=settings.vector_cache_mb,
         )
     else:
         if settings.vector_store != "default":

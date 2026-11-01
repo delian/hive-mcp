@@ -31,7 +31,7 @@ async def backend(request: pytest.FixtureRequest, tmp_path: Path) -> AsyncIterat
     if request.param == "memory":
         yield MemoryBackend()
     elif request.param == "sqlite":
-        sqlite = SqliteBackend(tmp_path / "data")
+        sqlite = SqliteBackend(tmp_path / "data", vector_cache_mb=512)  # the production default
         yield sqlite
         sqlite.close()
     else:

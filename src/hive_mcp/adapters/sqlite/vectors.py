@@ -11,6 +11,7 @@ import numpy as np
 
 from hive_mcp.adapters.sqlite.acl import acl_where
 from hive_mcp.adapters.sqlite.codec import acl_params
+from hive_mcp.adapters.sqlite.vector_cache import VectorCache, trim_log
 from hive_mcp.domain.errors import ValidationError
 from hive_mcp.domain.item import Hit
 from hive_mcp.search.vectors import unit
@@ -33,8 +34,9 @@ def _model_dim(conn: sqlite3.Connection, model_id: str) -> int | None:
 
 
 class SqliteVectors:
-    def __init__(self, db: Database) -> None:
+    def __init__(self, db: Database, cache_mb: int = 0) -> None:
         self._db = db
+        self._cache = VectorCache(cache_mb)
 
     async def replace(
         self, item_id: str, model_id: str, acl: Acl, vectors: Sequence[NDArray[np.float32]]
@@ -62,6 +64,7 @@ class SqliteVectors:
                     for i, m in enumerate(mats)
                 ],
             )
+            trim_log(conn)
 
         await self._db.run(tx, write=True)
 
@@ -77,6 +80,9 @@ class SqliteVectors:
                 return []
             if q.shape[0] != dim:
                 raise ValidationError(f"model {model_id} has dimension {dim}, got {q.shape[0]}")
+            fast = self._cache.search(conn, flt, model_id, dim, q, limit)
+            if fast is not None:  # the matrix answered, exactly as the scan below would
+                return [Hit(item, score, ordinal) for item, score, ordinal in fast]
             cur = conn.cursor()
             cur.row_factory = (
                 None  # plain tuples: a scan reads every row of the access-filtered set
@@ -112,6 +118,7 @@ class SqliteVectors:
                 "UPDATE vec_chunks SET org_id=?, scope_level=?, scope_owner=?, visibility=? WHERE item_id=?",
                 (*acl_params(acl), item_id),
             )
+            trim_log(conn)
 
         await self._db.run(tx, write=True)
 
@@ -135,11 +142,16 @@ class SqliteVectors:
             ).fetchone()
             conn.execute("DELETE FROM vec_chunks WHERE model_id = ?", (model_id,))
             conn.execute("DELETE FROM vec_models WHERE model_id = ?", (model_id,))
+            trim_log(conn)
             return int(row[0])
 
-        return await self._db.run(tx, write=True)
+        count = await self._db.run(tx, write=True)
+        self._cache.forget(model_id)
+        return count
 
     async def delete(self, item_id: str) -> None:
-        await self._db.run(
-            lambda c: c.execute("DELETE FROM vec_chunks WHERE item_id = ?", (item_id,)), write=True
-        )
+        def tx(conn: sqlite3.Connection) -> None:
+            conn.execute("DELETE FROM vec_chunks WHERE item_id = ?", (item_id,))
+            trim_log(conn)
+
+        await self._db.run(tx, write=True)

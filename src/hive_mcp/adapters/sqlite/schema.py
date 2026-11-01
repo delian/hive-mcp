@@ -95,6 +95,15 @@ MIGRATIONS = [
         PRIMARY KEY (item_id, revision)
     );
     """,
+    # A change log of the vectors, written by triggers so that every writer is recorded (this
+    # process, its background thread, a CLI import, a cascade): readers that keep the vectors in
+    # memory ask "what changed since seq N" instead of rescanning. One statement per line.
+    """
+    CREATE TABLE vec_log (seq INTEGER PRIMARY KEY AUTOINCREMENT, item_id TEXT NOT NULL, model_id TEXT NOT NULL);
+    CREATE TRIGGER vec_chunks_logged_insert AFTER INSERT ON vec_chunks BEGIN INSERT INTO vec_log (item_id, model_id) VALUES (new.item_id, new.model_id); END;
+    CREATE TRIGGER vec_chunks_logged_update AFTER UPDATE ON vec_chunks BEGIN INSERT INTO vec_log (item_id, model_id) VALUES (new.item_id, new.model_id); END;
+    CREATE TRIGGER vec_chunks_logged_delete AFTER DELETE ON vec_chunks BEGIN INSERT INTO vec_log (item_id, model_id) VALUES (old.item_id, old.model_id); END;
+    """,
 ]
 
 

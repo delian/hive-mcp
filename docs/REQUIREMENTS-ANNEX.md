@@ -1049,6 +1049,7 @@ Cross-field validation (all at startup, failing the process with a clear message
 | `HIVE_RERANKER` | str | 'none' | `none` or `onnx` | `none` or `onnx`. |
 | `HIVE_RERANK_MODEL` | str | 'ms-marco-minilm-l6-int8' |  | Pinned reranker name. |
 | `HIVE_RERANK_DEPTH` | int | 15 | ge=1 le=50 | Candidates re-scored. |
+| `HIVE_VECTOR_CACHE_MB` | int | 512 | ge=0 | Embedded profile: the cap in MiB for one model's in-memory vector matrix (about 1.5 KB per chunk at 384 dimensions); above it the database is scanned instead; 0 turns the cache off. |
 | `HIVE_SQLITE_READERS` | int | 1 | 0-32 | Read-only SQLite connections beside the single writer (embedded profile); 0 sends reads through the writer. More than 1 only pays when cores are idle and reads are cheap (see docs/SIZING.md). |
 | `HIVE_VECTOR_STORE` | Literal['default', 'lancedb'] | 'default' | `lancedb` is refused with the external profile | `default` (SQLite/pgvector) or `lancedb` (embedded only). |
 | `HIVE_EMBEDDING_MODEL` | str | 'bge-small-en-v1.5-int8' |  | onnx: pinned model name; openai: model id. |
@@ -1721,6 +1722,9 @@ CREATE TABLE vec_chunks (
     vec BLOB NOT NULL, PRIMARY KEY (item_id, model_id, ord)
 );
 CREATE INDEX vec_chunks_model ON vec_chunks (model_id, org_id);
+CREATE TABLE vec_log (seq INTEGER PRIMARY KEY AUTOINCREMENT, item_id TEXT NOT NULL, model_id TEXT NOT NULL);
+-- AFTER INSERT / UPDATE / DELETE triggers on vec_chunks each add (item_id, model_id) to vec_log;
+-- writers trim it to the newest 50,000 entries; readers use it to patch their in-memory matrix
 CREATE TABLE jobs (
     seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, org_id TEXT NOT NULL,
     kind TEXT NOT NULL, payload TEXT NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL,

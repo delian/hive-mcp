@@ -150,7 +150,7 @@ approval  :  ADMIN anywhere in the org; MEMBER+ only for scopes listed in `appro
 ### 6.1 Ports
 
 `ItemRepository` (CRUD with optimistic revisions, idempotency, access-filtered reads, system reads for jobs), `TextIndex`,
-`VectorIndex`, `JobQueue`, `AuditLog`, `KeyValueStore` (put, put_if_absent, get, take, delete, purge_expired),
+`VectorIndex`, `JobQueue`, `AuditLog`, `KeyValueStore` (put, put_if_absent, get, take, delete, scan, purge_expired),
 `BlobStore` (content-addressed per org), `EdgeRepository`, `ItemHistory`, `PromotionStore`, `Maintenance` (purge, erase a
 person, set status), `Embedder`, `Reranker`, `Notifier`.
 

@@ -24,13 +24,15 @@ if TYPE_CHECKING:
 
 
 class SqliteBackend:
-    def __init__(
+    def __init__(  # noqa: PLR0913 - explicit options
         self,
         root: Path | str,
         clock: Clock | None = None,
         busy_seconds: float = BUSY_SECONDS,
         vectors: VectorIndex | None = None,
+        *,
         readers: int = READERS,
+        vector_cache_mb: int = 0,
     ) -> None:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
@@ -38,7 +40,9 @@ class SqliteBackend:
         self.db = Database(self.root / "hive.db", busy_seconds, readers)
         self.items = SqliteItems(self.db, self.clock)
         self.text = SqliteText(self.db)
-        self.vectors: VectorIndex = vectors or SqliteVectors(self.db)  # derived data: swappable
+        self.vectors: VectorIndex = vectors or SqliteVectors(
+            self.db, vector_cache_mb
+        )  # derived data: swappable
         self.jobs = SqliteJobs(self.db, self.clock)
         self.audit = SqliteAudit(self.db)
         self.kv = SqliteKv(self.db, self.clock)

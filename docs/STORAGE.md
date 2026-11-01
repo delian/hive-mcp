@@ -10,7 +10,7 @@ in `tests/conformance/conftest.py` and run `uv run pytest tests/conformance`.
 |---|---|
 | `ItemRepository` | System of record: create (idempotent), get, get_many, update (optimistic revision), relocate (promotion), list (keyset pages) |
 | `TextIndex` | Keyword search, BM25-style, Unicode case-insensitive, one hit per item |
-| `VectorIndex` | Cosine search per embedding model; `replace` swaps all chunks of an item atomically |
+| `VectorIndex` | Cosine search per embedding model; `replace` swaps all chunks of an item atomically. On SQLite the vectors are also held in one in-memory matrix per model (`HIVE_VECTOR_CACHE_MB`, default 512), kept in step with every writer through the `vec_log` change log |
 | `BlobStore` | Content-addressed files, namespaced per org |
 | `JobQueue` | Durable jobs with leases, fenced completion, retries and a dead state |
 | `AuditLog` | Append-only events with a per-store sequence number |

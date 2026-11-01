@@ -7,7 +7,7 @@ Read the [caveats](#caveats-read-these-first) before quoting a number.
 
 | Question | Answer |
 |---|---|
-| How many notes on the default embedded profile (SQLite)? | **Comfortable to ~10k notes; fine to 50k only while few agents search at once.** A search reads every vector the caller may see, so its cost is linear: about **1.4 ms per 1,000 notes** (14 ms at 5k, 34 ms at 20k, 75 ms at 50k, one client alone). |
+| How many notes on the default embedded profile (SQLite)? | **Comfortable to ~10k notes; fine to 50k only while few agents search at once.** Without the in-memory vector matrix a search reads every vector the caller may see, so its cost is linear: about **1.4 ms per 1,000 notes** (14 ms at 5k, 34 ms at 20k, 75 ms at 50k, one client alone); the matrix (default) makes the scan itself 50 to 70 times cheaper (table below) and the saturated 20k-note run 2.6 times faster. |
 | When to move to PostgreSQL? | Above **~20k notes with more than ~10 agents active at once**, above **~50k notes** at all, when you want more than one replica, or when you want point-in-time recovery. At 50k notes, 24 agents hammering the server get **~88 calls/s on PostgreSQL against ~27 on SQLite**. |
 | Memory? | Server process: **~140 MB at 5k, ~220 MB at 20k, ~350 MB at 50k** on SQLite (the page cache grows with the data); **~115 MB flat** with PostgreSQL (the database has its own memory). Add **~300 MB** for the real ONNX embedding model. No growth over time was found. |
 | Disk? | **~6 to 7 KB per note** including indexes (hashing embedder, 256 dimensions; the 384-dimension bge model adds roughly 1 to 2 KB). Backups: an archive is about a quarter of the SQLite file. |
@@ -72,6 +72,13 @@ Notes on the table:
 
 ### Where the first cliff is
 
+> **The tables below were measured before the in-memory vector matrix** (`HIVE_VECTOR_CACHE_MB=0` reproduces them). With the
+> matrix on, which is the default, the same saturated 20k-note run with 24 agents went from **59 to 154 calls/s** (two runs
+> each: 60 and 58 against 156 and 153), median search from 489 and 506 ms to 176 and 181 ms, `kb_get` from 85 and 97 to 47 ms,
+> `kb_remember` from 382 and 390 to 150 ms, server memory from 263 to 185 MB, still no errors. That is 2.6 times the
+> throughput, not the 50 to 70 times of the scan alone: once the scan is cheap, HTTP, JSON and the writes are the cost.
+> The cliff has moved, not vanished; re-measure with `scripts/loadtest.py` before relying on a size.
+
 **SQLite, at about 20k notes with many concurrent agents.** Search is an exact scan over the caller's access-filtered
 vectors, which is CPU work in the server process (numpy plus Python row handling), so searches compete with every other
 request for the same cores.
@@ -97,11 +104,11 @@ the setting. The cure for a saturated SQLite server is PostgreSQL, or fewer note
 **PostgreSQL has no cliff up to 50k notes** in these runs, but search still grows with size (17, 42, 61 ms at 10 calls/s,
 pgvector with an HNSW index plus the access filter). For 100k to 1M notes see [BENCHMARK](BENCHMARK.md) (ANN engines at scale).
 
-### Would an in-memory vector matrix scale? (measured, not built)
+### The in-memory vector matrix (built; how it scales)
 
-Today a SQLite search streams every visible vector out of the database and multiplies in Python batches. An alternative
-is one resident float32 matrix (one row per chunk) and a single matrix-vector product per search, with an access mask
-by row. `bench/vecmatrix.py` measured that on synthetic 384-dimension unit vectors (4 vCPU, nothing else running,
+Without the cache a SQLite search streams every visible vector out of the database and multiplies in Python batches.
+With it (`HIVE_VECTOR_CACHE_MB`, default 512) one resident float32 matrix per model (one row per chunk) answers with a
+single matrix-vector product and an access mask by row, and follows every writer through a trigger-fed change log. `bench/vecmatrix.py` measured that on synthetic 384-dimension unit vectors (4 vCPU, nothing else running,
 exact results, so search quality is unchanged). Large texts matter because every chunk (about 100 to 120 words) is a
 row: **one megabyte of text is roughly 1,500 chunks, about 2.4 MB of float32 vectors**, more than the text itself.
 
@@ -123,10 +130,15 @@ row: **one megabyte of text is roughly 1,500 chunks, about 2.4 MB of float32 vec
 - **What it costs:** RAM of 1.5 KB per chunk (float32; float16 halves it but numpy has no fast float16 product, so it
   would need a conversion per block); a rebuild while serving briefly holds two copies; a load of about one current search
   per start (about 2 s at 1M chunks).
-- **Not measured, and the real work:** keeping the matrix correct when another connection or process writes (the
-  background thread, a CLI import, another replica): that needs a change counter and delta loading, plus tombstones for
-  deletes and moves; the access rules must give the same visible set as the SQL filter; every model id and dimension
-  needs its own matrix.
+- **Staying correct (built and tested):** triggers on the vector table log every change by any connection, process or cascade;
+  a search reads the newest log number inside its read transaction and patches in only the items logged since (reloading when
+  more than 20% of the items changed or the trimmed log no longer reaches back); dead rows are squeezed out when they pass 25%;
+  the access mask is the same rule as the SQL filter, and `tests/adapters/test_sqlite_vector_cache.py` checks the answers
+  against the scan for random principals, limits and data. A model that does not fit the cap is searched in the database.
+- **What it does not change:** the first search after a start loads the model (about one old-style scan, 2 s at 1M chunks);
+  memory is 1.5 KB per chunk (the default cap of 512 MB holds about 330,000 chunks of 384 dimensions, or 100 MB of text; raise it
+  to hold more); and searches of one model take turns, which cost nothing measurable because the product is already
+  multi-threaded and memory-bound.
 - **Beyond about 2M chunks** (a 1.3 GB text corpus) use an approximate index: PostgreSQL with pgvector (about 4 to 6 ms
   at 1M chunks, [BENCHMARK](BENCHMARK.md)) or the LanceDB store.
 

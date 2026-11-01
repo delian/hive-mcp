@@ -121,13 +121,11 @@ class PromotionService:
             limit=limit,
             newest_first=newest_first,
         )
-        views = []
-        for promo in found:
-            item = None
-            if approver and promo.status is PromotionStatus.PENDING:
-                item = await self._items.get_system(principal.org_id, promo.item_id)
-            views.append(PromotionView(promo, item))
-        return views
+        review = [
+            p.item_id for p in found if approver and p.status is PromotionStatus.PENDING
+        ]  # approvers read what they review: one batched read, however many are pending
+        items = await self._items.get_many_system(principal.org_id, review) if review else {}
+        return [PromotionView(p, items.get(p.item_id)) for p in found]
 
     async def decide(
         self, principal: Principal, promotion_id: str, decision: Decision, note: str | None = None

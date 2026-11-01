@@ -80,6 +80,10 @@ class MemoryItems:
         item = self._items.get(item_id)
         return item if item and item.org_id == org_id else None
 
+    async def get_many_system(self, org_id: str, item_ids: Sequence[str]) -> dict[str, Item]:
+        found = {i: self._items.get(i) for i in dict.fromkeys(item_ids)}
+        return {i: item for i, item in found.items() if item is not None and item.org_id == org_id}
+
     async def list_ids_system(self, org_id: str, after: str | None, limit: int) -> list[str]:
         ids = sorted(i.id for i in self._items.values() if i.org_id == org_id)
         return [i for i in ids if after is None or i > after][:limit]

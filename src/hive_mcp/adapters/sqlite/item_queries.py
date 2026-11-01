@@ -39,6 +39,21 @@ def fetch_item(conn: sqlite3.Connection, item_id: str) -> Item | None:
     return row_to_item(row, load_tags(conn, [item_id])[item_id]) if row else None
 
 
+def fetch_items(conn: sqlite3.Connection, org_id: str, ids: Sequence[str]) -> dict[str, Item]:
+    """The org's items among `ids`, a few statements for any number of ids."""
+    wanted = list(dict.fromkeys(ids))
+    found: dict[str, Item] = {}
+    for lo in range(0, len(wanted), _CHUNK):
+        part = wanted[lo : lo + _CHUNK]
+        rows = conn.execute(
+            f"SELECT {ITEM_COLS} FROM items WHERE org_id = ? AND id IN ({','.join('?' * len(part))})",  # noqa: S608
+            [org_id, *part],
+        ).fetchall()
+        tags = load_tags(conn, [r["id"] for r in rows])
+        found.update({r["id"]: row_to_item(r, tags[r["id"]]) for r in rows})
+    return found
+
+
 def fetch_view(conn: sqlite3.Connection, flt: ScopeFilter, item_id: str) -> ItemView | None:
     """None for missing *and* invisible items (callers raise NotFound for both)."""
     item = fetch_item(conn, item_id)

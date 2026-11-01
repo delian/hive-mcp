@@ -515,7 +515,9 @@ access rules in the same operation (`sync_acl`), and the item is re-indexed when
 (REQ-EMB-05). Index entries never grant access on their own.
 *Accept:* after approval, a member of the target scope finds the item by keyword and by vector; a non-member does not.
 
-**REQ-ACC-13** MUST `[D]` **Approvers read what they review.** `kb_list_promotions` returns, for approvers and only for open
+**REQ-ACC-13** MUST `[D]` **Approvers read what they review.** `kb_list_promotions` reads all the pending requests' notes with one
+batched system read (`ItemRepository.get_many_system(org, ids)`: the org's items among the ids, absent when missing or foreign; no
+query per request) and returns, for approvers and only for open
 requests, the item title, body (at most 4,000 characters), scope and author, including for private items; this is audited.
 Everyone else sees only their own requests. `status` filter: `pending` (default), `approved`, `rejected`, `withdrawn`, `stale`,
 `all`; `mine=true` limits approvers to their own requests.

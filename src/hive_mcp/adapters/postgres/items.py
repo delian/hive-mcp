@@ -118,6 +118,17 @@ class PgItems:
             item = await fetch_item(conn, item_id)
         return item if item and item.org_id == org_id else None
 
+    async def get_many_system(self, org_id: str, item_ids: Sequence[str]) -> dict[str, Item]:
+        wanted = list(dict.fromkeys(item_ids))
+        if not wanted:
+            return {}
+        async with self._db.tx() as conn:
+            cur = await conn.execute(
+                f"SELECT {ITEM_COLS} FROM items WHERE org_id = %s AND id = ANY(%s)",  # noqa: S608
+                [org_id, wanted],
+            )
+            return {row["id"]: row_to_item(row) for row in await cur.fetchall()}
+
     async def list_ids_system(self, org_id: str, after: str | None, limit: int) -> list[str]:
         async with self._db.tx() as conn:
             cur = await conn.execute(

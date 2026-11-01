@@ -29,6 +29,6 @@ nothing here trusts identity from tool arguments.
   stale or wrong index can never reveal an item.
 - **Relevance floor.** Vector search always has nearest neighbours, so each embedder declares `min_similarity`; weaker hits are dropped.
 - **Indexes carry a copy of the access rules.** `move` updates both indexes (`sync_acl`). Index jobs read the current item with
-  `get_system(org_id, id)` and never delete anything for an item that is not found in the org.
+  `get_system(org_id, id)` (or `get_many_system(org_id, ids)` for many) and never delete anything for an item that is not found in the org.
 - **Embedding outages degrade gracefully.** The keyword index is written first; the item stays stored and a job retries the
   embedding; `consult` falls back to keyword search and says so in `notes`.

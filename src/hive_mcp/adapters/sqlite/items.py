@@ -8,7 +8,13 @@ from typing import TYPE_CHECKING
 from hive_mcp.adapters.sqlite.acl import acl_where
 from hive_mcp.adapters.sqlite.codec import item_params, ts
 from hive_mcp.adapters.sqlite.history import record_version
-from hive_mcp.adapters.sqlite.item_queries import fetch_item, fetch_view, list_page, load_tags
+from hive_mcp.adapters.sqlite.item_queries import (
+    fetch_item,
+    fetch_items,
+    fetch_view,
+    list_page,
+    load_tags,
+)
 from hive_mcp.domain import access
 from hive_mcp.domain.errors import (
     Conflict,
@@ -130,6 +136,9 @@ class SqliteItems:
             return item if item and item.org_id == org_id else None
 
         return await self._db.run(tx)
+
+    async def get_many_system(self, org_id: str, item_ids: Sequence[str]) -> dict[str, Item]:
+        return await self._db.run(lambda conn: fetch_items(conn, org_id, item_ids))
 
     async def list_ids_system(self, org_id: str, after: str | None, limit: int) -> list[str]:
         def tx(conn: sqlite3.Connection) -> list[str]:

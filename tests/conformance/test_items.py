@@ -305,3 +305,19 @@ async def test_browsing_can_order_by_last_change_with_a_stable_cursor(backend):
             break
         cursor = Cursor.decode(page.next_cursor)
     assert seen == [v.item.id for v in by_updated.items] and len(set(seen)) == 5
+
+
+async def test_get_many_system_returns_the_orgs_items_by_id_in_one_call(backend):
+    mine = []
+    for n in range(3):
+        item = make_item(backend.clock, ALICE, tags=frozenset({f"t{n}"}))
+        mine.append((await backend.items.create(ALICE, item)).item)
+    other = make_item(backend.clock, ZOE, scope=Scope(ScopeLevel.PROJECT, "p1"))
+    theirs = (await backend.items.create(ZOE, other)).item  # another organisation
+    ids = [mine[2].id, mine[0].id, "missing", theirs.id, mine[0].id, mine[1].id]
+    found = await backend.items.get_many_system("org1", ids)
+    assert set(found) == {m.id for m in mine}  # missing, foreign and repeated ids add nothing
+    assert all(found[m.id] == m for m in mine)  # whole items, tags included
+    assert await backend.items.get_many_system("org1", []) == {}
+    many = [f"nope{n}" for n in range(1500)] + [mine[1].id]  # more ids than a bound-variable limit
+    assert set(await backend.items.get_many_system("org1", many)) == {mine[1].id}

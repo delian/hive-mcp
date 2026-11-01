@@ -322,4 +322,4 @@ Fixed (each has a regression test in `tests/regression/test_bug_load_*.py`):
 - LanceDB kept every table version for 7 days: 3.5 GB of disk for 20k notes.
 
 Open: a saturated SQLite server is limited by the CPU cost of the exact vector scan (more read connections do not help);
-`kb_list_promotions` reads each pending request's note one query at a time (up to 100); `hive backup` omits `lance/`.
+`hive backup` omits `lance/`.

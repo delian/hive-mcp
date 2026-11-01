@@ -90,7 +90,7 @@ def duck_search(conn, source: str, fn: str, cast: str):  # noqa: ANN001, ANN201
         inner = (
             f"SELECT id FROM {source} {where} ORDER BY {fn}(emb, {lit(q)}::{cast}) DESC LIMIT 10"
         )
-        return [r[0] for r in conn.execute(f"SELECT id FROM duckdb.query($${inner}$$)")]
+        return [r[0] for r in conn.execute(f"SELECT r['id'] FROM duckdb.query($${inner}$$) r")]
 
     return search
 
@@ -169,8 +169,8 @@ def compare(n: int) -> dict:
         "pg_duckdb_heap_real_array": lambda conn: duck_search(
             conn, "chunks_arr", "list_inner_product", "FLOAT[]"
         ),
-        "pg_duckdb_parquet_fixed_array": lambda conn: duck_search(
-            conn, arr, "array_inner_product", f"FLOAT[{DIM}]"
+        "pg_duckdb_parquet_list": lambda conn: duck_search(
+            conn, arr, "list_inner_product", "FLOAT[]"
         ),
     }
     for name, make in candidates.items():

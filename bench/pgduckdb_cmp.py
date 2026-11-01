@@ -141,7 +141,7 @@ def build_tables(ds, c) -> dict:  # noqa: ANN001
         }
     )
     PARQUET.parent.mkdir(parents=True, exist_ok=True)
-    pq.write_table(table, PARQUET, compression="zstd", row_group_size=100_000)
+    pq.write_table(table, PARQUET, compression="none", row_group_size=100_000)
     PARQUET.chmod(0o644)
     out["parquet_s"] = round(time.perf_counter() - t, 1)
     size = lambda rel: round(
@@ -167,7 +167,7 @@ def compare(n: int) -> dict:
         "pgvector_hnsw": lambda conn: pgvector_search(conn, exact=False),
         "pgvector_exact": lambda conn: pgvector_search(conn, exact=True),
         "pg_duckdb_heap_real_array": lambda conn: duck_search(
-            conn, "chunks_arr", "list_inner_product", "FLOAT[]"
+            conn, "pgduckdb.public.chunks_arr", "list_inner_product", "FLOAT[]"
         ),
         "pg_duckdb_parquet_list": lambda conn: duck_search(
             conn, arr, "list_inner_product", "FLOAT[]"

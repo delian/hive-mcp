@@ -6,7 +6,7 @@
 - **Formats:** text and source code, markdown, HTML (scripts/styles dropped, headings kept), Word `.docx`
   (headings, paragraphs, tables), Excel `.xlsx` (every sheet in workbook order, rows as `a | b | c`, capped at
   20,000 rows per sheet), PowerPoint `.pptx` (slides, titles, speaker notes) and PDF (needs
-  `pip install hive-mcp[documents]`; encrypted PDFs are refused). The Office readers use only the standard
+  `uv sync --extra documents`; encrypted PDFs are refused). The Office readers use only the standard
   library and refuse zip/XML bombs (size caps, DTDs). Old binary `.doc/.xls/.ppt`, images and scans are refused with
   a message (no OCR: text in images is not read); nothing is stored for a refused file.
 - **Parts:** text longer than ~40 KB is split at headings, then paragraphs, into items titled `name (i/n)`.

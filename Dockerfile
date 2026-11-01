@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 # One image for local use and Azure. Build args:
-#   EXTRAS     optional dependency groups to install (default: all runtime extras)
+#   EXTRAS     uv extras to install (default: postgres, local-embeddings, documents). Add
+#              "--extra parquet" for `hive export --format parquet` (about +150 MB: pyarrow) and
+#              "--extra lancedb" for HIVE_VECTOR_STORE=lancedb
 #   PYTHON_IMAGE base image (e.g. a registry mirror)
 #   WITH_GIT   install git so `hive ingest-git` works in the container (default false)
 #   WITH_OCR   install Tesseract + Poppler so HIVE_OCR=true can read scans and images (+~80 MB)

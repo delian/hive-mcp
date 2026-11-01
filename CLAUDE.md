@@ -8,6 +8,10 @@
   If a change really affects no requirement, put a line `Requirements: none` in the commit message.
   CI runs `scripts/check_requirements.py`, and `tests/unit/test_docs_drift.py` checks the Annex lists every
   tool, setting and command.
+- **uv only.** Python, dependencies and tools are managed with uv (`pyproject.toml`, `uv.lock`, `.python-version`,
+  dependency groups, extras). No `requirements*.txt`, no `pip install`, `pipx` or `venv` in the repo or its docs
+  (`tests/unit/test_uv_only.py` enforces it); system packages (Postgres, Tesseract) are the only exception.
+  A new optional extra must be added to the `Dockerfile` default `EXTRAS` or named in that test as left out.
 - Before pushing: `uv run ruff format . && uv run ruff check . && uv run mypy src clients/hooks/src`,
   `uv run python scripts/check_file_size.py src clients/hooks/src`, and `uv run pytest`
   (`scripts/start_test_postgres.sh` first for the Postgres variants).

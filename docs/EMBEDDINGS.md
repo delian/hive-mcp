@@ -11,7 +11,7 @@ unindexed items. Vectors of the old model stay stored (and unused) until you rem
 | Value     | What                                   | Needs                                              |
 |-----------|----------------------------------------|----------------------------------------------------|
 | `hashing` | word-overlap only, no meaning          | nothing. Dev and tests only.                       |
-| `onnx`    | offline bge-small-en-v1.5 (int8, 384d) | `pip install hive-mcp[local-embeddings]`, `hive models fetch` |
+| `onnx`    | offline bge-small-en-v1.5 (int8, 384d) | `uv sync --extra local-embeddings` (or `uv tool install 'hive-mcp[local-embeddings]'`), `hive models fetch` |
 | `openai`  | any OpenAI-compatible `/embeddings`    | `HIVE_EMBEDDING_URL`, `HIVE_EMBEDDING_API_KEY`, `HIVE_EMBEDDING_MODEL`, `HIVE_EMBEDDING_DIM` |
 
 `hive models fetch` downloads pinned files and verifies SHA-256; nothing is downloaded at server

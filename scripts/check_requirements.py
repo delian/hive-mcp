@@ -5,7 +5,7 @@ rebuild it, so a change under `src/` or `clients/hooks/src/` has to touch one of
 that really alters no requirement (a refactor, a pure bug fix to documented behaviour) says so
 with a line `Requirements: none` in a commit message of the range.
 
-Usage: python scripts/check_requirements.py [base-commit]   (default: the parent of HEAD)
+Usage: uv run python scripts/check_requirements.py [base-commit]   (default: the parent of HEAD)
 """
 
 from __future__ import annotations

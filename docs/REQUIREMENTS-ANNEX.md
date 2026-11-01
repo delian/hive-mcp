@@ -1187,7 +1187,7 @@ Write an organisation's items and links as JSONL or Parquet for analytics (REQ-O
 |---|---|---|
 | `--org` | str,required | Organisation id. |
 | `--out` | path,required | Directory to create (absent or empty). |
-| `--format` | str, default=jsonl | `jsonl`, or `parquet` (needs `hive-mcp[parquet]`). |
+| `--format` | str, default=jsonl | `jsonl`, or `parquet` (needs the `parquet` extra: `uv sync --extra parquet`). |
 | `--include-private/--no-include-private` | flag, default off | Also export PRIVATE notes. |
 | `--include-archived` | flag, default off | Also export archived items. |
 | `--since` | str | ISO date/time: items changed (links created) on or after it. |
@@ -2050,7 +2050,7 @@ a healthcheck (`--interval=15s --timeout=3s --start-period=20s`) fetching `/heal
 | Build arg | Default | Effect |
 |---|---|---|
 | `PYTHON_IMAGE` | `python:3.12-slim` | base image / registry mirror |
-| `EXTRAS` | `--extra postgres --extra local-embeddings --extra documents` | optional dependency groups |
+| `EXTRAS` | `--extra postgres --extra local-embeddings --extra documents` | uv extras to install; add `--extra parquet` (about +150 MB) for `hive export --format parquet` and `--extra lancedb` for the LanceDB vector store |
 | `BAKE_MODEL` | `false` | download and verify the default embedder into the image |
 | `EXTRA_MODELS` | empty | more pinned model names to bake in |
 | `PG_CLIENT` | `true` | install `postgresql-client` (pg_dump/pg_restore) |
@@ -2078,7 +2078,7 @@ Both set `HIVE_FORWARDED_ALLOW_IPS=*`, `HIVE_PORT=8080`, `HIVE_PUBLIC_URL`, `HIV
 ### K.4 Scripts
 
 `scripts/smoke_docker.sh [image]` (start with a volume, mint a token, expect 401 without it, `tools/list` contains `kb_consult`, `kb_remember` returns `"indexed":true`, restart keeps data, `docker stop -t 20` exits 0); `scripts/smoke_single_container.sh [image]` (self-backup, replaced container restores, second instance refuses; `SMOKE_ARGS` adds `docker run` args); `scripts/azure_upgrade_single.sh <rg> <tag>` (scale to 0 so the final backup is taken, wait for no replicas, redeploy);
-`scripts/install_client.sh` (uv or pipx install then `hive-hooks init`); `scripts/start_test_postgres.sh` (local test Postgres); `scripts/mutation.sh`; `scripts/check_file_size.py`.
+`scripts/install_client.sh` (`uv tool install` then `hive-hooks init`); `scripts/start_test_postgres.sh` (local test Postgres); `scripts/mutation.sh`; `scripts/check_file_size.py`.
 
 ## L. CI and tests
 
@@ -2093,7 +2093,7 @@ Source paths: `slack/verify.py`, `security/injection.py`, `domain/retention.py`,
 
 ### L.3 Test suites
 
-`unit`, `conformance` (items, text, vectors, jobs, audit, blobs, kv, edges, history, promotions, maintenance, robustness, regression for vector dimensions, Lance vectors), `adapters` (SQLite, Postgres, replicas), `services`, `security`, `integration` (app, backup, CLI ingest, drain, git ingest, MCP end-to-end, OAuth flow with a fake Google, protocols, sigterm, single container), `integrations`, `ops`, `connectors`, `slack`, `teams`, `webui`, `client`, `embeddings`, `fuzz`, `hardening`, `regression`, `stress`. Pytest config: `asyncio_mode=auto`, `timeout=60`, `testpaths=["tests"]`, `addopts=--cov=hive_mcp --cov-report=term-missing`, marker `stress`.
+`unit` (including `test_uv_only.py`: uv only, and the image knows every extra), `conformance` (items, text, vectors, jobs, audit, blobs, kv, edges, history, promotions, maintenance, robustness, regression for vector dimensions, Lance vectors), `adapters` (SQLite, Postgres, replicas), `services`, `security`, `integration` (app, backup, CLI ingest, drain, git ingest, MCP end-to-end, OAuth flow with a fake Google, protocols, sigterm, single container), `integrations`, `ops`, `connectors`, `slack`, `teams`, `webui`, `client`, `embeddings`, `fuzz`, `hardening`, `regression`, `stress`. Pytest config: `asyncio_mode=auto`, `timeout=60`, `testpaths=["tests"]`, `addopts=--cov=hive_mcp --cov-report=term-missing`, marker `stress`.
 
 ## M. Benchmarks and evaluation data
 

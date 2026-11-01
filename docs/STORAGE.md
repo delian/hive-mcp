@@ -65,7 +65,7 @@ a job de-duplication race that one burst of requests missed) were fixed by sharp
 
 ### Postgres specifics
 - Needs the `vector` extension (pgvector 0.8+). Migrations create it if the role may; on managed services allow-list it first
-  (Azure Database for PostgreSQL: `azure.extensions`). Install the client with `pip install hive-mcp[postgres]`.
+  (Azure Database for PostgreSQL: `azure.extensions`). Install the client with `uv sync --extra postgres`.
 - Migrations run in one transaction under an advisory lock, so several app instances can start together; a database from a newer
   version is refused.
 - Writes lock only rows the caller can see (`FOR UPDATE` after the ACL filter), so users cannot stall each other's invisible items.

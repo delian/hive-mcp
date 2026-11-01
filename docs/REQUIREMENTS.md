@@ -302,6 +302,10 @@ Produces: REQ-ACC-18 (foreign-note tools), `ops/pgclient.py` (REQ-OPS-04), `hive
 
 **U50** - 2026-11-01 - *"add a short rule in CLAUDED.md, ci check too, no regeneration trial"* (`CLAUDED.md` read as `CLAUDE.md`). Produces REQ-CI-11, `CLAUDE.md` and `scripts/check_requirements.py`; no regeneration trial was made.
 
+**U51** - 2026-11-01 - *"can you make everything and every dependency / tools in this project to be managed with uv and uv venv, if you haven't already? I don't want separate requirements.txt - only uv"* The project already used uv; the leftovers (a pipx fallback, `pip install` in documents and one error message, a system `python3` in one CI job) were removed. Produces REQ-TECH-11.
+
+**U52** - 2026-11-01 - *"separately - you do keep up to date Dockerfile?"* The assistant checked: the image built on every push but had not been audited against new features; the `parquet` extra was missing. Produces REQ-TECH-12.
+
 ### 2.3 Go-ahead lists in one table (what each number meant)
 
 | Message | Numbers | What they mean (the assistant's list at that moment) |
@@ -1562,6 +1566,12 @@ Decisions: Postgres + pgvector (`halfvec`, HNSW m=32, ef_construction=200) is th
 ## 5. Technology and packaging constraints
 
 **REQ-TECH-01** MUST `[U2]` **Language and tooling.** Python (>= 3.12; `.python-version` 3.12), managed with **uv** (lockfile `uv.lock` committed; the user confirmed that code, dependencies and environment are managed by uv, ledger U39), `src/` layout, `pyproject.toml` only, ruff, mypy strict, pytest, pre-commit.
+
+**REQ-TECH-11** MUST `[U51]` **uv only.** Python, dependencies and tools are managed with uv alone: `pyproject.toml`, `uv.lock`, `.python-version`, extras and dependency groups (`dev`, `bench`, `mutation`); commands run as `uv run ...`, installs as `uv sync [--extra X]` or `uv tool install`. There is no `requirements*.txt`, `Pipfile`, `setup.py` or similar, and no `pip install`, `pipx` or hand-made `venv` in scripts, CI, the Dockerfile, code messages or documentation (`uv pip` is allowed). System packages (PostgreSQL, Tesseract, Poppler) are the only exception. `tests/unit/test_uv_only.py` fails on any such file or text outside the history documents.
+*Accept:* the test passes on the repository and fails when a `requirements.txt` or a `pip install` line is added.
+
+**REQ-TECH-12** MUST `[U52]` **The image knows every extra.** Every optional extra of `pyproject.toml` is either in the Dockerfile's default `EXTRAS` (now postgres, local-embeddings, documents) or named as left out on purpose (now lancedb and parquet, because of size; build with `--build-arg EXTRAS=...`); `tests/unit/test_uv_only.py` fails when a new extra is neither. The `hive export --format parquet` error names the uv commands.
+*Accept:* adding an extra to `pyproject.toml` without deciding for the image fails the test.
 
 **REQ-TECH-02** MUST `[D]` **uv workspace with two distributions.** Root package `hive-mcp` (module `hive_mcp`, command `hive` -> `hive_mcp.cli:main`, build backend `uv_build`) and workspace member `clients/hooks` = `hive-hooks` (module `hive_hooks`, command `hive-hooks` -> `hive_hooks.cli:main`); `hive-hooks` is a dependency of `hive-mcp` (workspace source). Versions are kept equal (0.1.0 at the time of writing).
 

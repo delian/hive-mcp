@@ -210,7 +210,7 @@ in the audit trail with a random alias; her tokens stop working at once if she i
 ### 7.9a Analysis in a notebook or warehouse
 `hive export --org acme --out ./dump --pseudonymise` writes `items`, `edges` and a `manifest.json` (counts, flags, SHA-256 of each
 file). Shared notes only: private ones need `--include-private`, archived ones `--include-archived`. `--format parquet` needs
-`pip install 'hive-mcp[parquet]'`. The files are mode 0600 in a 0700 directory; text is exported as stored (secrets already masked).
+`uv sync --extra parquet` (in the container image: build with `--build-arg EXTRAS="--extra postgres --extra local-embeddings --extra documents --extra parquet"`). The files are mode 0600 in a 0700 directory; text is exported as stored (secrets already masked).
 
 ### 7.10 Moving up from SQLite to PostgreSQL
 Stop the server, `hive backup`, then `hive migrate to-postgres --embedded` (inside the Postgres image) or `--database-url ...`.

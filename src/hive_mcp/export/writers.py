@@ -83,8 +83,8 @@ def _pyarrow() -> tuple[Any, Any]:
         import pyarrow.parquet as pq  # noqa: PLC0415
     except ImportError as exc:
         raise ValidationError(
-            "--format parquet needs pyarrow: install it with `pip install 'hive-mcp[parquet]'`"
-            " (or use --format jsonl)"
+            "--format parquet needs pyarrow: add the extra with `uv sync --extra parquet`"
+            " (a checkout) or `uv tool install 'hive-mcp[parquet]'`, or use --format jsonl"
         ) from exc
     return pa, pq
 

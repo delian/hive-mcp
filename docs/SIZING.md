@@ -97,6 +97,39 @@ the setting. The cure for a saturated SQLite server is PostgreSQL, or fewer note
 **PostgreSQL has no cliff up to 50k notes** in these runs, but search still grows with size (17, 42, 61 ms at 10 calls/s,
 pgvector with an HNSW index plus the access filter). For 100k to 1M notes see [BENCHMARK](BENCHMARK.md) (ANN engines at scale).
 
+### Would an in-memory vector matrix scale? (measured, not built)
+
+Today a SQLite search streams every visible vector out of the database and multiplies in Python batches. An alternative
+is one resident float32 matrix (one row per chunk) and a single matrix-vector product per search, with an access mask
+by row. `bench/vecmatrix.py` measured that on synthetic 384-dimension unit vectors (4 vCPU, nothing else running,
+exact results, so search quality is unchanged). Large texts matter because every chunk (about 100 to 120 words) is a
+row: **one megabyte of text is roughly 1,500 chunks, about 2.4 MB of float32 vectors**, more than the text itself.
+
+| Chunks (text) | Matrix RAM (float32) | Full scan p50 | Visible set 3% | Visible set 0.3% | Searches per second, 1 / 4 at once |
+|---|---|---|---|---|---|
+| 100k (~65 MB) | 0.15 GB | 2 ms | 0.9 ms | 0.0 ms | 441 / 332 |
+| 500k (~330 MB) | 0.77 GB | 16 ms | 3.3 ms | 0.4 ms | 61 / 42 |
+| 1M (~650 MB) | 1.5 GB | 27 ms | 7.9 ms | 0.7 ms | 37 / 22 |
+| 2M (~1.3 GB) | 3.1 GB | 76 ms | 20 ms | 1.6 ms | 12 / 10 |
+
+- **Against today:** the current scan costs about 1.4 ms per 1,000 chunks, so 100k chunks take ~140 ms and 1M take
+  ~1.4 s; the matrix is 50 to 70 times faster at the same size.
+- **It scales to about 1M chunks (650 MB of text) comfortably and to 2M (1.3 GB of text) with a 76 ms worst case.**
+  Cost is linear and bound by memory bandwidth, not by Python: more threads do not add throughput (the product is
+  already multi-threaded and memory-bound), so a saturated server tops out near 40 searches per second at 1M chunks.
+- **Selecting rows by index (a gather) is only worth it for small visible sets.** At 30% visible the gather took 122 ms
+  at 1M chunks against 27 ms for scanning everything and masking: use the gather below about 5% visible and the full
+  scan above it.
+- **What it costs:** RAM of 1.5 KB per chunk (float32; float16 halves it but numpy has no fast float16 product, so it
+  would need a conversion per block); a rebuild while serving briefly holds two copies; a load of about one current search
+  per start (about 2 s at 1M chunks).
+- **Not measured, and the real work:** keeping the matrix correct when another connection or process writes (the
+  background thread, a CLI import, another replica): that needs a change counter and delta loading, plus tombstones for
+  deletes and moves; the access rules must give the same visible set as the SQL filter; every model id and dimension
+  needs its own matrix.
+- **Beyond about 2M chunks** (a 1.3 GB text corpus) use an approximate index: PostgreSQL with pgvector (about 4 to 6 ms
+  at 1M chunks, [BENCHMARK](BENCHMARK.md)) or the LanceDB store.
+
 ### Memory, threads, file descriptors
 
 | Notes | SQLite server RSS (after the saturated phase) | PostgreSQL profile: server RSS | PostgreSQL's own memory (PSS) |

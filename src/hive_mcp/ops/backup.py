@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 from hive_mcp import __version__
 from hive_mcp.config import Profile
 from hive_mcp.domain.errors import ValidationError
+from hive_mcp.ops import backup_lance
 from hive_mcp.ops.pgclient import check_client
 
 if TYPE_CHECKING:
@@ -41,6 +42,7 @@ class Summary:
     profile: str
     files: int
     bytes: int
+    notes: tuple[str, ...] = ()  # things the operator should know (e.g. an index not archived)
 
 
 def sha256_file(path: Path) -> str:
@@ -130,6 +132,10 @@ def create_backup(settings: Settings, dest: Path) -> Summary:
         if blobs.is_dir():
             for f in sorted(p for p in blobs.rglob("*") if _is_blob(p)):
                 members[f"blobs/{f.relative_to(blobs).as_posix()}"] = f
+        notes: list[str] = []
+        if settings.profile is Profile.EMBEDDED:
+            lance_members, notes = backup_lance.archive_members(settings.data_dir, stage)
+            members.update(lance_members)
         for name, path in _state_paths(settings).items():
             if path.is_file():  # rewritten while the server runs: archive one fixed copy
                 shutil.copy2(path, stage / f"state-{name}")
@@ -152,7 +158,7 @@ def create_backup(settings: Settings, dest: Path) -> Summary:
                 tar.add(path, arcname=name, recursive=False)
         partial.replace(dest)  # a half-written archive never has the final name
     total = sum(f["size"] for f in manifest["files"].values())  # type: ignore[attr-defined]
-    return Summary(dest, settings.profile.value, len(members), total)
+    return Summary(dest, settings.profile.value, len(members), total, tuple(notes))
 
 
 def _safe_extract(archive: Path, target: Path) -> dict[str, dict[str, object]]:
@@ -245,10 +251,11 @@ def restore_backup(settings: Settings, archive: Path, *, force: bool = False) ->
         blobs = data / "blobs"
         if (stage / "blobs").is_dir():
             shutil.copytree(stage / "blobs", blobs, dirs_exist_ok=True)
+        notes = backup_lance.restore_into(stage, data) if profile == Profile.EMBEDDED.value else []
         for name, path in _state_paths(settings).items():
             if (stage / "state" / name).is_file():
                 path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(stage / "state" / name, path)
                 path.chmod(0o600)
         total = sum(int(i["size"]) for i in files.values())  # type: ignore[call-overload]
-        return Summary(archive, profile, len(files), total)
+        return Summary(archive, profile, len(files), total, tuple(notes))

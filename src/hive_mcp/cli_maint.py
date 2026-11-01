@@ -82,6 +82,8 @@ def backup(
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(1) from exc
     typer.echo(f"wrote {summary.path} ({summary.files} files, {summary.bytes} bytes), verified")
+    for note in summary.notes:
+        typer.echo(f"warning: {note}", err=True)
 
 
 @app.command("backup-verify")
@@ -111,3 +113,5 @@ def restore(
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(1) from exc
     typer.echo(f"restored {summary.files} files from {archive.name}; start the server again")
+    for note in summary.notes:
+        typer.echo(f"warning: {note}", err=True)

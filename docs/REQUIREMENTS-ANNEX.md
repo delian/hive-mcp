@@ -2093,6 +2093,8 @@ Source paths: `slack/verify.py`, `security/injection.py`, `domain/retention.py`,
 
 ### L.3 Test suites
 
+The `dev` dependency group includes `lancedb` and `pyarrow`, so the Lance vector-store, Lance backup and Parquet export tests run in CI instead of being skipped.
+
 `unit` (including `test_uv_only.py`: uv only, and the image knows every extra), `conformance` (items, text, vectors, jobs, audit, blobs, kv, edges, history, promotions, maintenance, robustness, regression for vector dimensions, Lance vectors), `adapters` (SQLite, Postgres, replicas), `services`, `security`, `integration` (app, backup, CLI ingest, drain, git ingest, MCP end-to-end, OAuth flow with a fake Google, protocols, sigterm, single container), `integrations`, `ops`, `connectors`, `slack`, `teams`, `webui`, `client`, `embeddings`, `fuzz`, `hardening`, `regression`, `stress`. Pytest config: `asyncio_mode=auto`, `timeout=60`, `testpaths=["tests"]`, `addopts=--cov=hive_mcp --cov-report=term-missing`, marker `stress`.
 
 ## M. Benchmarks and evaluation data
@@ -2112,7 +2114,7 @@ Assist evaluation (U40): contradictions heuristic precision 0.57 / recall 0.67 (
 
 ## N. Protocols: backup archive, lease, hand-off, migration
 
-**Archive** (`.tar.gz`): `manifest.json` = `{"format":1,"created_at":iso,"software":version,"profile":"embedded|external","files":{<member>:{"sha256":hex,"size":n}}}`; members `db/hive.db` or `db/hive.pgdump` (custom format), `blobs/<org hex>/<aa>/<sha>` files, `state/tokens`, `state/users`, `state/secret`. Extraction uses the Python `data` filter after a name check; member set must equal the manifest's.
+**Archive** (`.tar.gz`): `manifest.json` = `{"format":1,"created_at":iso,"software":version,"profile":"embedded|external","files":{<member>:{"sha256":hex,"size":n}}}`; members `db/hive.db` or `db/hive.pgdump` (custom format), `blobs/<org hex>/<aa>/<sha>` files, `state/tokens`, `state/users`, `state/secret`, and (embedded profile, when `<data>/lance` exists) `lance/<relative path>` for the LanceDB store: files copied data first and `_versions/` manifests last, the copy opened (`count_rows` per table) before use, up to 3 attempts, otherwise left out with a warning and no failure. Extraction uses the Python `data` filter after a name check; member set must equal the manifest's.
 **Lease files** in the backup directory: `.hive-lease` JSON `{owner, pid, revision}` (mtime is the heartbeat); `.hive-handoff` JSON `{revision, owner}` written by the asker; `.hive-retired` JSON map revision -> unix time (kept 24 h).
 **Hand-off sequence:** newcomer (revision B) finds a live lease of revision A, writes `.hive-handoff`; A's watcher sees an asker with a different revision, records A in `.hive-retired`, triggers its own graceful stop (SIGTERM to itself: drain, final backup, close storage), keeps heartbeating, then releases; B takes the lease, deletes `.hive-handoff`, restores the newest verified archive and serves; if the platform restarts A, A refuses to start because it is retired.
 **Migration:** tables copied in order items, item_revisions, idempotency, audit, kv, promotions, edges (plus blobs), 500 rows per batch, expired KV rows skipped; verification = per table row count + order-independent checksum over (time-normalised) rows; blobs verified by SHA-256 and compared by (org, sha, size).

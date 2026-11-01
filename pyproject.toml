@@ -79,6 +79,8 @@ dev = [
     "python-pptx>=1.0.2",
     "pip-audit>=2.10.1",
     "pillow>=13.0.0",
+    "lancedb>=0.40.0",  # the Lance vector store and its backup are tested, not skipped
+    "pyarrow>=26.0.0",  # `hive export --format parquet`
 ]
 mutation = [
     "mutmut>=3.8.0",

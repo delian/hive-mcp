@@ -239,8 +239,8 @@ scraped: 26 to 35 ms idle, up to 0.2 to 1.0 s under saturation at 20k to 50k; sc
 LanceDB is built for bulk loading; written one note at a time (as Hive does) it creates two table versions per write and
 the library keeps them for 7 days. Hive now cleans versions older than 30 s when it compacts (every 100 writes); that bounds
 the disk growth but write latency remains well above SQLite's. **Do not use `HIVE_VECTOR_STORE=lancedb` for a growing
-knowledge base**; use PostgreSQL. Also note that `hive backup` does **not** archive the `lance/` directory: after a restore
-run `hive reindex` to rebuild the vectors.
+knowledge base**; use PostgreSQL. A `hive backup` archives the `lance/` directory too (when no consistent copy can be
+made it says so and a `hive reindex` after the restore rebuilds the vectors).
 
 ## Recommendations
 
@@ -321,5 +321,4 @@ Fixed (each has a regression test in `tests/regression/test_bug_load_*.py`):
   calls/s at 50k (55 vs 33 at 20k).
 - LanceDB kept every table version for 7 days: 3.5 GB of disk for 20k notes.
 
-Open: a saturated SQLite server is limited by the CPU cost of the exact vector scan (more read connections do not help);
-`hive backup` omits `lance/`.
+Open: a saturated SQLite server is limited by the CPU cost of the exact vector scan (more read connections do not help).

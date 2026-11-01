@@ -130,6 +130,38 @@ row: **one megabyte of text is roughly 1,500 chunks, about 2.4 MB of float32 vec
 - **Beyond about 2M chunks** (a 1.3 GB text corpus) use an approximate index: PostgreSQL with pgvector (about 4 to 6 ms
   at 1M chunks, [BENCHMARK](BENCHMARK.md)) or the LanceDB store.
 
+### pg_duckdb against pgvector (measured, not adopted)
+
+`pg_duckdb` 1.1.1 (DuckDB's engine inside PostgreSQL 16, built from source) next to pgvector 0.8.1 on the same server,
+the same 100,000 synthetic 384-dimension chunks, queries and exact ground truth as the storage benchmark
+([BENCHMARK](BENCHMARK.md)); `bench/pgduckdb_cmp.py`, 4 vCPU, nothing else running, one run each.
+
+| Candidate | Unfiltered p50 / p95 (ms) | Access-filtered (0.9% visible) p50 / p95 (ms) | Recall@10 | Searches/s, 4 clients (unfiltered / filtered) |
+|---|---|---|---|---|
+| **pgvector HNSW** (halfvec, m=32, ef 200) | **4.2 / 6.4** | **1.0 / 5.0** | 0.999 | **692 / 1,346** |
+| pgvector exact (no index) | 19.0 / 22.5 | 9.6 / 12.7 | 1.000 | 86 / 361 |
+| pg_duckdb on a Postgres `real[]` table | 288 / 324 | 33 / 43 | 1.000 | 7.6 / 46 |
+| pg_duckdb on an uncompressed Parquet file | 361 / 388 | 238 / 250 | 1.000 | 5.5 / 8.5 |
+
+- **For similarity search pgvector wins by a wide margin:** about 70 times faster than pg_duckdb unfiltered and 30 times
+  faster filtered, and even pgvector's exact scan is 15 times faster than pg_duckdb's. DuckDB's list and array inner
+  products ran at about 0.35 million vectors per second against 50 million for one numpy matrix product (previous
+  section); the fixed-size array function was only 20% faster than the list one (285 against 355 ms).
+- **They do not combine:** pg_duckdb cannot read a pgvector `vector` or `halfvec` column ("Unsupported PostgreSQL type"
+  in its planner); Postgres then runs the query itself with a warning, so nothing breaks, but nothing is accelerated.
+  Its vectors have to be `real[]` (1.8 times the size of halfvec: 164 MB against 91 MB for 100k chunks) and its functions are
+  reached through `duckdb.query(...)`.
+- **Analytics is where it can help, and only sometimes** (5 million synthetic audit-like rows, same server): a light
+  aggregation ran slower under pg_duckdb (about 430 ms, against 200 to 270 ms for plain PostgreSQL, whose scan is parallel),
+  a heavy high-cardinality one ran 3.8 times faster (0.50 s against 1.9 s). Our reports (usage, audit counts, digest)
+  work on tens of thousands of rows, so neither case would be noticed.
+- **Cost of adopting it:** the extension must be preloaded and built or installed for the exact PostgreSQL major version
+  (our image uses Debian's), managed Postgres offers it only as a preview behind an allow-list, and DuckDB brings its
+  own memory and threads. Not adopted; `hive export` (Parquet) and DuckDB's own `postgres` extension against a read-only
+  role cover analysis outside the server.
+- **Limits of this test:** one size (100k chunks), synthetic clustered vectors, one run each, DuckDB's thread and memory
+  settings left at their defaults, and `pg_duckdb` used as released, with no vendor tuning.
+
 ### Memory, threads, file descriptors
 
 | Notes | SQLite server RSS (after the saturated phase) | PostgreSQL profile: server RSS | PostgreSQL's own memory (PSS) |

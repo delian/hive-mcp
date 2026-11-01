@@ -2084,7 +2084,7 @@ Both set `HIVE_FORWARDED_ALLOW_IPS=*`, `HIVE_PORT=8080`, `HIVE_PUBLIC_URL`, `HIV
 
 ### L.1 CI jobs
 
-`test` (Postgres service, Tesseract/Poppler, PG16 client; `uv sync --frozen`, ruff format check, ruff check, mypy `src clients/hooks/src`, file-size guard, pytest), `audit` (`pip-audit`), `client`, `image` (build with `BAKE_MODEL=true`; smoke tests; `WITH_POSTGRES` image smoke; real-ONNX smoke; Trivy 0.58.0; OCR image; compose config), `bicep`, `mutation` (schedule/manual). Actions used: `actions/checkout@v7`, `astral-sh/setup-uv@v7`, `docker/setup-buildx-action@v4`, `docker/build-push-action@v7`. Release workflow: tag `v*`, version check, `uv build` both packages, GitHub release with wheels, optional PyPI job (`environment: pypi`, trusted publishing).
+`test` (Postgres service, Tesseract/Poppler, PG16 client; `uv sync --frozen`, ruff format check, ruff check, mypy `src clients/hooks/src`, file-size guard, pytest), `requirements` (`scripts/check_requirements.py <base>`: source changed without the requirements documents or a `Requirements: none` line in a commit message fails), `audit` (`pip-audit`), `client`, `image` (build with `BAKE_MODEL=true`; smoke tests; `WITH_POSTGRES` image smoke; real-ONNX smoke; Trivy 0.58.0; OCR image; compose config), `bicep`, `mutation` (schedule/manual). Actions used: `actions/checkout@v7`, `astral-sh/setup-uv@v7`, `docker/setup-buildx-action@v4`, `docker/build-push-action@v7`. Release workflow: tag `v*`, version check, `uv build` both packages, GitHub release with wheels, optional PyPI job (`environment: pypi`, trusted publishing).
 Dependabot weekly: `uv`, `docker`, `github-actions`.
 
 ### L.2 Mutation scope (`[tool.mutmut]`)

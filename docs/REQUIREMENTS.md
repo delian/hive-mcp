@@ -298,6 +298,10 @@ Produces: REQ-ACC-18 (foreign-note tools), `ops/pgclient.py` (REQ-OPS-04), `hive
 
 **U48** - 2026-10-31 - *"Do that SQLite read connections and moving the job runner off the request loop"*. Produces REQ-OPS-19. Both were measured: four readers halved throughput (default 1), the thread halves the job backlog for ~5% throughput (default off).
 
+**U49** - 2026-11-01 - *"do you, can you maintain a file docs/REQUIREMENTS.md containing collection of all the requirements for this project (in case of conflicts, keep the latest) in such a manner, that the project could be regenerated only by the REQUIREMENTS as a prompt? Or do you maintain a similar file?"* The assistant answered that both documents exist and are updated by hand, and offered three measures.
+
+**U50** - 2026-11-01 - *"add a short rule in CLAUDED.md, ci check too, no regeneration trial"* (`CLAUDED.md` read as `CLAUDE.md`). Produces REQ-CI-11, `CLAUDE.md` and `scripts/check_requirements.py`; no regeneration trial was made.
+
 ### 2.3 Go-ahead lists in one table (what each number meant)
 
 | Message | Numbers | What they mean (the assistant's list at that moment) |
@@ -1440,6 +1444,9 @@ mutants in messages that tell a person what to do are killed with exact-text ass
 **REQ-CI-08** SHOULD `[U44]` **Stress tests.** `tests/stress` exercises concurrency and scale (access filter under load, knowledge concurrency, KV and jobs, promotion races, rate-limit stress); `HIVE_STRESS_SCALE=<n>` multiplies their size; marker `stress`.
 
 **REQ-CI-09** SHOULD `[U2][D]` **Pre-commit.** `.pre-commit-config.yaml` runs ruff format, ruff check --fix, mypy on `src` and the file-size guard.
+
+**REQ-CI-11** MUST `[U50]` **The requirements move with the code.** A change under `src/` or `clients/hooks/src/` must touch `docs/REQUIREMENTS.md` or `docs/REQUIREMENTS-ANNEX.md`, or a commit message of the change must contain the line `Requirements: none` (the whole line, any case). CI job `requirements` runs `scripts/check_requirements.py <base>` on pull requests and pushes to main; `CLAUDE.md` tells every working session the same rule (update the `REQ-` entry, keep the Annex exact, record the user's decisions in the ledger, latest wins).
+*Accept:* source changed with no requirements change and no waiver fails the job and names the files; a waiver, or a requirements change, passes it (`tests/unit/test_check_requirements.py`).
 
 **REQ-CI-10** SHOULD `[U32][D]` **Release workflow.** See REQ-SESS-14.
 

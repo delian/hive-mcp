@@ -103,6 +103,15 @@ jobs:
       - run: az bicep build --file deploy/azure/main.bicep --stdout > /dev/null
       - run: az bicep build --file deploy/azure/single.bicep --stdout > /dev/null
       - run: az bicep build-params --file deploy/azure/main.bicepparam --stdout > /dev/null
+  requirements:
+    # The requirements documents must move with the code (see CLAUDE.md).
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: python3 scripts/check_requirements.py "${{ github.event.pull_request.base.sha || github.event.before }}"
   mutation-changed:
     # Only the security-critical modules this change touched (usually a few minutes).
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')

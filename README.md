@@ -86,6 +86,7 @@ uv run python scripts/check_file_size.py src clients/hooks/src   # target 8 KB, 
 uv run pytest                                    # all tests (Postgres variants run when HIVE_TEST_PG_DSN is set)
 uv run pytest -m stress                          # only the stress tests; HIVE_STRESS_SCALE=5 makes them bigger
 uv run pytest tests/regression                   # one test per bug found in review (BUG-<area>-<n>)
+python scripts/check_requirements.py origin/main # a change to src/ must update docs/REQUIREMENTS*.md (or say `Requirements: none`)
 scripts/mutation.sh                              # mutation testing of the security-critical modules (about 25 minutes)
 scripts/mutation_changed.sh origin/main          # only the modules your change touched
 ```

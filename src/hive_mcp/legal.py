@@ -7,6 +7,7 @@ has its own documents, point HIVE_PRIVACY_URL / HIVE_TERMS_URL at those instead.
 
 from __future__ import annotations
 
+import re
 from html import escape
 from typing import TYPE_CHECKING
 
@@ -16,6 +17,8 @@ from starlette.routing import Route
 from hive_mcp.security.oauth.pages import SECURITY_HEADERS
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from starlette.requests import Request
     from starlette.responses import Response
 
@@ -38,6 +41,57 @@ def _page(title: str, body: str) -> HTMLResponse:
         "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
     }
     return HTMLResponse(html, headers=headers)
+
+
+def render_markdown(text: str) -> str:
+    """The small Markdown subset legal text needs: #/##/### headings, - or * bullets, paragraphs,
+    **bold**, and [text](https://...) links. Everything else is shown as written, escaped."""
+
+    def inline(raw: str) -> str:
+        out = escape(raw)
+        out = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", out)
+        return re.sub(
+            r"\[([^\]]+)\]\((https?://[^\s)\"'<>]+|/[^\s)\"'<>]*)\)",
+            r"<a href='\2'>\1</a>",
+            out,
+        )
+
+    html: list[str] = []
+    para: list[str] = []
+    items: list[str] = []
+
+    def flush() -> None:
+        if para:
+            html.append(f"<p>{inline(' '.join(para))}</p>")
+            para.clear()
+        if items:
+            html.append("<ul>" + "".join(f"<li>{inline(i)}</li>" for i in items) + "</ul>")
+            items.clear()
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        head = re.match(r"(#{1,3})\s+(.*)", stripped)
+        bullet = re.match(r"[-*]\s+(.*)", stripped)
+        if not stripped:
+            flush()
+        elif head:
+            flush()
+            html.append(f"<h2>{inline(head.group(2))}</h2>")
+        elif bullet:
+            if para:
+                flush()
+            items.append(bullet.group(1))
+        else:
+            if items:
+                flush()
+            para.append(stripped)
+    flush()
+    return "".join(html)
+
+
+def check_file(path: Path | None, setting: str) -> None:
+    if path is not None and not path.is_file():
+        raise ValueError(f"{setting} points at {path}, which is not a readable file")
 
 
 def contact_line(settings: Settings) -> str:
@@ -107,14 +161,24 @@ before acting on them: notes can be wrong or out of date. {org} may suspend acce
 
 
 def legal_routes(settings: Settings) -> list[Route]:
+    check_file(settings.privacy_file, "HIVE_PRIVACY_FILE")
+    check_file(settings.terms_file, "HIVE_TERMS_FILE")
+
+    def own_text(path: Path) -> str:
+        return render_markdown(path.read_text(encoding="utf-8", errors="replace"))
+
     async def privacy(_: Request) -> Response:
         if settings.privacy_url:
             return RedirectResponse(settings.privacy_url, status_code=302)
+        if settings.privacy_file:
+            return _page("Privacy", own_text(settings.privacy_file))
         return _page("Privacy", privacy_body(settings))
 
     async def terms(_: Request) -> Response:
         if settings.terms_url:
             return RedirectResponse(settings.terms_url, status_code=302)
+        if settings.terms_file:
+            return _page("Terms of use", own_text(settings.terms_file))
         return _page("Terms of use", terms_body(settings))
 
     return [Route("/legal/privacy", privacy), Route("/legal/terms", terms)]

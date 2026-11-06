@@ -56,7 +56,9 @@ Teams wants a privacy and a terms link in the package. The server serves plain p
 (what is stored, chat apps, where data goes, how to ask for deletion; use, availability) naming the operator:
 `HIVE_LEGAL_ORG`, `HIVE_LEGAL_CONTACT`. They are a starting point and **not legal advice**: read them, and where your
 organisation has its own documents set `HIVE_PRIVACY_URL` / `HIVE_TERMS_URL` and the pages redirect there (and the package
-uses them).
+uses them). Or set `HIVE_PRIVACY_FILE` / `HIVE_TERMS_FILE` to your own Markdown files (headings, bullets,
+**bold**, links; read on every request, so edits need no restart; a missing file stops startup). A URL wins over a file,
+a file over the built-in text.
 
 ## Security properties
 - Every request must carry a Bot Framework JWT: signature checked against the published keys (RS256 only; refetched on an

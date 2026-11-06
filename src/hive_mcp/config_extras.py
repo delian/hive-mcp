@@ -36,6 +36,10 @@ class ExtrasSettings(BaseSettings):
     legal_contact: str | None = None  # an email address people can write to about their data
     privacy_url: str | None = None
     terms_url: str | None = None
+    # Your own Markdown text for the two pages (read on every request, so edits need no restart).
+    # A URL above wins over a file; a file wins over the built-in text. docs/TEAMS.md
+    privacy_file: Path | None = None
+    terms_file: Path | None = None
     # Run PostgreSQL + pgvector inside this container too (image built with WITH_POSTGRES=true):
     # the external profile without a second service. Data in <data_dir>/pg; with HIVE_BACKUP_DIR
     # the usual archives (pg_dump) protect it. docs/SINGLE-CONTAINER.md

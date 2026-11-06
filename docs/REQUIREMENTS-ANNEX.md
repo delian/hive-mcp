@@ -1023,6 +1023,8 @@ Cross-field validation (all at startup, failing the process with a clear message
 | `HIVE_LEGAL_CONTACT` | str | None | None |  | Contact email shown on the legal pages. |
 | `HIVE_PRIVACY_URL` | str | None | None |  | Redirect `/legal/privacy` here and use it in the Teams package. |
 | `HIVE_TERMS_URL` | str | None | None |  | Redirect `/legal/terms` here and use it in the Teams package. |
+| `HIVE_PRIVACY_FILE` | path | None | must be a readable file at startup | Your own Markdown for `/legal/privacy` (a URL wins; a file wins over the built-in text). |
+| `HIVE_TERMS_FILE` | path | None | must be a readable file at startup | Your own Markdown for `/legal/terms`. |
 | `HIVE_EMBEDDED_POSTGRES` | bool | False | startup error with `HIVE_DATABASE_URL`, an explicit `HIVE_PROFILE=embedded` or `HIVE_REPLICAS>1`; forces profile external and DSN `host=/tmp/hive-pg dbname=hive user=hive` | Run PostgreSQL inside the container (needs the `WITH_POSTGRES` image); implies profile external. |
 | `HIVE_LLM_PROVIDER` | Literal['none', 'openai', 'anthropic'] | 'none' |  | `none`, `openai` or `anthropic` (optional model for merge proposals and conflict checks). |
 | `HIVE_LLM_URL` | str | None | None |  | openai: chat completions URL; anthropic: optional override. |

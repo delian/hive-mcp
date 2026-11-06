@@ -59,9 +59,7 @@ def test_your_own_markdown_file_replaces_the_text_and_is_escaped(tmp_path):
     assert "&lt;b&gt;notes&lt;/b&gt;" in page.text and "<b>notes" not in page.text
     assert "<ul><li>one</li><li>two</li></ul>" in page.text
     assert "<a href='https://acme.com/p'>policy</a>" in page.text
-    assert (
-        "javascript:" not in page.text.split("[bad]")[0] or "<a href='javascript" not in page.text
-    )
+    assert "<a href='javascript" not in page.text
     assert "What is stored" not in page.text
     f.write_text("changed", encoding="utf-8")  # read on every request
     assert "changed" in client(privacy_file=f).get("/legal/privacy").text
